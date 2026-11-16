@@ -1732,6 +1732,11 @@ if ($id > 0 || !empty($ref)) {
 				foreach ($stringRows as $row) {
 					if ((int) $row->mppt_number === GETPOSTINT('edit_string_mppt') && (int) $row->pv_input_number === GETPOSTINT('edit_input')) { $editString = $row; }
 				}
+				if (GETPOST('action', 'aZ09') === 'save_string_config') {
+					// Failed submissions retain all authorized form values for correction.
+					$editString = (object) array('mppt_number' => $mpptNumber, 'pv_input_number' => $pvInputNumber, 'string_ref' => $stringRef, 'fk_product' => $moduleProduct, 'module_count' => $moduleCount, 'module_power' => $moduleProduct > 0 ? ($moduleChoices[$moduleProduct]['power'] ?? null) : $modulePower, 'orientation' => $orientation, 'tilt' => $tilt, 'is_connected' => $isConnected, 'position' => $stringPosition);
+				}
+
 				$mpptOptions = array();
 				foreach ($mpptRows as $mpptRow) {
 					$mpptOptions[(int) $mpptRow->mppt_number] = $langs->trans('PowerPlantPVMPPT').' '.((int) $mpptRow->mppt_number);
@@ -1809,7 +1814,7 @@ if ($id > 0 || !empty($ref)) {
 						print '<td>'.dol_escape_htmltag((string) $stringRow->string_ref).'</td>';
 						print '<td>'.$langs->trans(!empty($stringRow->is_connected) ? 'Yes' : 'No').'</td>';
 						print '<td>'.dol_escape_htmltag($moduleChoices[(int) $stringRow->fk_product]['label'] ?? '').'</td>';
-						print '<td>'.(int) $stringRow->module_count.'</td>';
+						print '<td>'.($stringRow->module_count === null ? '' : (int) $stringRow->module_count).'</td>';
 						print '<td>'.($stringRow->module_power === null ? '' : dol_escape_htmltag((string) $stringRow->module_power).' Wc').'</td>';
 						print '<td>'.($stringRow->module_power === null ? '' : dol_escape_htmltag((string) ((int) $stringRow->module_count * (float) $stringRow->module_power)).' Wc').'</td>';
 						foreach (array('orientation', 'tilt', 'position') as $column) {

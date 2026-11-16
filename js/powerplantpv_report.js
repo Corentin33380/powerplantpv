@@ -132,16 +132,20 @@
 	}
 
 	function restoreScrollPosition() {
+		var reportForm = document.getElementById('powerplantpvreportform');
+		if (reportForm && reportForm.dataset.advanceAfterSave === '1') { return; }
 		var restoreInput = document.getElementById('powerplantpv-restore-scroll-y');
 		if (!restoreInput) {
 			return;
 		}
 
 		var scrollY = parseInt(restoreInput.value, 10);
-		if (!scrollY || scrollY < 1) {
+		if (!Number.isFinite(scrollY) || scrollY < 0) {
 			return;
 		}
 
+		var restore = function () { window.scrollTo(0, scrollY); };
+		if (document.readyState !== 'complete') { window.addEventListener('load', restore, {once: true}); }
 		window.requestAnimationFrame(function () {
 			window.scrollTo(0, scrollY);
 			window.setTimeout(function () {
@@ -157,14 +161,41 @@
 		var dirty = false;
 		var submitted = false;
 		var state = form.querySelector('.powerplantpv-report-save-state');
-		var storageKey = 'powerplantpv-report-open:' + window.location.pathname + ':' + (form.querySelector('[name="id"]') || {}).value;
+		var storageKey = 'powerplantpv-report-mobile-view-v2:' + window.location.pathname + ':' + (form.querySelector('[name="id"]') || {}).value;
 		var sections = form.querySelectorAll('details');
-		try {
-			var open = JSON.parse(window.sessionStorage.getItem(storageKey));
-			if (Array.isArray(open)) {
-				for (var i = 0; i < sections.length; i++) { sections[i].open = open.indexOf(i) >= 0; }
-			}
-		} catch (error) { /* Optional navigation memory; never store field values. */ }
+		function sectionKey(section, index) { return section.dataset.stateKey || section.dataset.cardKey || 'summary:' + index; }
+		var view = null;
+		if (isMobileReportViewport()) {
+			try {
+				view = JSON.parse(window.sessionStorage.getItem(storageKey));
+				if (view && view.sections) {
+					sections.forEach(function (section, index) {
+						var key = sectionKey(section, index);
+						if (Object.prototype.hasOwnProperty.call(view.sections, key)) { section.open = view.sections[key] === true; }
+					});
+				}
+			} catch (error) { /* Optional navigation memory; never store field values. */ }
+		}
+		function rememberView() {
+			if (!isMobileReportViewport()) { return; }
+			var states = {};
+			sections.forEach(function (section, index) { states[sectionKey(section, index)] = section.open; });
+			try { window.sessionStorage.setItem(storageKey, JSON.stringify({sections: states, y: Math.max(0, Math.round(getScrollY()))})); } catch (error) { /* Storage may be disabled. */ }
+		}
+		sections.forEach(function (section) { section.addEventListener('toggle', rememberView); });
+		window.addEventListener('pagehide', rememberView);
+		var rememberingScroll = false;
+		window.addEventListener('scroll', function () {
+			if (rememberingScroll || !isMobileReportViewport()) { return; }
+			rememberingScroll = true;
+			window.requestAnimationFrame(function () { rememberingScroll = false; rememberView(); });
+		}, {passive: true});
+		// Restore only after all saved disclosure states have been applied.
+		var savedNavigation = new URL(window.location.href).searchParams.has('report_saved_card');
+		if (!savedNavigation && isMobileReportViewport() && view && Number.isFinite(view.y)) {
+			var position = document.getElementById('powerplantpv-restore-scroll-y');
+			if (position && !new URL(window.location.href).searchParams.has('report_scroll_y')) { position.value = String(Math.max(0, view.y)); }
+		}
 		function updateProgress(target) {
 			var field = target && target.closest ? target.closest('[data-progress-required="1"]') : null;
 			if (field) {
@@ -197,6 +228,7 @@
 		var savedUrl = new URL(window.location.href);
 		var savedKey = savedUrl.searchParams.get('report_saved_card');
 		if (savedKey && /^[a-f0-9]{32}$/.test(savedKey) && isMobileReportViewport()) {
+			form.dataset.advanceAfterSave = '1';
 			var cards = Array.prototype.slice.call(form.querySelectorAll('details.powerplantpv-dc-card'));
 			var savedIndex = cards.findIndex(function (card) { return card.dataset.cardKey === savedKey; });
 			if (savedIndex >= 0) {
@@ -210,7 +242,7 @@
 				if (next) {
 					var ancestor = next.closest('details');
 					while (ancestor) { ancestor.open = true; ancestor = ancestor.parentElement.closest('details'); }
-					window.setTimeout(function () { next.scrollIntoView({block: 'start'}); }, 180);
+					window.setTimeout(function () { next.scrollIntoView({block: 'start'}); rememberView(); }, 180);
 				}
 			}
 		}
@@ -249,9 +281,7 @@
 			if (submitted) { event.preventDefault(); return; }
 			submitted = true;
 			if (state) { state.textContent = form.dataset.saving; }
-			var open = [];
-			for (var i = 0; i < sections.length; i++) { if (sections[i].open) { open.push(i); } }
-			try { window.sessionStorage.setItem(storageKey, JSON.stringify(open)); } catch (error) { /* Storage may be disabled. */ }
+			rememberView();
 			// Restore the retry action if a navigation fails without replacing the page.
 			window.setTimeout(function () { submitted = false; if (dirty && state) { state.textContent = form.dataset.unsaved; } }, 10000);
 		});

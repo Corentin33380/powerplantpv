@@ -1050,7 +1050,7 @@ function powerplantpvReportRenderSections($sections, $editable, $form, $powerpla
 			$label = powerplantpvReportLocalizedObjectLabel($section, 'section_label');
 			$identity = !empty($row['equipment']) ? (object) $row['equipment'] : null;
 			$identity = $identity && (string) $identity->equipment_type === 'INVERTER' ? $identity : null;
-			print '<details class="powerplantpv-report-section" open>';
+			print '<details class="powerplantpv-report-section" data-state-key="section:'.hash('sha256', (string) ($section->fk_powerplant ?? '').':'.(string) $section->section_code.':'.(string) ($section->occurrence_key ?? '')).'" open>';
 			print '<summary class="liste_titre"><span>'.dol_escape_htmltag($label).'</span><span class="powerplantpv-report-progress opacitymedium" data-progress-label="'.dol_escape_htmltag($langs->transnoentities('PowerPlantPVReportProgress')).'"></span>';
 			if ($identity) {
 				print ' <span class="powerplantpv-identity-mobile">'.dol_escape_htmltag(PowerPlantPVReportPresentation::identity($identity, false)).'</span>';
@@ -1390,12 +1390,12 @@ function powerplantpvReportRenderDcMeasures($section, $measures, $editable, $for
 
 	$grouped = PowerPlantPVReportPresentation::groupMeasures($measures);
 	print '<div class="powerplantpv-dc-measures">';
-	foreach ($grouped as $group) {
-		print '<details class="powerplantpv-dc-inverter" open><summary class="liste_titre">';
+	foreach ($grouped as $groupKey => $group) {
+		print '<details class="powerplantpv-dc-inverter" data-state-key="inverter:'.dol_escape_htmltag($groupKey).'" open><summary class="liste_titre">';
 		print '<span class="powerplantpv-identity-mobile">'.dol_escape_htmltag(PowerPlantPVReportPresentation::identity($group['identity'], false, $langs->trans('PowerPlantPVManualDcLine'))).'</span>';
 		print '<span class="powerplantpv-identity-desktop">'.dol_escape_htmltag(PowerPlantPVReportPresentation::identity($group['identity'], true, $langs->trans('PowerPlantPVManualDcLine'))).'</span></summary>';
 		foreach ($group['mppts'] as $mpptLabel => $rows) {
-			print '<details class="powerplantpv-dc-mppt" open><summary>'.dol_escape_htmltag($langs->trans('PowerPlantPVMPPT').' '.($mpptLabel !== '' ? powerplantpvReportDcDisplayIndex($mpptLabel) : $langs->trans('PowerPlantPVManual'))).'</summary>';
+			print '<details class="powerplantpv-dc-mppt" data-state-key="mppt:'.dol_escape_htmltag($groupKey.':'.$mpptLabel).'" open><summary>'.dol_escape_htmltag($langs->trans('PowerPlantPVMPPT').' '.($mpptLabel !== '' ? powerplantpvReportDcDisplayIndex($mpptLabel) : $langs->trans('PowerPlantPVManual'))).'</summary>';
 			print '<div class="powerplantpv-dc-measure-grid">';
 			foreach ($rows as $measure) {
 				powerplantpvReportRenderDcMeasureCard($measure, $editable, $form);
