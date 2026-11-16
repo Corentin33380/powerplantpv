@@ -1810,3 +1810,4 @@ PowerPlantPVSerialAnnexGenerated=Annexe générée.
 
 PowerPlantPVIdentityConcurrentChange=Cet onduleur a été renommé par un autre utilisateur. Rechargez sa fiche avant de réessayer.
 PowerPlantPVDocumentDirectoryUnavailable=Le répertoire documentaire de l’entité propriétaire est indisponible.
+PowerPlantPVSaveCollapse=Enregistrer et réduire

@@ -1810,3 +1810,4 @@ PowerPlantPVSerialAnnexGenerated=Annex generated.
 
 PowerPlantPVIdentityConcurrentChange=This inverter was renamed by another user. Reload it before retrying.
 PowerPlantPVDocumentDirectoryUnavailable=The owner entity document directory is unavailable.
+PowerPlantPVSaveCollapse=Save and collapse

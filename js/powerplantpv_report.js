@@ -193,6 +193,32 @@
 			});
 		}
 		updateProgress(null);
+		// Only the successful POST redirect carries this marker. Errors leave the card open.
+		var savedUrl = new URL(window.location.href);
+		var savedKey = savedUrl.searchParams.get('report_saved_card');
+		if (savedKey && /^[a-f0-9]{32}$/.test(savedKey) && isMobileReportViewport()) {
+			var cards = Array.prototype.slice.call(form.querySelectorAll('details.powerplantpv-dc-card'));
+			var savedIndex = cards.findIndex(function (card) { return card.dataset.cardKey === savedKey; });
+			if (savedIndex >= 0) {
+				cards[savedIndex].open = false;
+				var next = cards.slice(savedIndex + 1).find(function (card) { return card.querySelector('.powerplantpv-save-collapse'); });
+				if (!next) {
+					var reportSections = Array.prototype.slice.call(form.querySelectorAll('.powerplantpv-report-section'));
+					var currentSection = cards[savedIndex].closest('.powerplantpv-report-section');
+					next = reportSections[reportSections.indexOf(currentSection) + 1] || form.querySelector('.powerplantpv-floating-save');
+				}
+				if (next) {
+					var ancestor = next.closest('details');
+					while (ancestor) { ancestor.open = true; ancestor = ancestor.parentElement.closest('details'); }
+					window.setTimeout(function () { next.scrollIntoView({block: 'start'}); }, 180);
+				}
+			}
+		}
+		if (savedKey) { savedUrl.searchParams.delete('report_saved_card'); window.history.replaceState(null, document.title, savedUrl.pathname + savedUrl.search + savedUrl.hash); }
+		form.querySelectorAll('.powerplantpv-save-collapse').forEach(function (button) {
+			button.addEventListener('click', function (event) { event.stopPropagation(); });
+		});
+
 		form.addEventListener('input', function (event) { updateProgress(event.target); });
 		form.addEventListener('change', function (event) { updateProgress(event.target); });
 		function markDirty() {
@@ -251,6 +277,7 @@
 
 			var updateFonts = function () {
 				updateEditorIframes(form);
+				if (!isMobileReportViewport()) { form.querySelectorAll('details.powerplantpv-dc-card').forEach(function (card) { card.open = true; }); }
 			};
 			if (mobileMediaQuery) {
 				if (mobileMediaQuery.addEventListener) {

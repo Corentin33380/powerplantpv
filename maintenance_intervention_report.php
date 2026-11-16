@@ -244,8 +244,12 @@ if (($action === 'save_draft' || $action === 'save') && $caneditreport) {
 			}
 			$redirectUrl = $_SERVER['PHP_SELF'].'?id='.(int) $id;
 			if ($action === 'save_draft') {
+				$savedCard = GETPOST('save_draft_submit', 'alphanohtml');
+				if (preg_match('/^[a-f0-9]{32}$/D', $savedCard) && isset($dcValues[$savedCard])) {
+					$redirectUrl .= '&report_saved_card='.urlencode($savedCard);
+				}
 				$scrollY = GETPOSTINT('powerplantpv_scroll_y');
-				if ($scrollY > 0) {
+				if ($scrollY > 0 && strpos($redirectUrl, 'report_saved_card=') === false) {
 					$redirectUrl .= '&report_scroll_y='.(int) $scrollY;
 				}
 			}
@@ -1585,17 +1589,22 @@ function powerplantpvReportRenderDcMeasureCard($measure, $editable, $form)
 		'not_applicable' => $langs->trans('PowerPlantPVNotApplicableShort'),
 	);
 
-	print '<div class="powerplantpv-dc-card">';
-	print '<div class="powerplantpv-dc-card-title">';
+	print '<details class="powerplantpv-dc-card" data-card-key="'.$key.'" open>';
+	print '<summary class="powerplantpv-dc-card-title"><span>';
 	print dol_escape_htmltag($langs->trans('PowerPlantPVPVInput')).' '.dol_escape_htmltag(powerplantpvReportDcDisplayIndex($measure->pv_input_number));
 	if ((string) $measure->string_ref !== '') {
 		print ' - '.dol_escape_htmltag((string) $measure->string_ref);
 	}
-	print '</div>';
+	print '</span>';
+	if ($editable && ($isManual || $isUsed)) {
+		$saveLabel = dol_escape_htmltag($langs->trans('PowerPlantPVSaveCollapse'));
+		print '<button type="submit" class="button powerplantpv-save-collapse" name="save_draft_submit" value="'.$key.'" title="'.$saveLabel.'" aria-label="'.$saveLabel.'">'.img_picto('', 'fa-save').'</button>';
+	}
+	print '</summary><div class="powerplantpv-dc-card-body">';
 
 	if (!$isManual && !$isUsed) {
 		print '<div class="opacitymedium powerplantpv-dc-not-used">'.dol_escape_htmltag($langs->trans('PowerPlantPVNotUsedByPowerPlant')).'</div>';
-		print '</div>';
+		print '</div></details>';
 		return;
 	}
 
@@ -1609,7 +1618,7 @@ function powerplantpvReportRenderDcMeasureCard($measure, $editable, $form)
 		print '<span>'.dol_escape_htmltag($langs->trans('PowerPlantPVInsulationPositiveToGround')).' : '.dol_escape_htmltag(powerplantpvReportDcDisplayNumber($measure, $measure->insulation_positive_to_ground, 'MOhm')).'</span>';
 		print '<span>'.dol_escape_htmltag($langs->trans('PowerPlantPVInsulationNegativeToGround')).' : '.dol_escape_htmltag(powerplantpvReportDcDisplayNumber($measure, $measure->insulation_negative_to_ground, 'MOhm')).'</span>';
 		print '<span>'.dol_htmlentitiesbr(powerplantpvReportDcDisplayText($measure, $measure->observation, false)).'</span>';
-		print '</div></div>';
+		print '</div></div></details>';
 		return;
 	}
 
@@ -1633,7 +1642,7 @@ function powerplantpvReportRenderDcMeasureCard($measure, $editable, $form)
 	print '<label>'.$langs->trans('PowerPlantPVInsulationPositiveToGround').'<span class="powerplantpv-control-with-unit"><input type="text" class="flat powerplantpv-report-control right" name="'.$name.'[insulation_positive_to_ground]" value="'.dol_escape_htmltag(powerplantpvReportDcInputNumberValue($measure->insulation_positive_to_ground)).'"><span class="opacitymedium">MOhm</span></span></label>';
 	print '<label>'.$langs->trans('PowerPlantPVInsulationNegativeToGround').'<span class="powerplantpv-control-with-unit"><input type="text" class="flat powerplantpv-report-control right" name="'.$name.'[insulation_negative_to_ground]" value="'.dol_escape_htmltag(powerplantpvReportDcInputNumberValue($measure->insulation_negative_to_ground)).'"><span class="opacitymedium">MOhm</span></span></label>';
 	print '<label class="powerplantpv-dc-observation">'.$langs->trans('Observation').'<textarea class="flat powerplantpv-report-control" rows="2" name="'.$name.'[observation]">'.dol_escape_htmltag((string) $measure->observation).'</textarea></label>';
-	print '</div>';
+	print '</div></details>';
 }
 
 /**
