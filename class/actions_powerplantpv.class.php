@@ -63,7 +63,8 @@ class ActionsPowerplantpv
 		$db->free($resql);
 		foreach (array(1 => 'Validated', 2 => 'PowerPlantInService', 3 => 'PowerPlantOutOfService') as $status => $label) {
 			$board = new WorkboardResponse();
-			$board->label = $langs->trans($label);
+			$board->labelShort = $langs->trans($label);
+			$board->label = $langs->trans('PowerPlantPVHomePlantStatus'.$status.'Help');
 			$board->url = dol_buildpath('/powerplantpv/powerplant_list.php', 1).'?search_status='.$status;
 			$board->nbtodo = $counts[$status] ?? 0;
 			$this->results['powerplantpv_status_'.$status] = $board;
@@ -85,7 +86,8 @@ class ActionsPowerplantpv
 			$filters = array('total' => implode(',', $statuses), 'planned' => 'planned,due', 'overdue' => 'overdue');
 			foreach (array('total' => 'PowerPlantPVHomeMaintenanceTotal', 'planned' => 'PowerPlantPVHomeMaintenancePlanned', 'overdue' => 'PowerPlantPVHomeMaintenanceOverdue') as $key => $label) {
 				$board = new WorkboardResponse();
-				$board->label = $langs->trans($label);
+				$board->labelShort = $langs->trans($label);
+				$board->label = $langs->trans($label.'Help');
 				$board->url = dol_buildpath('/powerplantpv/maintenance_list.php', 1).'?search_status='.urlencode($filters[$key]);
 				$board->nbtodo = $maintenanceCounts[$key];
 				$this->results['powerplantpv_maintenance_'.$key] = $board;
