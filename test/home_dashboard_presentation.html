@@ -1,0 +1,42 @@
+<!doctype html><html lang="fr"><meta charset="utf-8"><title>PowerPlantPV home presentation regression</title><link rel="stylesheet" referrerpolicy="no-referrer" href="https://develop.lesmetiersdubatiment.fr/theme/common/fontawesome-5/css/all.min.css?layout=classic&amp;version=25.0.0-alpha">
+<link rel="stylesheet" referrerpolicy="no-referrer" href="https://develop.lesmetiersdubatiment.fr/theme/eldy/style.css.php?lang=fr_FR&amp;theme=eldy&amp;layout=classic&amp;version=25.0.0-alpha">
+<body style="max-width:620px">
+<link rel="stylesheet" href="../css/powerplantpv_home.css">
+<p>Isolated native dashboard markup fixture. No ERP data or session.</p>
+<div id="other-tile"><span class="classfortooltip badge badge-info">8</span></div>
+<div class="info-box"><span class="info-box-icon bg-infobox-powerplantpv"></span><div class="info-box-content"><div class="info-box-lines"><div class="info-box-line spanoverflow nowrap"><a href="/custom/powerplantpv/powerplant_list.php?search_status=1" class="info-box-text info-box-text-a"><div class="marginrightonly inline-block valignmiddle info-box-line-text">Validé</div></a><div class="inline-block nowraponall"><a href="/custom/powerplantpv/powerplant_list.php?search_status=1" class="info-box-text info-box-text-a"><span class="classfortooltip opacitymedium" title="Validé (0)">0</span></a></div></div><div class="info-box-line spanoverflow nowrap"><a href="/custom/powerplantpv/powerplant_list.php?search_status=2" class="info-box-text info-box-text-a"><div class="marginrightonly inline-block valignmiddle info-box-line-text">En service</div></a><div class="inline-block nowraponall"><a href="/custom/powerplantpv/powerplant_list.php?search_status=2" class="info-box-text info-box-text-a"><span class="classfortooltip badge badge-info" title="En service (3)">3</span></a></div></div><div class="info-box-line spanoverflow nowrap"><a href="/custom/powerplantpv/powerplant_list.php?search_status=3" class="info-box-text info-box-text-a"><div class="marginrightonly inline-block valignmiddle info-box-line-text">Hors service</div></a><div class="inline-block nowraponall"><a href="/custom/powerplantpv/powerplant_list.php?search_status=3" class="info-box-text info-box-text-a"><span class="classfortooltip opacitymedium" title="Hors service (0)">0</span></a></div></div></div></div></div><div class="info-box"><span class="info-box-icon bg-infobox-powerplantpvmaintenance"></span><div class="info-box-content"><div class="info-box-lines"><div class="info-box-line spanoverflow nowrap"><a href="/custom/powerplantpv/maintenance_list.php?search_status=planned,due,scheduled,overdue,covered,incomplete" class="info-box-text info-box-text-a"><div class="marginrightonly inline-block valignmiddle info-box-line-text">Maintenances totales</div></a><div class="inline-block nowraponall"><a href="/custom/powerplantpv/maintenance_list.php?search_status=planned,due,scheduled,overdue,covered,incomplete" class="info-box-text info-box-text-a"><span class="classfortooltip badge badge-info" title="Maintenances totales (1)">1</span></a></div></div><div class="info-box-line spanoverflow nowrap"><a href="/custom/powerplantpv/maintenance_list.php?search_status=planned,due" class="info-box-text info-box-text-a"><div class="marginrightonly inline-block valignmiddle info-box-line-text">À prévoir</div></a><div class="inline-block nowraponall"><a href="/custom/powerplantpv/maintenance_list.php?search_status=planned,due" class="info-box-text info-box-text-a"><span class="classfortooltip opacitymedium" title="À prévoir (0)">0</span></a></div></div><div class="info-box-line spanoverflow nowrap"><a href="/custom/powerplantpv/maintenance_list.php?search_status=overdue" class="info-box-text info-box-text-a"><div class="marginrightonly inline-block valignmiddle info-box-line-text">En retard</div></a><div class="inline-block nowraponall"><a href="/custom/powerplantpv/maintenance_list.php?search_status=overdue" class="info-box-text info-box-text-a"><span class="classfortooltip opacitymedium" title="En retard (0)">0</span></a></div></div></div></div></div>
+<script src="../js/powerplantpv_home.js"></script>
+<script src="../js/powerplantpv_home.js"></script>
+<pre id="result">Waiting</pre>
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+ var checks = 0;
+ function check(value, message) { if (!value) throw new Error(message); checks++; }
+ try {
+  var plant = document.querySelector('.bg-infobox-powerplantpv').closest('.info-box');
+  var maintenance = document.querySelector('.bg-infobox-powerplantpvmaintenance').closest('.info-box');
+  check(plant.querySelectorAll('.info-box-line').length === 2, 'Only two plant rows after two initializations');
+  var inLink = plant.querySelector('a[href$="search_status=2"]');
+  var outLink = plant.querySelector('a[href$="search_status=3"]');
+  check(inLink.closest('.info-box-line') === outLink.closest('.info-box-line'), 'Service states share a row');
+  check(inLink.href !== outLink.href, 'Each service label keeps its filtered destination');
+  check(inLink.title === 'En service' && outLink.title === 'Hors service', 'Both labels retain text tooltips');
+  ['1','2','3'].forEach(function (status, i) {
+   var badge = plant.querySelector('a[href$="search_status='+status+'"] .classfortooltip');
+   check(badge.classList.contains(['badge-secondary','badge-success','badge-danger'][i]), 'Plant badge color '+status);
+  });
+  ['planned,due,scheduled,overdue,covered,incomplete','planned,due','overdue'].forEach(function (status,i) {
+   var badge = maintenance.querySelector('a[href$="search_status='+status+'"] .classfortooltip');
+   check(badge.classList.contains(['badge-secondary','badge-warning','badge-danger'][i]), 'Maintenance badge color '+status);
+  });
+  check(plant.querySelectorAll('a').length === 6 && maintenance.querySelectorAll('a').length === 6, 'All labels and count links retained');
+  check(document.querySelector('#other-tile span').className === 'classfortooltip badge badge-info', 'Other modules untouched');
+  check(plant.querySelector('a[href$="search_status=1"] .classfortooltip').textContent === '0', 'Zero count retained and badged');
+  var red = getComputedStyle(plant.querySelector('.badge-danger')).backgroundColor.match(/\d+/g).map(Number);
+  var orange = getComputedStyle(maintenance.querySelector('.badge-warning')).backgroundColor.match(/\d+/g).map(Number);
+  check(red[0] > red[1] * 2 && red[1] === red[2], 'Danger hue is red, not the theme brown');
+  check(orange[0] > orange[1] && orange[1] > orange[2], 'To-schedule hue is orange');
+  document.getElementById('result').textContent = checks+' checks passed';
+ } catch (error) { document.getElementById('result').textContent = 'FAILED: '+error.message; throw error; }
+});
+</script></body></html>

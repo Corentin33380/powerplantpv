@@ -1,5 +1,11 @@
 # CHANGELOG MODULE POWERPLANTPV FOR [DOLIBARR ERP CRM](https://www.dolibarr.org)
 
+## Correctif en attente — version 1.7.0 conservée
+
+- Accueil : retrait de la ligne « Brouillon » dans la tuile Centrales. Les lignes « Validé », « En service » et « Hors service » sont conservées ; aucune centrale ni donnée métier n’est supprimée.
+- Accueil : états « En service / Hors service » sur une même ligne, avec liens distincts et badges natifs verts/rouges. « Validé » et le total des maintenances restent gris ; « À prévoir » devient orange et « En retard » rouge, y compris lorsque le compteur vaut zéro.
+- Le tag et le paquet de la release 1.7.0 déjà publiée restent inchangés. Ce correctif doit être intégré et déployé séparément.
+
 ## 1.7.0 — 2026-11-13
 
 - Accueil : deux tuiles natives pour les centrales (brouillons, validées, en service et hors service) et les maintenances (total des périodes requises, à prévoir et en retard), avec accès aux listes filtrées.
