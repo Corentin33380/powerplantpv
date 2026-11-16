@@ -1844,6 +1844,7 @@ class modPowerPlantPV extends DolibarrModules
 				mppt_number integer NOT NULL,
 				pv_input_number integer NOT NULL,
 				string_ref varchar(128),
+				fk_product integer,
 				module_count integer,
 				module_power double(24,8),
 				orientation varchar(64),
@@ -1906,6 +1907,7 @@ class modPowerPlantPV extends DolibarrModules
 				'pv_input_count' => array('type' => 'integer', 'value' => '', 'null' => 'DEFAULT 0 NOT NULL'),
 			),
 			$this->db->prefix().'powerplantpv_equipment_string' => array(
+				'fk_product' => array('type' => 'integer', 'value' => '', 'null' => ''),
 				'fk_powerplant' => array('type' => 'integer', 'value' => '', 'null' => 'NOT NULL'),
 				'fk_inverter' => array('type' => 'integer', 'value' => '', 'null' => 'NOT NULL'),
 				'mppt_number' => array('type' => 'integer', 'value' => '', 'null' => 'NOT NULL'),
@@ -1994,6 +1996,7 @@ class modPowerPlantPV extends DolibarrModules
 				'idx_powerplantpv_equipment_mppt_position' => 'position',
 			),
 			$this->db->prefix().'powerplantpv_equipment_string' => array(
+				'idx_ppv_string_product' => 'fk_product',
 				'idx_powerplantpv_equipment_string_entity' => 'entity',
 				'idx_powerplantpv_equipment_string_powerplant' => 'fk_powerplant',
 				'idx_powerplantpv_equipment_string_inverter' => 'fk_inverter',

@@ -1936,12 +1936,14 @@ class PowerPlantPVReportBuilder
 			$this->db->free($resql);
 		}
 
-		$sql = "SELECT rowid, fk_powerplant, fk_inverter, mppt_number, pv_input_number, string_ref, module_count, module_power, orientation, tilt, is_connected, position";
-		$sql .= " FROM ".$this->db->prefix()."powerplantpv_equipment_string";
-		$sql .= " WHERE fk_powerplant IN (".implode(',', $powerplantIds).")";
-		$sql .= " AND fk_inverter IN (".implode(',', $inverterIds).")";
-		$sql .= " AND entity IN (".$this->db->sanitize(getEntity('powerplant')).")";
-		$sql .= " ORDER BY fk_powerplant ASC, fk_inverter ASC, position ASC, mppt_number ASC, pv_input_number ASC";
+		$sql = "SELECT s.rowid, s.fk_powerplant, s.fk_inverter, s.mppt_number, s.pv_input_number, s.string_ref, s.module_count, CASE WHEN s.fk_product IS NOT NULL THEN panel.pmax ELSE s.module_power END as module_power, s.orientation, s.tilt, s.is_connected, s.position";
+		$sql .= " FROM ".$this->db->prefix()."powerplantpv_equipment_string s";
+		$sql .= " LEFT JOIN ".$this->db->prefix()."product p ON p.rowid = s.fk_product AND p.entity IN (".$this->db->sanitize(getEntity('product')).")";
+		$sql .= " LEFT JOIN ".$this->db->prefix()."powerplantpv_product_pvpanel panel ON panel.fk_product = p.rowid AND panel.entity = p.entity";
+		$sql .= " WHERE s.fk_powerplant IN (".implode(',', $powerplantIds).")";
+		$sql .= " AND s.fk_inverter IN (".implode(',', $inverterIds).")";
+		$sql .= " AND s.entity IN (".$this->db->sanitize(getEntity('powerplant')).")";
+		$sql .= " ORDER BY s.fk_powerplant ASC, s.fk_inverter ASC, s.mppt_number ASC, s.pv_input_number ASC, s.position ASC";
 		$resql = $this->db->query($sql);
 		if ($resql) {
 			while (is_object($obj = $this->db->fetch_object($resql))) {

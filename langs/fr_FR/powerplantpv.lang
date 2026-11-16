@@ -1811,3 +1811,13 @@ PowerPlantPVSerialAnnexGenerated=Annexe générée.
 PowerPlantPVIdentityConcurrentChange=Cet onduleur a été renommé par un autre utilisateur. Rechargez sa fiche avant de réessayer.
 PowerPlantPVDocumentDirectoryUnavailable=Le répertoire documentaire de l’entité propriétaire est indisponible.
 PowerPlantPVSaveCollapse=Enregistrer et réduire
+
+PowerPlantPVEquipmentNumbering=Numérotation des onduleurs et des chaînes
+PowerPlantPVEquipmentMaskHelp=Préfixe et suffixe libres avec un seul compteur numérique entre accolades : OND{00}, PV{00} ou TOIT-{000}. Le nombre de zéros fixe la largeur du compteur. Les références existantes et les saisies manuelles sont conservées.
+PowerPlantPVInverterMaskScope=Compteur par centrale, à partir de 1. Exemple : OND01, OND02.
+PowerPlantPVStringMaskScope=Compteur indépendant par onduleur, à partir de 0, commun à tous ses MPPT. Exemple : PV00, PV01.
+
+PowerPlantPVModuleConnectionSummary=Modules raccordés sur cet onduleur : %s. Modules restant à raccorder sur la centrale : %s.
+PowerPlantPVStringPower=Puissance de la chaîne
+PowerPlantPVInvalidModuleSelection=Sélectionnez une référence de module présente dans la composition de la centrale et un nombre de modules valide.
+PowerPlantPVModuleAllocationExceeded=Le nombre de modules raccordés dépasse la quantité disponible dans la composition.

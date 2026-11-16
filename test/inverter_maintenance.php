@@ -77,8 +77,8 @@ $db->rows = array(
 	(object) array('rowid' => 3, 'qty' => 1, 'inverter_id' => 20, 'equipment_marker' => 'O3', 'equipment_identification' => 'South'),
 );
 $service = new PowerPlantPVEquipmentIdentity($db);
-checkMaintenance($service->save(2, 2, 2, '', '', true) === 1, 'Explicit default allocation succeeds');
-checkMaintenance(strpos(end($db->updates), "equipment_marker = 'O2'") !== false, 'First free marker allocated, existing identities preserved');
+checkMaintenance($service->save(2, 2, 2, 'O2', 'Onduleur 2', true) === 1, 'Explicit identity creation succeeds');
+checkMaintenance(strpos(end($db->updates), "equipment_marker = 'O2'") !== false, 'Requested marker stored, existing identities preserved');
 $revision = PowerPlantPVEquipmentIdentity::revision($db->rows[1]);
 $db->updates = array();
 checkMaintenance($service->save(2, 2, 2, ' o1 ', 'Duplicate', false, $revision) < 0 && !$db->updates, 'Case-insensitive trimmed duplicate refused before mutation');
@@ -91,6 +91,37 @@ checkMaintenance($service->save(2, 2, 2, 'O2', 'Changed', false, $revision) < 0,
 
 $db->fail = false; $db->rows[1]->category_code = 'ONDACC'; $db->updates = array();
 checkMaintenance($service->save(2, 2, 2, '', '', true) === 1 && !$db->updates, 'An inverter accessory does not acquire a physical inverter marker');
+
+
+require_once dirname(__DIR__).'/class/powerplantpvstringallocation.class.php';
+if (!function_exists('getEntity')) { function getEntity($kind) { return '2'; } }
+class MaintenanceAllocationDb
+{
+ public $queries = array(); public $fail = false;
+ public function prefix() { return 'test_'; }
+ public function sanitize($s) { return $s; }
+ public function query($sql) {
+  $this->queries[] = $sql;
+  if ($this->fail) { return false; }
+  return (object) array('rows' => strpos($sql, 'SELECT c.fk_product') === 0
+   ? array((object) array('fk_product'=>10, 'qty'=>12, 'ref'=>'PV450', 'label'=>'Panel', 'pmax'=>450))
+   : array((object) array('fk_inverter'=>31, 'fk_product'=>10, 'module_count'=>3), (object) array('fk_inverter'=>32, 'fk_product'=>10, 'module_count'=>4)));
+ }
+ public function fetch_object($r) { return array_shift($r->rows); }
+ public function lasterror() { return 'Allocation read failed'; }
+}
+$allocationDb = new MaintenanceAllocationDb();
+$allocation = new PowerPlantPVStringAllocation($allocationDb, 21, 2);
+checkMaintenance($allocation->modules()[10]['power'] === 450.0, 'Module power comes from detailed product characteristics');
+$counts = $allocation->connected(31);
+checkMaintenance($counts['inverter'] === 3 && 12 - $counts['total'] === 5, 'Inverter count and remaining plant modules include all other inverters');
+checkMaintenance($allocation->validate(10, 5, 1, 31, 1, 1), 'Available five modules may be connected');
+checkMaintenance(!$allocation->validate(10, 6, 1, 31, 1, 1), 'Over-allocation refused');
+checkMaintenance(!$allocation->validate(99, 1, 1, 31, 1, 1), 'Product outside composition refused');
+checkMaintenance($allocation->validate(10, 0, 1, 31, 1, 1), 'Explicit zero module count is valid');
+checkMaintenance(strpos(implode('\n', $allocationDb->queries), 'AND NOT (fk_inverter = 31 AND mppt_number = 1 AND pv_input_number = 1)') !== false, 'Current string excluded when editing its allocation');
+$allocationDb->fail = true;
+checkMaintenance(!$allocation->validate(10, 1, 1, 31, 1, 1), 'Database failure refuses allocation');
 
 // Real filesystem tests for ownership and idempotence of the frozen annex.
 $temporary = sys_get_temp_dir().'/ppv-maintenance-'.bin2hex(random_bytes(8));

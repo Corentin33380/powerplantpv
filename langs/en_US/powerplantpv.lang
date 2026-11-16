@@ -1811,3 +1811,13 @@ PowerPlantPVSerialAnnexGenerated=Annex generated.
 PowerPlantPVIdentityConcurrentChange=This inverter was renamed by another user. Reload it before retrying.
 PowerPlantPVDocumentDirectoryUnavailable=The owner entity document directory is unavailable.
 PowerPlantPVSaveCollapse=Save and collapse
+
+PowerPlantPVEquipmentNumbering=Inverter and string numbering
+PowerPlantPVEquipmentMaskHelp=Free prefix and suffix with exactly one numeric counter in braces: OND{00}, PV{00} or ROOF-{000}. The number of zeroes sets the counter width. Existing references and manual entries are preserved.
+PowerPlantPVInverterMaskScope=Counter per power plant, starting at 1. Example: OND01, OND02.
+PowerPlantPVStringMaskScope=Independent counter per inverter, starting at 0, shared across its MPPTs. Example: PV00, PV01.
+
+PowerPlantPVModuleConnectionSummary=Modules connected to this inverter: %s. Modules remaining to connect at the plant: %s.
+PowerPlantPVStringPower=String power
+PowerPlantPVInvalidModuleSelection=Select a module reference from the plant composition and a valid module count.
+PowerPlantPVModuleAllocationExceeded=Connected modules exceed the available quantity in the composition.

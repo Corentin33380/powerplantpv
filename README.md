@@ -302,3 +302,16 @@ The plant tile groups in-service and out-of-service states on one line with
 separate links and green/red native badges. Validated and total maintenance
 counts use gray badges; to-schedule counts use orange and overdue counts red,
 including zero values. Without JavaScript, native separate rows remain usable.
+
+### Préparation 1.8 : raccordement des chaînes
+
+Les réglages proposent deux masques libres : `OND{00}` pour les onduleurs (premier numéro 1,
+compteur par centrale) et `PV{00}` pour les chaînes (premier numéro 0, compteur par onduleur,
+commun à tous ses MPPT). Un changement de masque ne renomme pas les éléments existants.
+Les crayons des tableaux MPPT et chaînes reprennent les valeurs de la ligne dans leur formulaire.
+Le sélecteur de modules utilise les références actives de la composition ; la puissance unitaire
+provient des caractéristiques détaillées du produit et la puissance de chaîne est calculée.
+Le bilan indique les modules raccordés à l’onduleur et ceux restant à raccorder sur la centrale.
+Une quantité dépassant le stock de la composition est refusée côté serveur.
+Après déploiement, recharger le module depuis la liste native pour ajouter la liaison nullable
+`fk_product` aux chaînes et son index, sans modifier les anciennes valeurs manuelles.

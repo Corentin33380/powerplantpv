@@ -22,6 +22,7 @@ CREATE TABLE IF NOT EXISTS llx_powerplantpv_equipment_string(
 	mppt_number integer NOT NULL,
 	pv_input_number integer NOT NULL,
 	string_ref varchar(128),
+	fk_product integer,
 	module_count integer,
 	module_power double(24,8),
 	orientation varchar(64),

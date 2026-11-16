@@ -81,6 +81,8 @@ $langs->loadLangs(array("admin", "powerplantpv@powerplantpv"));
 $hookmanager->initHooks(array('powerplantpvsetup', 'globalsetup'));
 
 // Parameters
+require_once __DIR__.'/../class/powerplantpvequipmentnumbering.class.php';
+
 $action = GETPOST('action', 'aZ09');
 $backtopage = GETPOST('backtopage', 'alpha');
 $modulepart = GETPOST('modulepart', 'aZ09');	// Used by actions_setmoduleoptions.inc.php
@@ -514,7 +516,30 @@ if (versioncompare(explode('.', DOL_VERSION), array(15)) < 0 && $action == 'upda
 
 include DOL_DOCUMENT_ROOT.'/core/actions_setmoduleoptions.inc.php';
 
-if ($action == 'updateMask') {
+if ($action === 'save_equipment_masks') {
+	$error = 0;
+	$masks = array();
+	foreach (array('inverter', 'string') as $kind) {
+		$model = new PowerPlantPVEquipmentNumbering($db, $kind);
+		$mask = trim(GETPOST('equipment_mask_'.$kind, 'alphanohtml'));
+		if ($model->getNextValue((object) array('id' => 0, 'entity' => (int) $conf->entity, 'fk_inverter' => 0), $mask) === '') {
+			setEventMessages($langs->trans($model->error), null, 'errors');
+			$error++;
+		}
+		$masks[$kind] = $mask;
+	}
+	if (!$error) {
+		$db->begin();
+		foreach ($masks as $kind => $mask) {
+			if (dolibarr_set_const($db, 'POWERPLANTPV_'.strtoupper($kind).'_MASK', $mask, 'chaine', 0, '', (int) $conf->entity) <= 0) { $error++; }
+		}
+		if ($error) { $db->rollback(); setEventMessages($langs->trans('Error'), null, 'errors'); }
+		else {
+			$db->commit(); setEventMessages($langs->trans('SetupSaved'), null, 'mesgs');
+			header('Location: '.dol_buildpath('/powerplantpv/admin/setup.php', 1).'#equipment-numbering'); exit;
+		}
+	}
+} elseif ($action == 'updateMask') {
 	$maskconst = GETPOST('maskconst', 'aZ09');
 	$maskvalue = GETPOST('maskvalue', 'alpha');
 
@@ -871,6 +896,25 @@ if (getDolGlobalInt('POWERPLANTPV_ATTESTATION_ENABLE', 1)) {
 }
 
 $setupnotempty += powerplantpvPrintPowerPlantModelSettings($myTmpObjects, $dirmodels, $moduledir);
+
+print '<div id="equipment-numbering">'.load_fiche_titre($langs->trans('PowerPlantPVEquipmentNumbering'), '', 'fa-hashtag').'</div>';
+print '<form method="POST" action="'.dol_escape_htmltag($_SERVER['PHP_SELF']).'">';
+print '<input type="hidden" name="token" value="'.newToken().'">';
+print '<input type="hidden" name="action" value="save_equipment_masks">';
+print '<div class="div-table-responsive-no-min"><table class="noborder centpercent">';
+print '<tr class="liste_titre"><td>'.$langs->trans('Name').'</td><td>'.$langs->trans('Description').'</td><td>'.$langs->trans('Example').'</td><td>'.$langs->trans('Status').'</td></tr>';
+foreach (array('inverter' => 'PowerPlantPVInverter', 'string' => 'PowerPlantPVStringRef') as $kind => $label) {
+	$model = new PowerPlantPVEquipmentNumbering($db, $kind);
+	$mask = GETPOST('action', 'aZ09') === 'save_equipment_masks' ? GETPOST('equipment_mask_'.$kind, 'alphanohtml') : $model->getMask();
+	$example = $model->getNextValue((object) array('id' => 0, 'entity' => (int) $conf->entity, 'fk_inverter' => 0), $mask);
+	print '<tr class="oddeven"><td>advanced — '.$langs->trans($label).'</td><td>';
+	print '<label for="equipment_mask_'.$kind.'">'.$langs->trans('Mask').'</label> ';
+	print $form->textwithpicto('<input type="text" class="flat minwidth150" id="equipment_mask_'.$kind.'" name="equipment_mask_'.$kind.'" value="'.dol_escape_htmltag($mask).'">', $langs->trans('PowerPlantPVEquipmentMaskHelp'));
+	print '<br><span class="opacitymedium">'.$langs->trans($kind === 'inverter' ? 'PowerPlantPVInverterMaskScope' : 'PowerPlantPVStringMaskScope').'</span></td>';
+	print '<td>'.dol_escape_htmltag($example !== '' ? $example : $langs->trans($model->error)).'</td><td>'.img_picto($langs->trans('Enabled'), 'switch_on').'</td></tr>';
+}
+print '</table></div><div class="center"><input type="submit" class="button button-save" value="'.$langs->trans('Save').'"></div></form><br>';
+
 
 
 /*if ($action == 'edit') {

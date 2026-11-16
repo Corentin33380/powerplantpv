@@ -81,7 +81,7 @@ class NativeMaintenanceSchemaDb
  public function idate($value) { return '2000-01-01 00:00:00'; }
  public function query($sql) {
   if (strpos($sql, 'CREATE TABLE') === 0) { return true; }
-  if (preg_match("/SHOW COLUMNS FROM ([a-z_]+) LIKE '((?:equipment|inverter)_(?:marker|identification))'/", $sql, $m)) {
+  if (preg_match("/SHOW COLUMNS FROM ([a-z_]+) LIKE '((?:equipment|inverter)_(?:marker|identification)|fk_product)'/", $sql, $m)) {
    return (object) array('count' => isset($this->columns[$m[1].'.'.$m[2]]) ? 1 : 0);
   }
   if (strpos($sql, 'SHOW INDEX') === 0 && strpos($sql, 'uk_ppv_comp_marker') !== false) { return (object) array('count' => $this->index ? 1 : 0); }
@@ -97,7 +97,7 @@ class NativeMaintenanceSchemaDb
 $schema = new NativeMaintenanceSchemaDb();
 $dbProperty = new ReflectionProperty($descriptor, 'db'); $dbProperty->setAccessible(true); $dbProperty->setValue($descriptor, $schema);
 $migration = new ReflectionMethod($descriptor, 'ensureGeneratedReportSchema'); $migration->setAccessible(true);
-nativeMaintenanceCheck($migration->invoke($descriptor) === 1 && count($schema->columns) === 6 && $schema->index, 'Existing schema receives six nullable identity columns and a unique marker index');
+nativeMaintenanceCheck($migration->invoke($descriptor) === 1 && count($schema->columns) === 7 && $schema->index, 'Existing schema receives six nullable identity columns and the module product relationship and a unique marker index');
 $count = count($schema->ddl);
 nativeMaintenanceCheck($migration->invoke($descriptor) === 1 && count($schema->ddl) === $count, 'Repeated activation does not recreate columns or indexes');
 
@@ -127,4 +127,34 @@ $db = $schema;
 $filterError = '';
 $filterSql = forgeSQLFromUniversalSearchCriteria('(t.entity:=:2) AND (t.src_object_id:=:99)', $filterError);
 nativeMaintenanceCheck($filterError === '' && strpos($filterSql, 't.entity') !== false && method_exists('EcmFiles', 'fetchAll'), 'Owner-specific ECM lookup uses a native v20+ USF contract');
+
+require_once $module.'/class/powerplantpvequipmentnumbering.class.php';
+class NativeEquipmentCounterDb
+{
+ public $last = null; public $nb = 0; public $queries = array();
+ public function prefix() { return MAIN_DB_PREFIX; }
+ public function escape($value) { return addslashes($value); }
+ public function sanitize($value) { return $value; }
+ public function query($sql) { $this->queries[] = $sql; return (object) array('nb' => $this->nb, 'val' => $this->last); }
+ public function fetch_object($row) { return $row; }
+ public function lasterror() { return 'Database failure'; }
+}
+$counterDb = new NativeEquipmentCounterDb();
+$inverterModel = new PowerPlantPVEquipmentNumbering($counterDb, 'inverter');
+$stringModel = new PowerPlantPVEquipmentNumbering($counterDb, 'string');
+$scope = (object) array('id' => 21, 'entity' => 2, 'fk_inverter' => 31);
+nativeMaintenanceCheck($inverterModel->getNextValue($scope, 'OND{00}') === 'OND01', 'Native two-digit inverter counter starts at one');
+nativeMaintenanceCheck(!isset($conf->global->MAIN_COUNTER_WITH_LESS_3_DIGITS), 'Short-counter allowance does not leak to other modules');
+nativeMaintenanceCheck($stringModel->getNextValue($scope, 'PV{00}') === 'PV00', 'First chain starts at zero');
+$counterDb->last = '0'; $counterDb->nb = 1;
+nativeMaintenanceCheck($stringModel->getNextValue($scope, 'PV{00}') === 'PV01', 'PV00 advances to PV01');
+$counterDb->last = '9';
+nativeMaintenanceCheck($stringModel->getNextValue($scope, 'TOIT-{000}') === 'TOIT-010', 'Free prefix and native padding retained');
+$queries = implode('\n', $counterDb->queries);
+nativeMaintenanceCheck(strpos($queries, 'fk_powerplant = 21 AND entity = 2 AND fk_inverter = 31') !== false, 'Chain counter constrained by plant, owner and installed inverter');
+$counterDb->last = null; $counterDb->nb = 0; $scope->fk_inverter = 32;
+nativeMaintenanceCheck($stringModel->getNextValue($scope, 'PV{00}') === 'PV00', 'Another inverter starts its own zero counter');
+nativeMaintenanceCheck($stringModel->getNextValue($scope, 'PV00') === '' && $stringModel->error === 'ErrorBadMask', 'Invalid mask rejected before allocation');
+$counterDb->last = '99'; $counterDb->nb = 1;
+nativeMaintenanceCheck($inverterModel->getNextValue($scope, 'OND{00}') === '', 'Exhausted native counter fails instead of truncating or duplicating');
 print 'OK: '.$checks.' native checks, PHP '.PHP_VERSION.', Dolibarr '.DOL_VERSION." (no live database).\n";

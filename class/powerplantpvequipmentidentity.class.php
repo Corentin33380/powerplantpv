@@ -86,10 +86,13 @@ class PowerPlantPVEquipmentIdentity
 			return 1;
 		}
 		if ($new) {
-			$n = 1;
-			while (isset($used['o'.$n])) { $n++; }
-			$marker = $marker !== '' ? $marker : 'O'.$n;
-			$name = $name !== '' ? $name : $langs->transnoentities('PowerPlantPVInverter').' '.$n;
+			if ($marker === '') {
+				require_once __DIR__.'/powerplantpvequipmentnumbering.class.php';
+				$model = new PowerPlantPVEquipmentNumbering($this->db, 'inverter');
+				$marker = $model->getNextValue((object) array('id' => $plant, 'entity' => $entity));
+				if ($marker === '') { $this->error = $model->error; return -1; }
+			}
+			$name = $name !== '' ? $name : $langs->transnoentities('PowerPlantPVInverter').' '.$marker;
 		}
 		if ((float) $current->qty !== 1.0 || $marker === '' || $name === '' || mb_strlen($marker, 'UTF-8') > 32 || mb_strlen($name, 'UTF-8') > 255) {
 			$this->error = 'PowerPlantPVIdentityRequired';
