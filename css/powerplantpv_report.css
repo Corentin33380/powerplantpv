@@ -454,11 +454,11 @@
 	}
 }
 
-.page-maintenance-intervention-report .powerplantpv-save-collapse { display: none; }
+.page-maintenance-intervention-report button.powerplantpv-save-collapse[type="submit"] { display: none; }
 .page-maintenance-intervention-report .powerplantpv-dc-card-title { list-style: none; }
 .page-maintenance-intervention-report .powerplantpv-dc-card-title::-webkit-details-marker { display: none; }
 @media (max-width: 767px) {
 	.page-maintenance-intervention-report .powerplantpv-dc-card-title { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-	.page-maintenance-intervention-report .powerplantpv-save-collapse { display: inline-flex; align-items: center; justify-content: center; min-width: 44px; min-height: 44px; padding: 8px; margin: 0; }
+	.page-maintenance-intervention-report button.powerplantpv-save-collapse[type="submit"] { display: inline-flex; align-items: center; justify-content: center; min-width: 44px; min-height: 44px; padding: 8px; margin: 0; }
 	.page-maintenance-intervention-report .powerplantpv-dc-card { scroll-margin-top: 110px; }
 }
