@@ -642,6 +642,7 @@ if (in_array($action, array('save_mppt_config', 'delete_mppt_config', 'save_stri
 				setEventMessages($db->lasterror(), null, 'errors');
 			} else {
 				setEventMessages($langs->trans('RecordSaved'), null, 'mesgs');
+				header('Location: '.dol_buildpath('/powerplantpv/powerplant_composition.php', 1).'?id='.(int) $object->id.'&action=configdc&lineid='.(int) $lineid.'&token='.newToken().'#powerplantpv-mppt-string-configuration'); exit;
 			}
 		}
 		$action = 'configdc';
@@ -1699,7 +1700,7 @@ if ($id > 0 || !empty($ref)) {
 					print '<td>'.dol_escape_htmltag((string) $inverterline->serial_number).'</td>';
 					print '<td><a href="'.dol_escape_htmltag($configurl).'">'.$configlink.'</a></td>';
 					$editurl = dol_buildpath('/powerplantpv/powerplant_composition.php', 1).'?id='.(int) $object->id.'&action=editline&lineid='.(int) $inverterline->rowid.'&token='.newToken();
-					print '<td class="center nowrap"><a class="reposition" href="'.dol_escape_htmltag($editurl).'" title="'.dol_escape_htmltag($langs->trans('Modify')).'">'.img_edit($langs->trans('Modify')).'</a></td>';
+					print '<td class="center nowrap"><a class="editfielda reposition" href="'.dol_escape_htmltag($editurl).'" title="'.dol_escape_htmltag($langs->trans('Modify')).'">'.img_edit($langs->trans('Modify')).'</a></td>';
 					print '</tr>';
 				}
 			} else {
@@ -1737,6 +1738,7 @@ if ($id > 0 || !empty($ref)) {
 					$editString = (object) array('mppt_number' => $mpptNumber, 'pv_input_number' => $pvInputNumber, 'string_ref' => $stringRef, 'fk_product' => $moduleProduct, 'module_count' => $moduleCount, 'module_power' => $moduleProduct > 0 ? ($moduleChoices[$moduleProduct]['power'] ?? null) : $modulePower, 'orientation' => $orientation, 'tilt' => $tilt, 'is_connected' => $isConnected, 'position' => $stringPosition);
 				}
 
+				if (GETPOST('action', 'aZ09') === 'save_mppt_config') { $editMppt = (object) array('mppt_number' => GETPOSTINT('mppt_number'), 'pv_input_count' => GETPOSTINT('pv_input_count'), 'position' => GETPOSTINT('mppt_position')); }
 				$mpptOptions = array();
 				foreach ($mpptRows as $mpptRow) {
 					$mpptOptions[(int) $mpptRow->mppt_number] = $langs->trans('PowerPlantPVMPPT').' '.((int) $mpptRow->mppt_number);
@@ -1766,11 +1768,18 @@ if ($id > 0 || !empty($ref)) {
 				if ($connectedModules !== null) {
 					print '<div class="info">'.$langs->trans('PowerPlantPVModuleConnectionSummary', $connectedModules['inverter'], array_sum(array_column($moduleChoices, 'qty')) - $connectedModules['total']).'</div>';
 				}
+				$configBase = dol_buildpath('/powerplantpv/powerplant_composition.php', 1).'?id='.(int) $object->id.'&action=configdc&lineid='.(int) $lineid.'&token='.newToken();
+				$showMpptDialog = $editMppt !== null || GETPOSTINT('add_mppt') || GETPOST('action', 'aZ09') === 'save_mppt_config';
+				$showStringDialog = $editString !== null || GETPOSTINT('add_string') || GETPOST('action', 'aZ09') === 'save_string_config';
+				$nextMppt = 1;
+				foreach ($mpptRows as $row) { $nextMppt = max($nextMppt, (int) $row->mppt_number + 1); }
+				$addMppt = dolGetButtonTitle($langs->trans('PowerPlantPVAddOrUpdateMPPT'), '', 'fa fa-plus-circle', $configBase.'&add_mppt=1', '', $canmanagecomposition);
+				$addString = dolGetButtonTitle($langs->trans('PowerPlantPVAddOrUpdateString'), '', 'fa fa-plus-circle', $configBase.'&add_string=1', '', $canmanagecomposition);
 				print '<div class="fichecenter">';
 				print '<div class="fichehalfleft">';
 				print '<div class="div-table-responsive-no-min">';
 				print '<table class="noborder centpercent">';
-				print '<tr class="liste_titre"><td>'.$langs->trans('PowerPlantPVMPPT').'</td><td>'.$langs->trans('PowerPlantPVPVInputCount').'</td><td>'.$langs->trans('Position').'</td><td class="center"></td></tr>';
+				print '<tr class="liste_titre"><td>'.$langs->trans('PowerPlantPVMPPT').'</td><td>'.$langs->trans('PowerPlantPVPVInputCount').'</td><td>'.$langs->trans('Position').'</td><td class="center nowraponall">'.$addMppt.'</td></tr>';
 				if (!empty($mpptRows)) {
 					foreach ($mpptRows as $mpptRow) {
 						print '<tr class="oddeven">';
@@ -1778,7 +1787,7 @@ if ($id > 0 || !empty($ref)) {
 						print '<td>'.dol_escape_htmltag((string) $mpptRow->pv_input_count).'</td>';
 						print '<td>'.dol_escape_htmltag((string) $mpptRow->position).'</td>';
 						print '<td class="center">';
-						print '<a class="reposition marginrightonly" href="'.dol_buildpath('/powerplantpv/powerplant_composition.php', 1).'?id='.(int) $object->id.'&action=configdc&lineid='.(int) $lineid.'&token='.newToken().'&edit_mppt='.(int) $mpptRow->mppt_number.'#powerplantpv-mppt-edit">'.img_edit($langs->trans('Modify')).'</a>';
+						print '<a class="editfielda reposition marginrightonly" href="'.dol_buildpath('/powerplantpv/powerplant_composition.php', 1).'?id='.(int) $object->id.'&action=configdc&lineid='.(int) $lineid.'&token='.newToken().'&edit_mppt='.(int) $mpptRow->mppt_number.'#powerplantpv-mppt-edit">'.img_edit($langs->trans('Modify')).'</a>';
 						print '<a class="reposition" href="'.$_SERVER['PHP_SELF'].'?id='.$object->id.'&action=delete_mppt_config&lineid='.(int) $lineid.'&mppt_number='.(int) $mpptRow->mppt_number.'&token='.newToken().'">'.img_delete($langs->trans('Delete')).'</a>';
 						print '</td>';
 						print '</tr>';
@@ -1788,24 +1797,31 @@ if ($id > 0 || !empty($ref)) {
 				}
 				print '</table>';
 				print '</div>';
-				print '<form method="POST" action="'.$_SERVER['PHP_SELF'].'?id='.$object->id.'">';
-				print '<input type="hidden" name="token" value="'.newToken().'">';
-				print '<input type="hidden" name="action" value="save_mppt_config">';
-				print '<input type="hidden" name="lineid" value="'.((int) $lineid).'">';
-				print '<table class="noborder centpercent">';
-				print '<tr id="powerplantpv-mppt-edit" class="liste_titre"><td colspan="2">'.$langs->trans('PowerPlantPVAddOrUpdateMPPT').'</td></tr>';
-				print '<tr><td class="titlefield">'.$langs->trans('PowerPlantPVMPPT').'</td><td><input type="number" min="1" class="flat maxwidth75" name="mppt_number" value="'.(int) ($editMppt->mppt_number ?? 0).'" '.($editMppt ? 'readonly' : '').'></td></tr>';
-				print '<tr><td>'.$langs->trans('PowerPlantPVPVInputCount').'</td><td><input type="number" min="0" class="flat maxwidth75" name="pv_input_count" value="'.(int) ($editMppt->pv_input_count ?? 2).'"></td></tr>';
-				print '<tr><td>'.$langs->trans('Position').'</td><td><input type="number" class="flat maxwidth75" name="mppt_position" value="'.(int) ($editMppt->position ?? 0).'"></td></tr>';
-				print '</table>';
-				print '<div class="center"><input type="submit" class="button button-save" value="'.$langs->trans('Save').'"></div>';
-				print '</form>';
+				if ($showMpptDialog) {
+					print '<div id="powerplantpv-mppt-dialog"'.(!empty($conf->use_javascript_ajax) ? ' class="hidden"' : '').'>';
+					print '<form method="POST" action="'.$_SERVER['PHP_SELF'].'?id='.$object->id.'">';
+					print '<input type="hidden" name="token" value="'.newToken().'">';
+					print '<input type="hidden" name="action" value="save_mppt_config">';
+					print '<input type="hidden" name="lineid" value="'.((int) $lineid).'">';
+					print '<table class="noborder centpercent">';
+					print '<tr id="powerplantpv-mppt-edit" class="liste_titre"><td colspan="2">'.$langs->trans('PowerPlantPVAddOrUpdateMPPT').'</td></tr>';
+					print '<tr><td class="titlefield">'.$langs->trans('PowerPlantPVMPPT').'</td><td><input type="number" min="1" class="flat maxwidth75" name="mppt_number" value="'.(int) ($editMppt->mppt_number ?? $nextMppt).'" '.($editMppt ? 'readonly' : '').'></td></tr>';
+					print '<tr><td>'.$langs->trans('PowerPlantPVPVInputCount').'</td><td><input type="number" min="0" class="flat maxwidth75" name="pv_input_count" value="'.(int) ($editMppt->pv_input_count ?? 2).'"></td></tr>';
+					print '<tr><td>'.$langs->trans('Position').'</td><td><input type="number" class="flat maxwidth75" name="mppt_position" value="'.(int) ($editMppt->position ?? $nextMppt).'"></td></tr>';
+					print '</table>';
+					print '<div class="center"><input type="submit" class="button button-save" value="'.$langs->trans('Save').'"> '.dolGetButtonAction($langs->trans('Cancel'), '', 'default', $configBase).'</div>';
+					print '</form>';
+					print '</div>';
+					if (!empty($conf->use_javascript_ajax)) {
+						print '<script nonce="'.getNonce().'">jQuery(function ($) { var dialog = $("#powerplantpv-mppt-dialog"); dialog.removeClass("hidden").dialog({autoOpen:true,modal:true,width:Math.min(650,$(window).width()-32),maxHeight:$(window).height()-32,title:"'.dol_escape_js($langs->transnoentities('PowerPlantPVAddOrUpdateMPPT')).'"}); dialog.find(".butAction").on("click.ppvDcCancel",function(e){e.preventDefault();dialog.dialog("close");}); });</script>';
+					}
+				}
 				print '</div>';
 
 				print '<div class="fichehalfright">';
 				print '<div class="div-table-responsive-no-min">';
 				print '<table class="noborder centpercent">';
-				print '<tr class="liste_titre"><td>'.$langs->trans('PowerPlantPVMPPT').'</td><td>'.$langs->trans('PowerPlantPVPVInput').'</td><td>'.$langs->trans('PowerPlantPVStringRef').'</td><td>'.$langs->trans('PowerPlantPVPVInputConnected').'</td><td>'.$langs->trans('Product').'</td><td>'.$langs->trans('PowerPlantPVModuleCount').'</td><td>'.$langs->trans('PowerPlantPVModulePower').'</td><td>'.$langs->trans('PowerPlantPVStringPower').'</td><td>'.$langs->trans('PowerPlantPVOrientation').'</td><td>'.$langs->trans('PowerPlantPVTilt').'</td><td>'.$langs->trans('Position').'</td><td class="center"></td></tr>';
+				print '<tr class="liste_titre"><td>'.$langs->trans('PowerPlantPVMPPT').'</td><td>'.$langs->trans('PowerPlantPVPVInput').'</td><td>'.$langs->trans('PowerPlantPVStringRef').'</td><td>'.$langs->trans('PowerPlantPVPVInputConnected').'</td><td>'.$langs->trans('Product').'</td><td>'.$langs->trans('PowerPlantPVModuleCount').'</td><td>'.$langs->trans('PowerPlantPVModulePower').'</td><td>'.$langs->trans('PowerPlantPVStringPower').'</td><td>'.$langs->trans('PowerPlantPVOrientation').'</td><td>'.$langs->trans('PowerPlantPVTilt').'</td><td>'.$langs->trans('Position').'</td><td class="center nowraponall">'.$addString.'</td></tr>';
 				if (!empty($stringRows)) {
 					foreach ($stringRows as $stringRow) {
 						print '<tr class="oddeven">';
@@ -1821,7 +1837,7 @@ if ($id > 0 || !empty($ref)) {
 							print '<td>'.dol_escape_htmltag((string) ($stringRow->{$column} ?? '')).'</td>';
 						}
 						print '<td class="center nowraponall">';
-						print '<a class="reposition marginrightonly" href="'.dol_buildpath('/powerplantpv/powerplant_composition.php', 1).'?id='.(int) $object->id.'&action=configdc&lineid='.(int) $lineid.'&token='.newToken().'&edit_string_mppt='.(int) $stringRow->mppt_number.'&edit_input='.(int) $stringRow->pv_input_number.'#powerplantpv-string-edit">'.img_edit($langs->trans('Modify')).'</a>';
+						print '<a class="editfielda reposition marginrightonly" href="'.dol_buildpath('/powerplantpv/powerplant_composition.php', 1).'?id='.(int) $object->id.'&action=configdc&lineid='.(int) $lineid.'&token='.newToken().'&edit_string_mppt='.(int) $stringRow->mppt_number.'&edit_input='.(int) $stringRow->pv_input_number.'#powerplantpv-string-edit">'.img_edit($langs->trans('Modify')).'</a>';
 						print '<a class="reposition" href="'.$_SERVER['PHP_SELF'].'?id='.$object->id.'&action=delete_string_config&lineid='.(int) $lineid.'&mppt_number='.(int) $stringRow->mppt_number.'&pv_input_number='.(int) $stringRow->pv_input_number.'&token='.newToken().'">'.img_delete($langs->trans('Delete')).'</a>';
 						print '</td>';
 						print '</tr>';
@@ -1831,41 +1847,48 @@ if ($id > 0 || !empty($ref)) {
 				}
 				print '</table>';
 				print '</div>';
-				print '<form method="POST" action="'.$_SERVER['PHP_SELF'].'?id='.$object->id.'">';
-				print '<input type="hidden" name="token" value="'.newToken().'">';
-				print '<input type="hidden" name="action" value="save_string_config">';
-				print '<input type="hidden" name="lineid" value="'.((int) $lineid).'">';
-				print '<table class="noborder centpercent">';
-				print '<tr id="powerplantpv-string-edit" class="liste_titre"><td colspan="2">'.$langs->trans('PowerPlantPVAddOrUpdateString').'</td></tr>';
-				print '<tr><td class="titlefield">'.$langs->trans('PowerPlantPVMPPT').'</td><td>';
-				if ($editString) {
-					print (int) $editString->mppt_number.'<input type="hidden" name="string_mppt_number" value="'.(int) $editString->mppt_number.'">';
-				} elseif (!empty($mpptOptions)) {
-					print $form->selectarray('string_mppt_number', $mpptOptions, 0, 1, 0, 0, '', 0, 0, 0, '', 'maxwidth150');
-				} else {
-					print '<input type="number" min="1" class="flat maxwidth75" name="string_mppt_number" value="">';
+				if ($showStringDialog) {
+					print '<div id="powerplantpv-string-dialog"'.(!empty($conf->use_javascript_ajax) ? ' class="hidden"' : '').'>';
+					print '<form method="POST" action="'.$_SERVER['PHP_SELF'].'?id='.$object->id.'">';
+					print '<input type="hidden" name="token" value="'.newToken().'">';
+					print '<input type="hidden" name="action" value="save_string_config">';
+					print '<input type="hidden" name="lineid" value="'.((int) $lineid).'">';
+					print '<table class="noborder centpercent">';
+					print '<tr id="powerplantpv-string-edit" class="liste_titre"><td colspan="2">'.$langs->trans('PowerPlantPVAddOrUpdateString').'</td></tr>';
+					print '<tr><td class="titlefield">'.$langs->trans('PowerPlantPVMPPT').'</td><td>';
+					if ($editString) {
+						print (int) $editString->mppt_number.'<input type="hidden" name="string_mppt_number" value="'.(int) $editString->mppt_number.'">';
+					} elseif (!empty($mpptOptions)) {
+						print $form->selectarray('string_mppt_number', $mpptOptions, 0, 1, 0, 0, '', 0, 0, 0, '', 'maxwidth150');
+					} else {
+						print '<input type="number" min="1" class="flat maxwidth75" name="string_mppt_number" value="">';
+					}
+					print '</td></tr>';
+					print '<tr><td>'.$langs->trans('PowerPlantPVPVInput').'</td><td><input type="number" min="1" class="flat maxwidth75" name="pv_input_number" value="'.dol_escape_htmltag((string) ($editString->pv_input_number ?? '')).'" '.($editString ? 'readonly' : '').'></td></tr>';
+					print '<tr><td>'.$langs->trans('PowerPlantPVStringRef').'</td><td><input type="text" class="flat minwidth150" name="string_ref" value="'.dol_escape_htmltag((string) ($editString->string_ref ?? '')).'"></td></tr>';
+					$moduleOptions = array();
+					$modulePowers = array();
+					foreach ($moduleChoices as $productId => $moduleChoice) { $moduleOptions[$productId] = $moduleChoice['label']; $modulePowers[$productId] = $moduleChoice['power']; }
+					print '<tr><td>'.$langs->trans('Product').'</td><td>'.$form->selectarray('module_product', $moduleOptions, (int) ($editString->fk_product ?? 0), 1, 0, 0, '', 0, 0, 0, '', 'minwidth150').'</td></tr>';
+					if (!empty($conf->use_javascript_ajax)) { print ajax_combobox('module_product'); }
+					print '<tr><td>'.$langs->trans('PowerPlantPVModuleCount').'</td><td><input type="number" min="0" class="flat maxwidth75" name="module_count" value="'.dol_escape_htmltag((string) ($editString->module_count ?? '')).'"></td></tr>';
+					print '<tr><td>'.$langs->trans('PowerPlantPVModulePower').'</td><td><input type="text" class="flat maxwidth75 right" name="module_power" value="'.dol_escape_htmltag((string) ($editString->module_power ?? '')).'"> Wc</td></tr>';
+					print '<tr><td>'.$langs->trans('PowerPlantPVStringPower').'</td><td><output id="powerplantpv-string-power">'.($editString && $editString->module_power !== null ? dol_escape_htmltag((string) ((int) $editString->module_count * (float) $editString->module_power)) : '').'</output> Wc</td></tr>';
+					print '<tr><td>'.$langs->trans('PowerPlantPVOrientation').'</td><td><input type="text" class="flat maxwidth100" name="orientation" value="'.dol_escape_htmltag((string) ($editString->orientation ?? '')).'"></td></tr>';
+					print '<tr><td>'.$langs->trans('PowerPlantPVTilt').'</td><td><input type="text" class="flat maxwidth75 right" name="tilt" value="'.dol_escape_htmltag((string) ($editString->tilt ?? '')).'"> °</td></tr>';
+					print '<tr><td>'.$langs->trans('PowerPlantPVPVInputConnected').'</td><td>'.$form->selectarray('is_connected', array(0 => $langs->trans('No'), 1 => $langs->trans('Yes')), (int) ($editString->is_connected ?? 1), 0, 0, 0, '', 0, 0, 0, '', 'maxwidth100').'</td></tr>';
+					print '<tr><td>'.$langs->trans('Position').'</td><td><input type="number" class="flat maxwidth75" name="string_position" value="'.dol_escape_htmltag((string) ($editString->position ?? '')).'"></td></tr>';
+					print '</table>';
+					print '<div class="center"><input type="submit" class="button button-save" value="'.$langs->trans('Save').'"> '.dolGetButtonAction($langs->trans('Cancel'), '', 'default', $configBase).'</div>';
+					if (!empty($conf->use_javascript_ajax)) {
+						print '<script nonce="'.getNonce().'">jQuery(function ($) { var powers = '.json_encode($modulePowers, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT).'; var product = $("#module_product"), form = product.closest("form"), power = form.find("[name=module_power]"), count = form.find("[name=module_count]"); function update() { var id = product.val(); if (id && id !== "-1") { power.val(powers[id] == null ? "" : powers[id]).prop("readonly", true); } else { power.prop("readonly", false); } var p = power.val(), n = count.val(); $("#powerplantpv-string-power").text(p !== "" && n !== "" ? Number(p.replace(",", ".")) * Number(n) : ""); } product.on("change.ppvString", update); power.add(count).on("input.ppvString", update); update(); });</script>';
+					}
+					print '</form>';
+					print '</div>';
+					if (!empty($conf->use_javascript_ajax)) {
+						print '<script nonce="'.getNonce().'">jQuery(function ($) { var dialog = $("#powerplantpv-string-dialog"); dialog.removeClass("hidden").dialog({autoOpen:true,modal:true,width:Math.min(650,$(window).width()-32),maxHeight:$(window).height()-32,title:"'.dol_escape_js($langs->transnoentities('PowerPlantPVAddOrUpdateString')).'"}); dialog.find(".butAction").on("click.ppvDcCancel",function(e){e.preventDefault();dialog.dialog("close");}); });</script>';
+					}
 				}
-				print '</td></tr>';
-				print '<tr><td>'.$langs->trans('PowerPlantPVPVInput').'</td><td><input type="number" min="1" class="flat maxwidth75" name="pv_input_number" value="'.dol_escape_htmltag((string) ($editString->pv_input_number ?? '')).'" '.($editString ? 'readonly' : '').'></td></tr>';
-				print '<tr><td>'.$langs->trans('PowerPlantPVStringRef').'</td><td><input type="text" class="flat minwidth150" name="string_ref" value="'.dol_escape_htmltag((string) ($editString->string_ref ?? '')).'"></td></tr>';
-				$moduleOptions = array();
-				$modulePowers = array();
-				foreach ($moduleChoices as $productId => $moduleChoice) { $moduleOptions[$productId] = $moduleChoice['label']; $modulePowers[$productId] = $moduleChoice['power']; }
-				print '<tr><td>'.$langs->trans('Product').'</td><td>'.$form->selectarray('module_product', $moduleOptions, (int) ($editString->fk_product ?? 0), 1, 0, 0, '', 0, 0, 0, '', 'minwidth150').'</td></tr>';
-				if (!empty($conf->use_javascript_ajax)) { print ajax_combobox('module_product'); }
-				print '<tr><td>'.$langs->trans('PowerPlantPVModuleCount').'</td><td><input type="number" min="0" class="flat maxwidth75" name="module_count" value="'.dol_escape_htmltag((string) ($editString->module_count ?? '')).'"></td></tr>';
-				print '<tr><td>'.$langs->trans('PowerPlantPVModulePower').'</td><td><input type="text" class="flat maxwidth75 right" name="module_power" value="'.dol_escape_htmltag((string) ($editString->module_power ?? '')).'"> Wc</td></tr>';
-				print '<tr><td>'.$langs->trans('PowerPlantPVStringPower').'</td><td><output id="powerplantpv-string-power">'.($editString && $editString->module_power !== null ? dol_escape_htmltag((string) ((int) $editString->module_count * (float) $editString->module_power)) : '').'</output> Wc</td></tr>';
-				print '<tr><td>'.$langs->trans('PowerPlantPVOrientation').'</td><td><input type="text" class="flat maxwidth100" name="orientation" value="'.dol_escape_htmltag((string) ($editString->orientation ?? '')).'"></td></tr>';
-				print '<tr><td>'.$langs->trans('PowerPlantPVTilt').'</td><td><input type="text" class="flat maxwidth75 right" name="tilt" value="'.dol_escape_htmltag((string) ($editString->tilt ?? '')).'"> °</td></tr>';
-				print '<tr><td>'.$langs->trans('PowerPlantPVPVInputConnected').'</td><td>'.$form->selectarray('is_connected', array(0 => $langs->trans('No'), 1 => $langs->trans('Yes')), (int) ($editString->is_connected ?? 1), 0, 0, 0, '', 0, 0, 0, '', 'maxwidth100').'</td></tr>';
-				print '<tr><td>'.$langs->trans('Position').'</td><td><input type="number" class="flat maxwidth75" name="string_position" value="'.dol_escape_htmltag((string) ($editString->position ?? '')).'"></td></tr>';
-				print '</table>';
-				print '<div class="center"><input type="submit" class="button button-save" value="'.$langs->trans('Save').'"></div>';
-				if (!empty($conf->use_javascript_ajax)) {
-					print '<script nonce="'.getNonce().'">jQuery(function ($) { var powers = '.json_encode($modulePowers, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT).'; var product = $("#module_product"), form = product.closest("form"), power = form.find("[name=module_power]"), count = form.find("[name=module_count]"); function update() { var id = product.val(); if (id && id !== "-1") { power.val(powers[id] == null ? "" : powers[id]).prop("readonly", true); } else { power.prop("readonly", false); } var p = power.val(), n = count.val(); $("#powerplantpv-string-power").text(p !== "" && n !== "" ? Number(p.replace(",", ".")) * Number(n) : ""); } product.on("change.ppvString", update); power.add(count).on("input.ppvString", update); update(); });</script>';
-				}
-				print '</form>';
 				print '</div>';
 				print '</div>';
 				print '<div class="clearboth"></div><br>';
