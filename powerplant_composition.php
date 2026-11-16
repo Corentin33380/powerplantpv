@@ -1773,8 +1773,8 @@ if ($id > 0 || !empty($ref)) {
 				$showStringDialog = $editString !== null || GETPOSTINT('add_string') || GETPOST('action', 'aZ09') === 'save_string_config';
 				$nextMppt = 1;
 				foreach ($mpptRows as $row) { $nextMppt = max($nextMppt, (int) $row->mppt_number + 1); }
-				$addMppt = dolGetButtonTitle($langs->trans('PowerPlantPVAddOrUpdateMPPT'), '', 'fa fa-plus-circle', $configBase.'&add_mppt=1', '', $canmanagecomposition);
-				$addString = dolGetButtonTitle($langs->trans('PowerPlantPVAddOrUpdateString'), '', 'fa fa-plus-circle', $configBase.'&add_string=1', '', $canmanagecomposition);
+				$addMppt = dolGetButtonTitle($langs->trans('PowerPlantPVAddOrUpdateMPPT'), '', 'fa fa-plus-circle', $configBase.'&add_mppt=1', '', (int) $canmanagecomposition);
+				$addString = dolGetButtonTitle($langs->trans('PowerPlantPVAddOrUpdateString'), '', 'fa fa-plus-circle', $configBase.'&add_string=1', '', (int) $canmanagecomposition);
 				print '<div class="fichecenter">';
 				print '<div class="fichehalfleft">';
 				print '<div class="div-table-responsive-no-min">';
