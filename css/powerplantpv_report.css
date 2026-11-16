@@ -40,7 +40,7 @@
 .page-maintenance-intervention-report .powerplantpv-report-summary-table td {
 	vertical-align: top;
 	min-width: 0;
-	overflow-wrap: anywhere;
+	overflow-wrap: normal;
 }
 
 .page-maintenance-intervention-report .powerplantpv-report-summary-fallback {
@@ -437,4 +437,19 @@
 	.page-maintenance-intervention-report summary { min-height: 44px; }
 	.page-maintenance-intervention-report .powerplantpv-report-control { min-height: 44px; }
 	.page-maintenance-intervention-report .powerplantpv-floating-save { max-width: calc(100vw - 20px); white-space: normal; }
+}
+
+/* Keep reference summaries readable inside their native scroll container. */
+.page-maintenance-intervention-report .powerplantpv-report-summary-table td a {
+	white-space: nowrap;
+}
+@media (max-width: 767px) {
+	.page-maintenance-intervention-report .powerplantpv-inline-form {
+		max-width: 100%;
+	}
+	.page-maintenance-intervention-report .powerplantpv-inline-form > input[type="submit"] {
+		max-width: 100%;
+		white-space: normal;
+		box-sizing: border-box;
+	}
 }
