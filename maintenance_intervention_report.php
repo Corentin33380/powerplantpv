@@ -328,8 +328,8 @@ if ($action === 'delete_file' && $caneditreport && $reportFetch > 0) {
 $form = new Form($db);
 $title = $langs->trans('PowerPlantPVReportTab');
 
-$morejs = array('/powerplantpv/js/powerplantpv_report.js');
-$morecss = array('/powerplantpv/css/powerplantpv_report.css');
+$morejs = array('/powerplantpv/js/powerplantpv_report.js?v='.(int) filemtime(__DIR__.'/js/powerplantpv_report.js'));
+$morecss = array('/powerplantpv/css/powerplantpv_report.css?v='.(int) filemtime(__DIR__.'/css/powerplantpv_report.css'));
 llxHeader('', $title, '', '', 0, 0, $morejs, $morecss, '', 'mod-powerplantpv page-maintenance-intervention-report');
 
 $head = array();
