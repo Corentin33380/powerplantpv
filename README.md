@@ -278,8 +278,8 @@ Dynamic LMDB Lead dictionary choices require Dolibarr 24+ and its native `comple
 
 ### Home dashboard — 1.7.0
 
-The native home dashboard now groups power plants by draft, validated, in-service
-and out-of-service status. A second tile shows required maintenance periods in
+The native home dashboard now groups power plants by validated, in-service and out-of-service status.
+Draft plants remain available in the list and are omitted from the home tile. A second tile shows required maintenance periods in
 total, to schedule (planned or due), and overdue. Every counter links to its
 filtered list. Maintenance counts use the existing scheduler and exclude periods
 where maintenance is not required. Both tiles respect read permissions and entity
@@ -287,3 +287,8 @@ sharing. Refresh the module in each entity after upgrading to register the home
 hook and icon aliases while preserving existing settings.
 
 See [dashboard semantics and validation](docs/home-dashboard.md).
+
+The plant tile groups in-service and out-of-service states on one line with
+separate links and green/red native badges. Validated and total maintenance
+counts use gray badges; to-schedule counts use orange and overdue counts red,
+including zero values. Without JavaScript, native separate rows remain usable.

@@ -65,3 +65,6 @@ jobs:
 
       - name: Native home dashboard responses with simulated SQL and scheduler
         run: php powerplantpv/test/home_dashboard.php dolibarr/htdocs
+
+      - name: Check native home presentation JavaScript syntax
+        run: node --check powerplantpv/js/powerplantpv_home.js

@@ -2,8 +2,9 @@
 
 Version préparée : **1.7.0**.
 
-- **Centrales** : brouillons, validées, en service et hors service. Les centrales
-  annulées ne figurent pas dans ces quatre compteurs.
+- **Centrales** : validées, en service et hors service. Les brouillons et les
+  centrales annulées ne figurent pas dans ces trois compteurs. Le retrait du
+  compteur de brouillons ne supprime ni ne modifie aucune centrale.
 - **Maintenances** : total des périodes contractuelles nécessitant une maintenance
   (y compris programmées, réalisées et configuration incomplète), à prévoir
   (`planned` et `due`) et en retard (`overdue`). Les lignes « non requise » sont
@@ -54,3 +55,26 @@ versions Dolibarr 21–25 ; la lecture v20 ne constitue pas une recette d’inst
   environnement de bootstrap isolé. Cela ne prouve pas une installation ERP réelle.
 - Aucun déploiement réalisé ; l’installation via l’interface native, l’acceptation
   Dolistore et la recette visuelle restent hors de ces preuves locales.
+
+## Ajustement proposé après publication (version 1.7.0 conservée)
+
+La tuile Centrales affiche « Validé » sur la première ligne, puis les deux états
+« En service / Hors service » sur la seconde. Chaque libellé et chaque compteur
+conserve son lien filtré propre. Les badges utilisent les classes natives du thème :
+`badge-secondary` (Validé et total maintenance), `badge-success` (En service),
+`badge-warning` (À prévoir) et `badge-danger` (Hors service et En retard).
+Les zéros restent visibles dans leur badge.
+
+Le moteur natif impose les couleurs de ses compteurs. Un script de présentation
+limité aux deux tuiles du module applique donc les classes natives et regroupe
+les deux lignes de service, sans recalculer les comptes ni modifier les droits.
+Sans JavaScript, les trois états et leurs liens restent disponibles sur trois
+lignes avec le rendu natif. La recette HTML isolée charge le script deux fois et
+vérifie le regroupement, les six couleurs, les zéros et les liens distincts.
+
+Les teintes explicites rouge et orange demandées sont limitées aux badges de ces
+deux tuiles (`powerplantpv-home-tile`), car les classes natives danger/warning du
+thème Eldy utilisent du brun/ocre. La géométrie des badges, le gris et le vert
+restent ceux du thème. Les 15 contrôles de l’aperçu HTML isolé passent dans le
+navigateur intégré, dont les couleurs calculées et la double initialisation.
+Cet aperçu ne constitue pas encore une recette du correctif déployé sur develop.

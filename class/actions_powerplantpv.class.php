@@ -61,7 +61,7 @@ class ActionsPowerplantpv
 			$counts[(int) $row->status] = (int) $row->nb;
 		}
 		$db->free($resql);
-		foreach (array(0 => 'Draft', 1 => 'Validated', 2 => 'PowerPlantInService', 3 => 'PowerPlantOutOfService') as $status => $label) {
+		foreach (array(1 => 'Validated', 2 => 'PowerPlantInService', 3 => 'PowerPlantOutOfService') as $status => $label) {
 			$board = new WorkboardResponse();
 			$board->label = $langs->trans($label);
 			$board->url = dol_buildpath('/powerplantpv/powerplant_list.php', 1).'?search_status='.$status;
@@ -111,7 +111,7 @@ class ActionsPowerplantpv
 			return 0;
 		}
 		$this->results['powerplantpv'] = array('groupName' => 'PowerPlants', 'lang' => 'powerplantpv@powerplantpv',
-			'stats' => array('powerplantpv_status_0', 'powerplantpv_status_1', 'powerplantpv_status_2', 'powerplantpv_status_3'));
+			'stats' => array('powerplantpv_status_1', 'powerplantpv_status_2', 'powerplantpv_status_3'));
 		if ($user->hasRight('powerplantpv', 'maintenance', 'read') && getDolGlobalInt('POWERPLANTPV_MAINTENANCE_ENABLE', 1)) {
 			$this->results['powerplantpvmaintenance'] = array('groupName' => 'PowerPlantPVHomeMaintenances', 'lang' => 'powerplantpv@powerplantpv',
 				'stats' => array('powerplantpv_maintenance_total', 'powerplantpv_maintenance_planned', 'powerplantpv_maintenance_overdue'));
