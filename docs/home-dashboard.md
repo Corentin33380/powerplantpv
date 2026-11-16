@@ -78,3 +78,23 @@ thème Eldy utilisent du brun/ocre. La géométrie des badges, le gris et le ver
 restent ceux du thème. Les 15 contrôles de l’aperçu HTML isolé passent dans le
 navigateur intégré, dont les couleurs calculées et la double initialisation.
 Cet aperçu ne constitue pas encore une recette du correctif déployé sur develop.
+
+## Infobulles des badges
+
+Les réponses natives `WorkboardResponse` utilisent `labelShort` pour le texte
+visible et `label` pour l’explication reprise par le badge (avec son compteur).
+Les six descriptions sont traduites en français et en anglais. Les badges
+En service et Hors service conservent leurs explications distinctes après
+regroupement. Le total des maintenances décrit des périodes contractuelles,
+pas un historique d’interventions. À prévoir exclut les périodes en retard et
+les périodes disposant déjà d’une intervention programmée ou couvrante.
+
+La feuille `css/powerplantpv_home_tiles.css` remplace l’ancien nom pour renouveler
+le cache des couleurs sans déplacer le tag 1.7.0. Après déploiement, recharger
+le module par l’action native pour actualiser cette déclaration.
+
+Recette PR #44 sur develop, commit `24ee4f2`, Dolibarr 25.0.0-alpha, entité
+TEST 1 : brouillons absents, deux états de service regroupés, six liens et
+filtres vérifiés (centrales 0/3/0, maintenances 1/0/0). L’ancienne feuille était
+encore chargée après rechargement ; rouge/orange restent à contrôler avec le
+nouveau nom. Aucun enregistrement métier modifié pour cette recette.

@@ -71,6 +71,10 @@ checkDashboard($hook->results['powerplantpv_status_2']->nbtodo === 4, 'In servic
 checkDashboard($hook->results['powerplantpv_maintenance_total']->nbtodo === 6, 'Total periods');
 checkDashboard($hook->results['powerplantpv_maintenance_planned']->nbtodo === 2, 'Planned and due grouped');
 checkDashboard($hook->results['powerplantpv_maintenance_overdue']->nbtodo === 1, 'Overdue counted');
+checkDashboard($hook->results['powerplantpv_status_2']->labelShort === 'PowerPlantInService', 'Short plant label retained');
+checkDashboard($hook->results['powerplantpv_status_2']->label === 'PowerPlantPVHomePlantStatus2Help', 'Native plant badge receives explanatory tooltip');
+checkDashboard($hook->results['powerplantpv_maintenance_planned']->labelShort === 'PowerPlantPVHomeMaintenancePlanned', 'Short maintenance label retained');
+checkDashboard($hook->results['powerplantpv_maintenance_planned']->label === 'PowerPlantPVHomeMaintenancePlannedHelp', 'Native maintenance badge receives explanatory tooltip');
 checkDashboard(strpos($hook->results['powerplantpv_status_1']->url, 'search_status=1') !== false, 'Validated filter preserved');
 checkDashboard(strpos($hook->results['powerplantpv_maintenance_planned']->url, 'planned%2Cdue') !== false, 'Link uses both states');
 checkDashboard(strpos($db->sql, 't.entity IN (2,3)') !== false, 'Shared entities filtered');

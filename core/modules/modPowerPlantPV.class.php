@@ -112,7 +112,7 @@ class modPowerPlantPV extends DolibarrModules
 			'theme' => 0,
 			// Set this to relative path of css file if module has its own css file
 			'css' => array(
-				'/powerplantpv/css/powerplantpv_home.css',
+				'/powerplantpv/css/powerplantpv_home_tiles.css',
 				'/powerplantpv/css/powerplantpv_maintenance_dashboard.css',
 				'/powerplantpv/css/powerplantpv_units.css',
 			),
