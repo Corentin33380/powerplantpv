@@ -1809,6 +1809,4 @@ PowerPlantPVReportProgress=Required fields completed
 PowerPlantPVSerialAnnexGenerated=Annex generated.
 
 PowerPlantPVIdentityConcurrentChange=This inverter was renamed by another user. Reload it before retrying.
-PowerPlantPVInitializeIdentities=Suggest markers for existing inverters
-PowerPlantPVInitializeIdentitiesConfirm=Assign O1, O2… to individual inverters without identification? Existing names will be preserved. Check these markers on site afterwards.
 PowerPlantPVDocumentDirectoryUnavailable=The owner entity document directory is unavailable.

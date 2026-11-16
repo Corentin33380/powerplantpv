@@ -31,28 +31,6 @@ class PowerPlantPVEquipmentIdentity
 	}
 
 	/**
-	 * Suggest names only after an explicit administrative confirmation.
-	 * @param int $plant Owner plant id
-	 * @param int $entity Owner entity
-	 * @return int 1 on success, -1 on failure; caller rolls back all allocations
-	 */
-	public function initializeMissing($plant, $entity)
-	{
-		$sql = 'SELECT rowid, equipment_marker, equipment_identification FROM '.$this->db->prefix().'powerplantpv_powerplantcomp';
-		$sql .= ' WHERE fk_powerplant = '.(int) $plant.' AND entity = '.(int) $entity.' ORDER BY rowid';
-		$result = $this->db->query($sql);
-		if (!$result) { $this->error = $this->db->lasterror(); return -1; }
-		$ids = array();
-		while ($row = $this->db->fetch_object($result)) {
-			if (trim((string) $row->equipment_marker) === '' && trim((string) $row->equipment_identification) === '') { $ids[] = (int) $row->rowid; }
-		}
-		foreach ($ids as $id) {
-			if ($this->save($plant, $entity, $id, '', '', true) < 0) { return -1; }
-		}
-		return 1;
-	}
-
-	/**
 	 * Update a named physical inverter inside the caller's transaction.
 	 * Lock the plant to serialize name allocation and interactive edits.
 	 * @param int $plant Plant id
@@ -60,7 +38,7 @@ class PowerPlantPVEquipmentIdentity
 	 * @param int $line Installed component id
 	 * @param string $marker Requested marker, or empty for a new default
 	 * @param string $name Identification, or empty for a new default
-	 * @param bool $new Allocate defaults only for a new or explicitly initialized component
+	 * @param bool $new Allocate defaults only for a new component
 	 * @param string|null $revision Expected previous identity hash on interactive edits
 	 * @return int 1 on success, -1 on failure
 	 */

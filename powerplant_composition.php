@@ -447,7 +447,7 @@ $componentstatus = array(
 
 $canedit = ($permissiontoadd && (int) $object->status === (int) $object::STATUS_DRAFT);
 $canmanagecomposition = ($permissiontoadd && (int) $object->status !== (int) $object::STATUS_CANCELED);
-if (in_array($action, array('updateline', 'initidentities', 'confirm_initidentities'), true) && !$canmanagecomposition) { accessforbidden(); }
+if ($action === 'updateline' && !$canmanagecomposition) { accessforbidden(); }
 $serialimportcategories = powerplantpvSerialImportFetchCompositionCategories($object);
 $canimportserialnumbers = ($canmanagecomposition && $permissiontoserialimport && !empty($object->id) && !empty($serialimportcategories));
 $availablemassactions = array();
@@ -481,30 +481,6 @@ if ($showaddform) {
 	$openaddmodal = 1;
 }
 $recalculateinstalledpower = 0;
-
-if ($action === 'confirm_initidentities' && $canmanagecomposition) {
-	if (!powerplantpv_check_token()) { accessforbidden(); }
-	$transactionStarted = $db->begin() > 0;
-	$identityService = new PowerPlantPVEquipmentIdentity($db);
-	$identityError = !$transactionStarted || $identityService->initializeMissing((int) $object->id, $powerplantentity) < 0;
-	if (!$identityError && $identityService->changedEquipmentIds) {
-		$previousContext = $object->context;
-		$object->context['trigger_reason'] = 'equipment_identity_initialization';
-		$object->context['equipment_ids'] = $identityService->changedEquipmentIds;
-		$object->context['changed_fields'] = array('equipment_marker', 'equipment_identification');
-		$identityError = $object->call_trigger('POWERPLANTPV_POWERPLANT_UPDATE', $user) < 0;
-		$object->context = $previousContext;
-	}
-	if ($identityError) {
-		$db->rollback(); setEventMessages($identityService->error !== '' ? $langs->trans($identityService->error) : ($object->error !== '' ? $object->error : $db->lasterror()), null, 'errors');
-	} elseif ($db->commit() <= 0) {
-		setEventMessages($db->lasterror(), null, 'errors'); $db->rollback();
-	} else {
-		setEventMessages($langs->trans('RecordSaved'), null, 'mesgs');
-		header('Location: '.$_SERVER['PHP_SELF'].'?id='.(int) $object->id); exit;
-	}
-	$action = 'view';
-}
 
 if ($action === 'createcomposition' && $canedit) {
 	if (!powerplantpv_check_token()) {
@@ -1181,13 +1157,6 @@ if ($id > 0 || !empty($ref)) {
 
 	print '<div class="fichecenter">';
 	print '<div class="underbanner clearboth"></div>';
-	if ($canmanagecomposition) {
-		print dolGetButtonAction($langs->trans('PowerPlantPVInitializeIdentities'), '', 'default', $_SERVER['PHP_SELF'].'?id='.(int) $object->id.'&action=initidentities&token='.newToken(), '', true);
-		if ($action === 'initidentities') {
-			print $form->formconfirm($_SERVER['PHP_SELF'].'?id='.(int) $object->id, $langs->trans('PowerPlantPVInitializeIdentities'), $langs->trans('PowerPlantPVInitializeIdentitiesConfirm'), 'confirm_initidentities', '', 0, 1);
-		}
-	}
-
 
 	$param = 'id='.$object->id;
 	if ($search_ref !== '') {
@@ -1328,21 +1297,23 @@ if ($id > 0 || !empty($ref)) {
 				print '<input type="hidden" name="token" value="'.newToken().'">';
 				print '<input type="hidden" name="action" value="updateline">';
 				print '<input type="hidden" name="lineid" value="'.((int) $objedit->rowid).'">';
-				print '<label>'.$langs->trans('PowerPlantPVEquipmentMarker').' <input type="text" class="flat" maxlength="32" name="equipment_marker" value="'.dol_escape_htmltag(GETPOSTISSET('equipment_marker') ? GETPOST('equipment_marker', 'alphanohtml') : (string) $objedit->equipment_marker).'"></label> ';
-				print '<label>'.$langs->trans('PowerPlantPVEquipmentIdentification').' <input type="text" class="flat" maxlength="255" name="equipment_identification" value="'.dol_escape_htmltag(GETPOSTISSET('equipment_identification') ? GETPOST('equipment_identification', 'alphanohtml') : (string) $objedit->equipment_identification).'"></label>';
 				print '<input type="hidden" name="identity_revision" value="'.PowerPlantPVEquipmentIdentity::revision($objedit).'">';
-				print '<table class="noborder centpercent">';
+				print '<div class="div-table-responsive-no-min"><table class="noborder centpercent">';
 				print '<tr class="liste_titre">';
+				print '<td><label for="equipment_marker">'.$langs->trans('PowerPlantPVEquipmentMarker').'</label></td>';
+				print '<td><label for="equipment_identification">'.$langs->trans('PowerPlantPVEquipmentIdentification').'</label></td>';
 				print '<td>'.$langs->trans('PowerPlantSerialNumber').'</td>';
 				print '<td>'.$langs->trans('PowerPlantStatus').'</td>';
 				print '<td>'.$langs->trans('PowerPlantCommissioningDate').'</td>';
 				print '</tr>';
 				print '<tr>';
+				print '<td><input type="text" class="flat maxwidth100" id="equipment_marker" maxlength="32" name="equipment_marker" value="'.dol_escape_htmltag(GETPOSTISSET('equipment_marker') ? GETPOST('equipment_marker', 'alphanohtml') : (string) $objedit->equipment_marker).'"></td>';
+				print '<td><input type="text" class="flat maxwidth200" id="equipment_identification" maxlength="255" name="equipment_identification" value="'.dol_escape_htmltag(GETPOSTISSET('equipment_identification') ? GETPOST('equipment_identification', 'alphanohtml') : (string) $objedit->equipment_identification).'"></td>';
 				print '<td><input type="text" class="flat minwidth100" name="serial_number" value="'.dol_escape_htmltag($objedit->serial_number).'"></td>';
 				print '<td>'.$form->selectarray('fk_status_edit', $componentstatus, ($objedit->fk_status !== null ? (int) $objedit->fk_status : 4), 0, 0, '', 0, 0, 0, '', 'flat minwidth100').'</td>';
 				print '<td><input type="date" class="flat width125" name="commissioning_date" value="'.($objedit->commissioning_date ? dol_print_date($db->jdate($objedit->commissioning_date), '%Y-%m-%d') : '').'"></td>';
 				print '</tr>';
-				print '</table>';
+				print '</table></div>';
 				print '<div class="center">';
 				print '<input type="submit" class="button button-edit" value="'.$langs->trans('Modify').'">';
 				print ' <input type="submit" class="button button-cancel" name="cancel" value="'.$langs->trans('Cancel').'">';
@@ -1352,7 +1323,7 @@ if ($id > 0 || !empty($ref)) {
 
 				print '<script nonce="'.getNonce().'">';
 				print 'jQuery(function(){';
-				print 'jQuery("#dialog-editcomposition").dialog({autoOpen:true,modal:true,width:700,title:"'.dol_escape_js($langs->transnoentitiesnoconv('Modify')).'"});';
+				print 'jQuery("#dialog-editcomposition").dialog({autoOpen:true,modal:true,width:Math.min(1000,jQuery(window).width()-32),title:"'.dol_escape_js($langs->transnoentitiesnoconv('Modify')).'"});';
 				print 'if (jQuery("#fk_status_edit").length) {';
 				print 'jQuery("#fk_status_edit").select2({';
 				print 'dir:"ltr",';
@@ -1678,6 +1649,7 @@ if ($id > 0 || !empty($ref)) {
 			print '<td>'.$langs->trans('Label').'</td>';
 			print '<td>'.$langs->trans('PowerPlantSerialNumber').'</td>';
 			print '<td>'.$langs->trans('PowerPlantPVMPPTStringConfiguration').'</td>';
+			print '<td class="center"></td>';
 			print '</tr>';
 			if (!empty($inverterlines)) {
 				foreach ($inverterlines as $inverterline) {
@@ -1695,10 +1667,12 @@ if ($id > 0 || !empty($ref)) {
 					print '<td>'.dol_escape_htmltag(trim((string) $inverterline->equipment_marker.' | '.(string) $inverterline->equipment_identification, ' |')).'<br>'.dol_escape_htmltag((string) $inverterline->product_label).'</td>';
 					print '<td>'.dol_escape_htmltag((string) $inverterline->serial_number).'</td>';
 					print '<td><a href="'.dol_escape_htmltag($configurl).'">'.$configlink.'</a></td>';
+					$editurl = dol_buildpath('/powerplantpv/powerplant_composition.php', 1).'?id='.(int) $object->id.'&action=editline&lineid='.(int) $inverterline->rowid.'&token='.newToken();
+					print '<td class="center nowrap"><a class="reposition" href="'.dol_escape_htmltag($editurl).'" title="'.dol_escape_htmltag($langs->trans('Modify')).'">'.img_edit($langs->trans('Modify')).'</a></td>';
 					print '</tr>';
 				}
 			} else {
-				print '<tr class="oddeven"><td colspan="4"><span class="opacitymedium">';
+				print '<tr class="oddeven"><td colspan="5"><span class="opacitymedium">';
 				print $langs->trans('NoRecordFound');
 				print '</span></td></tr>';
 			}
