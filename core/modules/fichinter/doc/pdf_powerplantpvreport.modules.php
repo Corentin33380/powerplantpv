@@ -683,6 +683,7 @@ class pdf_powerplantpvreport extends ModelePDFFicheinter
 		if (!empty($sectionRow['equipment']) && (string) $sectionRow['equipment']->equipment_type === 'INVERTER') {
 			$label .= ' · '.PowerPlantPVReportPresentation::identity($sectionRow['equipment']);
 		}
+		if ((string) $section->section_code === 'DC_ELECTRICAL_MEASURE' && !empty($dcMeasures)) { $this->ensureSpace($pdf, 55); }
 		$this->renderSectionTitle($pdf, $label, 2);
 
 		if (!empty($sectionRow['equipment']) && is_object($sectionRow['equipment'])) {
