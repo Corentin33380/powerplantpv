@@ -31,6 +31,8 @@ CREATE TABLE IF NOT EXISTS llx_powerplantpv_report_equipment(
 	equipment_ref varchar(128),
 	equipment_label varchar(255),
 	serial_number varchar(128),
+	equipment_marker varchar(32),
+	equipment_identification varchar(255),
 	qty double(24,8),
 	technical_key varchar(255),
 	equipment_position varchar(255),

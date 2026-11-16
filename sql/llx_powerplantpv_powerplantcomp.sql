@@ -21,6 +21,8 @@ CREATE TABLE IF NOT EXISTS llx_powerplantpv_powerplantcomp(
 	fk_status integer,
 	qty double NOT NULL,
 	serial_number varchar(128),
+	equipment_marker varchar(32),
+	equipment_identification varchar(255),
 	commissioning_date date,
 	entity integer NOT NULL DEFAULT 1
 ) ENGINE=innodb DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

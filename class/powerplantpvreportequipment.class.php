@@ -47,6 +47,8 @@ class PowerPlantPVReportEquipment extends PowerPlantPVReportGeneratedBase
 		'technical_key' => array('type' => 'varchar(255)', 'label' => 'Code', 'enabled' => 1, 'position' => 90, 'notnull' => 0, 'visible' => 1),
 		'equipment_position' => array('type' => 'varchar(255)', 'label' => 'PowerPlantPVEquipmentPosition', 'enabled' => 1, 'position' => 100, 'notnull' => 0, 'visible' => 1),
 		'technical_snapshot' => array('type' => 'mediumtext', 'label' => 'PowerPlantPVTechnicalSnapshot', 'enabled' => 1, 'position' => 110, 'notnull' => 0, 'visible' => 1),
+		'equipment_marker' => array('type' => 'varchar(32)', 'label' => 'PowerPlantPVEquipmentMarker', 'enabled' => 1, 'position' => 91, 'notnull' => 0, 'visible' => 1),
+		'equipment_identification' => array('type' => 'varchar(255)', 'label' => 'PowerPlantPVEquipmentIdentification', 'enabled' => 1, 'position' => 92, 'notnull' => 0, 'visible' => 1),
 		'position' => array('type' => 'integer', 'label' => 'Position', 'enabled' => 1, 'position' => 120, 'notnull' => 1, 'visible' => 1, 'default' => 0),
 		'date_creation' => array('type' => 'datetime', 'label' => 'DateCreation', 'enabled' => 1, 'position' => 500, 'notnull' => 0, 'visible' => -2),
 		'tms' => array('type' => 'timestamp', 'label' => 'DateModification', 'enabled' => 1, 'position' => 501, 'notnull' => 0, 'visible' => -2),
@@ -73,5 +75,7 @@ class PowerPlantPVReportEquipment extends PowerPlantPVReportGeneratedBase
 	public $technical_key;
 	public $equipment_position;
 	public $technical_snapshot;
+	public $equipment_marker;
+	public $equipment_identification;
 	public $position;
 }

@@ -1791,3 +1791,24 @@ PowerPlantPVHomePlantStatus3Help=Centrales déclarées hors service ; elles ne s
 PowerPlantPVHomeMaintenanceTotalHelp=Total des périodes contractuelles nécessitant une maintenance : à prévoir, échues, programmées, en retard, couvertes ou à configuration incomplète. Les périodes non requises sont exclues. Ce compteur ne représente pas le nombre d’interventions réalisées et ne se limite pas à l’année courante.
 PowerPlantPVHomeMaintenancePlannedHelp=Périodes à anticiper selon le délai configuré ou déjà commencées, sans intervention programmée ni maintenance couvrante. Les périodes en retard sont exclues.
 PowerPlantPVHomeMaintenanceOverdueHelp=Périodes contractuelles terminées, sans maintenance couvrante ni intervention programmée.
+
+# Installed equipment and maintenance reports 1.8
+PowerPlantPVEquipmentMarker=Repère
+PowerPlantPVEquipmentIdentification=Identification
+PowerPlantPVIdentityRequired=Renseignez le repère et l’identification d’un onduleur individuel (quantité 1).
+PowerPlantPVMarkerAlreadyUsed=Ce repère est déjà utilisé dans cette centrale.
+PowerPlantPVConsultPowerplant=Consulter la centrale
+PowerPlantPVMultipleStatuses=États multiples
+PowerPlantPVSerialAnnex=Annexe des numéros de série des panneaux
+PowerPlantPVSerialAnnexUnavailable=Aucun inventaire historique des séries de panneaux n’est disponible dans ce rapport.
+PowerPlantPVUnsavedChanges=Modifications non enregistrées
+PowerPlantPVSavingReport=Enregistrement en cours…
+PowerPlantPVLeaveUnsaved=Des modifications ne sont pas enregistrées.
+PowerPlantPVIdentityMissing=Identification de l’onduleur à compléter dans la centrale
+PowerPlantPVReportProgress=Champs requis renseignés
+PowerPlantPVSerialAnnexGenerated=Annexe générée.
+
+PowerPlantPVIdentityConcurrentChange=Cet onduleur a été renommé par un autre utilisateur. Rechargez sa fiche avant de réessayer.
+PowerPlantPVInitializeIdentities=Proposer les repères des onduleurs existants
+PowerPlantPVInitializeIdentitiesConfirm=Attribuer O1, O2… aux onduleurs individuels sans identification ? Les noms existants seront conservés. Vérifiez ensuite ces repères sur le terrain.
+PowerPlantPVDocumentDirectoryUnavailable=Le répertoire documentaire de l’entité propriétaire est indisponible.

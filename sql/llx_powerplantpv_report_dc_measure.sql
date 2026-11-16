@@ -26,6 +26,8 @@ CREATE TABLE IF NOT EXISTS llx_powerplantpv_report_dc_measure(
 	inverter_ref varchar(128),
 	inverter_label varchar(255),
 	inverter_serial varchar(128),
+	inverter_marker varchar(32),
+	inverter_identification varchar(255),
 	mppt_number integer,
 	pv_input_number integer,
 	string_ref varchar(128),

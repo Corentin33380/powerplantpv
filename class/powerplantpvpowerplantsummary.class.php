@@ -14,6 +14,7 @@
  */
 
 dol_include_once('/powerplantpv/class/powerplant.class.php');
+require_once __DIR__.'/powerplantpvreportpresentation.class.php';
 dol_include_once('/powerplantpv/lib/powerplantpv_serialnumber.lib.php');
 require_once DOL_DOCUMENT_ROOT.'/contact/class/contact.class.php';
 require_once DOL_DOCUMENT_ROOT.'/societe/class/societe.class.php';
@@ -118,6 +119,7 @@ class PowerPlantPVPowerPlantSummary
 		}
 		$connectionType = class_exists('PowerPlant') ? PowerPlant::getConnectionTypeLabel($powerplant->connection_type, $translator) : (string) $powerplant->connection_type;
 
+		$powerplantId = (int) $powerplant->id;
 		$sections = array(
 			array(
 				'code' => 'site',
@@ -171,12 +173,12 @@ class PowerPlantPVPowerPlantSummary
 					array(
 						'title_key' => 'PowerPlantPDFModules',
 						'columns' => $this->columns(array('product', 'qty', 'power', 'serial', 'status'), array('PowerPlantPDFProduct', 'PowerPlantPDFQuantity', 'PowerPlantPDFPower', 'PowerPlantPDFSerialNumber', 'PowerPlantPDFStatus')),
-						'rows' => $this->buildMaterialRows($components, array('MODULE'), $translator, 'module'),
+						'rows' => $this->buildMaterialRows($components, array('MODULE'), $translator, 'module', $powerplantId),
 					),
 					array(
 						'title_key' => 'PowerPlantPDFInverters',
 						'columns' => $this->columns(array('product', 'qty', 'power', 'serial', 'status'), array('PowerPlantPDFProduct', 'PowerPlantPDFQuantity', 'PowerPlantPDFPower', 'PowerPlantPDFSerialNumber', 'PowerPlantPDFStatus')),
-						'rows' => $this->buildMaterialRows($components, array('ONDULE'), $translator, 'inverter'),
+						'rows' => $this->buildMaterialRows($components, array('ONDULE'), $translator, 'inverter', $powerplantId),
 					),
 				),
 			),
@@ -192,9 +194,10 @@ class PowerPlantPVPowerPlantSummary
 		$sections = array_values(array_filter($sections, array($this, 'snapshotSectionHasContent')));
 
 		return array(
-			'version' => 1,
+			'version' => 2,
 			'source_powerplant_id' => !empty($powerplant->id) ? (int) $powerplant->id : 0,
 			'source_powerplant_ref' => (string) $powerplant->ref,
+			'serial_inventory' => $this->fetchPanelSerialInventory($powerplant, $components),
 			'sections' => $sections,
 		);
 	}
@@ -403,12 +406,13 @@ class PowerPlantPVPowerPlantSummary
 	 * @param	array<int,string>				$codes			Category codes
 	 * @param	Translate						$outputlangs	Output language
 	 * @param	string							$type			Material type
-	 * @return	array<int,array<string,string>>					Rows
+	 * @param int $powerplantId Owner plant id
+	 * @return	array<int,array<string,mixed>>					Rows
 	 */
-	private function buildMaterialRows($components, $codes, $outputlangs, $type)
+	private function buildMaterialRows($components, $codes, $outputlangs, $type, $powerplantId)
 	{
 		$rows = array();
-		foreach ($components as $component) {
+		foreach (PowerPlantPVReportPresentation::consolidate($components) as $component) {
 			if (!in_array((string) $component['category_code'], $codes, true)) {
 				continue;
 			}
@@ -424,14 +428,15 @@ class PowerPlantPVPowerPlantSummary
 				if ($this->isFilled($component['ac_max_power'])) {
 					$values[] = $outputlangs->transnoentities('PowerPlantPDFACMaxPowerShort').' '.$this->formatNumber($component['ac_max_power'], 2, $outputlangs);
 				}
-				$power = implode(' / ', $values);
+				$power = !empty($values) ? implode(' / ', $values).' W' : '';
 			}
 			$rows[] = array(
 				'product' => $this->productLabel($component),
 				'qty' => $this->formatNumber($component['qty'], 2, $outputlangs),
 				'power' => $power,
-				'serial' => $this->serialNumberDisplayValue($component, $outputlangs),
-				'status' => (string) $component['status'],
+				'serial' => $outputlangs->transnoentities('PowerPlantPVConsultPowerplant'),
+				'serial_powerplant_id' => (int) $powerplantId,
+				'status' => !empty($component['multiple_statuses']) ? $outputlangs->transnoentities('PowerPlantPVMultipleStatuses') : (string) $component['status'],
 			);
 		}
 
@@ -449,6 +454,9 @@ class PowerPlantPVPowerPlantSummary
 	{
 		$rows = array();
 		foreach ($components as $component) {
+			if (in_array((string) $component['category_code'], array('MODULE', 'ONDULE'), true)) {
+				continue;
+			}
 			$rows[] = array(
 				'category' => $this->firstNonEmpty(array($component['category_label'], $component['category_code'])),
 				'product' => $this->productLabel($component),
@@ -460,6 +468,40 @@ class PowerPlantPVPowerPlantSummary
 		}
 
 		return array_values(array_filter($rows, array($this, 'tableRowHasContent')));
+	}
+
+	/**
+	 * Freeze PV module serials without adding them to display sections.
+	 * @param PowerPlant $plant Owner plant
+	 * @param array<int,array<string,mixed>> $components Installed composition
+	 * @return array<int,array<string,string>> Historical inventory
+	 */
+	private function fetchPanelSerialInventory($plant, $components)
+	{
+		$rows = array();
+		$panels = array();
+		foreach ($components as $component) {
+			if ((string) $component['category_code'] !== 'MODULE') { continue; }
+			$panels[(int) $component['id']] = $component;
+			if (trim((string) $component['serial_number']) !== '') {
+				$rows[(int) $component['id'].':'.(string) $component['serial_number']] = array('product_ref' => (string) $component['product_ref'], 'product_label' => (string) $component['product_label'], 'serial' => (string) $component['serial_number']);
+			}
+		}
+		$sql = 'SELECT fk_powerplant_line, serial_number FROM '.$this->db->prefix().'powerplantpv_serialnumber';
+		$sql .= ' WHERE fk_powerplant = '.(int) $plant->id.' AND entity = '.(int) $plant->entity;
+		$sql .= " AND import_status = 'validated' ORDER BY rowid";
+		$result = $this->db->query($sql);
+		if (!$result) {
+			$this->error = $this->db->lasterror();
+			$this->errors[] = $this->error;
+			return array();
+		}
+		while ($row = $this->db->fetch_object($result)) {
+			$id = (int) $row->fk_powerplant_line;
+			if (!isset($panels[$id])) { continue; }
+			$rows[$id.':'.(string) $row->serial_number] = array('product_ref' => (string) $panels[$id]['product_ref'], 'product_label' => (string) $panels[$id]['product_label'], 'serial' => (string) $row->serial_number);
+		}
+		return array_values($rows);
 	}
 
 	/**

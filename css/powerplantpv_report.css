@@ -423,3 +423,18 @@
 		grid-template-columns: 1fr;
 	}
 }
+
+/* Installed identities: series are displayed only in large-screen summaries. */
+.page-maintenance-intervention-report .powerplantpv-identity-mobile { display: none; }
+.page-maintenance-intervention-report .powerplantpv-identity-desktop { overflow-wrap: anywhere; }
+.page-maintenance-intervention-report .powerplantpv-dc-inverter > summary,
+.page-maintenance-intervention-report .powerplantpv-dc-mppt > summary { cursor: pointer; padding: 12px; }
+.page-maintenance-intervention-report .powerplantpv-report-save-state { padding: 8px; }
+.page-maintenance-intervention-report summary { scroll-margin-top: 80px; }
+@media (max-width: 767px) {
+	.page-maintenance-intervention-report .powerplantpv-identity-mobile { display: inline; overflow-wrap: anywhere; }
+	.page-maintenance-intervention-report .powerplantpv-identity-desktop { display: none; }
+	.page-maintenance-intervention-report summary { min-height: 44px; }
+	.page-maintenance-intervention-report .powerplantpv-report-control { min-height: 44px; }
+	.page-maintenance-intervention-report .powerplantpv-floating-save { max-width: calc(100vw - 20px); white-space: normal; }
+}

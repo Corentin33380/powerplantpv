@@ -207,7 +207,7 @@ class PowerPlantPVReportBuilder
 			return -1;
 		}
 
-		$this->db->begin();
+		if ($this->db->begin() <= 0) { $this->setError($this->db->lasterror()); return -1; }
 		$report = $this->newReportFromContext($context, $status);
 		$reportId = $report->create($user, 0);
 		if ($reportId <= 0) {
@@ -231,7 +231,7 @@ class PowerPlantPVReportBuilder
 			}
 		}
 
-		$this->db->commit();
+		if ($this->db->commit() <= 0) { $this->setError($this->db->lasterror()); $this->db->rollback(); return -1; }
 
 		return $report;
 	}
@@ -259,7 +259,7 @@ class PowerPlantPVReportBuilder
 		$oldFiles = $this->fetchExistingFilesByStableKey((int) $report->id);
 		$oldDcValues = $this->fetchExistingDcMeasureValues((int) $report->id);
 
-		$this->db->begin();
+		if ($this->db->begin() <= 0) { $this->setError($this->db->lasterror()); return -1; }
 		$report->status = $status;
 		$report->fk_soc = $context['fk_soc'];
 		$report->fk_project = $context['fk_project'];
@@ -313,7 +313,7 @@ class PowerPlantPVReportBuilder
 			}
 		}
 
-		$this->db->commit();
+		if ($this->db->commit() <= 0) { $this->setError($this->db->lasterror()); $this->db->rollback(); return -1; }
 
 		return 1;
 	}
@@ -337,6 +337,17 @@ class PowerPlantPVReportBuilder
 			return -1;
 		}
 
+		if ((string) $status === PowerPlantPVReport::STATUS_SAVED) {
+			$equipmentObject = new PowerPlantPVReportEquipment($this->db);
+			$equipmentRows = $equipmentObject->fetchAllByReport((int) $report->id);
+			if (!is_array($equipmentRows)) { $this->copyErrorsFrom($equipmentObject); return -1; }
+			foreach ($equipmentRows as $equipment) {
+				if ((string) $equipment->equipment_type === 'INVERTER' && (trim((string) $equipment->equipment_marker) === '' || trim((string) $equipment->equipment_identification) === '' || (float) $equipment->qty !== 1.0)) {
+					$this->setError('PowerPlantPVIdentityMissing'); return -1;
+				}
+			}
+		}
+
 		$fieldObject = new PowerPlantPVReportField($this->db);
 		$fields = $fieldObject->fetchAllByReport((int) $report->id, 'position', 'ASC');
 		if (!is_array($fields)) {
@@ -344,7 +355,7 @@ class PowerPlantPVReportBuilder
 			return -1;
 		}
 
-		$this->db->begin();
+		if ($this->db->begin() <= 0) { $this->setError($this->db->lasterror()); return -1; }
 		foreach ($fields as $field) {
 			if (!empty($field->readonly)) {
 				continue;
@@ -380,7 +391,7 @@ class PowerPlantPVReportBuilder
 			return -1;
 		}
 
-		$this->db->commit();
+		if ($this->db->commit() <= 0) { $this->setError($this->db->lasterror()); $this->db->rollback(); return -1; }
 
 		return 1;
 	}
@@ -419,7 +430,7 @@ class PowerPlantPVReportBuilder
 			$byStableKey[(string) $measure->stable_key] = $measure;
 		}
 
-		$this->db->begin();
+		if ($this->db->begin() <= 0) { $this->setError($this->db->lasterror()); return -1; }
 		foreach ($values as $row) {
 			if (!is_array($row)) {
 				continue;
@@ -442,7 +453,7 @@ class PowerPlantPVReportBuilder
 				return -1;
 			}
 		}
-		$this->db->commit();
+		if ($this->db->commit() <= 0) { $this->setError($this->db->lasterror()); $this->db->rollback(); return -1; }
 
 		return 1;
 	}
@@ -491,7 +502,7 @@ class PowerPlantPVReportBuilder
 		$row->stable_key = (string) $section->occurrence_key.':dc:manual:pending:'.dol_now().':'.random_int(1000, 999999);
 		$row->position = $position;
 
-		$this->db->begin();
+		if ($this->db->begin() <= 0) { $this->setError($this->db->lasterror()); return -1; }
 		$rowId = $row->create($user, 0);
 		if ($rowId <= 0) {
 			$this->copyErrorsFrom($row);
@@ -506,7 +517,7 @@ class PowerPlantPVReportBuilder
 			$this->db->rollback();
 			return -1;
 		}
-		$this->db->commit();
+		if ($this->db->commit() <= 0) { $this->setError($this->db->lasterror()); $this->db->rollback(); return -1; }
 
 		return $rowId;
 	}
@@ -706,6 +717,10 @@ class PowerPlantPVReportBuilder
 		$summaryBuilder = new PowerPlantPVPowerPlantSummary($this->db);
 		foreach ($context['powerplants'] as $powerplantId => $powerplant) {
 			$technicalSnapshot = $summaryBuilder->buildSnapshotById((int) $powerplantId);
+			if ($summaryBuilder->error !== '') {
+				$this->copyErrorsFrom($summaryBuilder);
+				return -1;
+			}
 			if (empty($technicalSnapshot)) {
 				dol_syslog(__METHOD__.' unable to build technical snapshot for powerplant_id='.(int) $powerplantId.' error='.$summaryBuilder->error, LOG_WARNING);
 			}
@@ -762,6 +777,8 @@ class PowerPlantPVReportBuilder
 			$row->equipment_type = (string) $equipment['equipment_type'];
 			$row->equipment_ref = (string) $equipment['equipment_ref'];
 			$row->equipment_label = (string) $equipment['equipment_label'];
+			$row->equipment_marker = (string) $equipment['equipment_marker'];
+			$row->equipment_identification = (string) $equipment['equipment_identification'];
 			$row->serial_number = (string) $equipment['serial_number'];
 			$row->qty = (float) $equipment['qty'];
 			$row->technical_key = (string) $equipment['technical_key'];
@@ -1082,6 +1099,8 @@ class PowerPlantPVReportBuilder
 		$row->fk_inverter = (int) $input['fk_inverter'];
 		$row->inverter_ref = (string) $input['inverter_ref'];
 		$row->inverter_label = (string) $input['inverter_label'];
+		$row->inverter_marker = (string) $input['inverter_marker'];
+		$row->inverter_identification = (string) $input['inverter_identification'];
 		$row->inverter_serial = (string) $input['inverter_serial'];
 		$row->mppt_number = (int) $input['mppt_number'];
 		$row->pv_input_number = (int) $input['pv_input_number'];
@@ -1119,6 +1138,8 @@ class PowerPlantPVReportBuilder
 		$row->fk_report_equipment = 0;
 		$row->fk_powerplant = isset($value['fk_powerplant']) ? (int) $value['fk_powerplant'] : $this->fetchSourcePowerplantId((int) $section->fk_report_powerplant);
 		$row->fk_inverter = isset($value['fk_inverter']) ? (int) $value['fk_inverter'] : 0;
+		$row->inverter_marker = (string) ($value['inverter_marker'] ?? '');
+		$row->inverter_identification = (string) ($value['inverter_identification'] ?? '');
 		$row->stable_key = $stableKey;
 		$row->position = $position;
 		$this->copyStoredValueToDcMeasure($row, $value);
@@ -1797,18 +1818,20 @@ class PowerPlantPVReportBuilder
 		$hasBrand = $hasProductExtra && $this->columnExists($productExtraTable, 'product_photovoltaic_brand');
 		$hasManufacturer = $hasProductExtra && $this->columnExists($productExtraTable, 'product_photovoltaic_manufacturer');
 
-		$sql = "SELECT pc.rowid, pc.fk_powerplant, pc.fk_product, pc.qty, pc.serial_number";
+		$sql = "SELECT pc.rowid, pc.fk_powerplant, pc.fk_product, pc.qty, pc.serial_number, pc.equipment_marker, pc.equipment_identification";
 		$sql .= ", p.ref as product_ref, p.label as product_label";
 		$sql .= ", inv.rowid as inverter_id";
+		$sql .= $hasProductExtra ? ", category.code as category_code" : ", '' as category_code";
 		$sql .= $hasBrand ? ", pe.product_photovoltaic_brand as equipment_brand" : ", '' as equipment_brand";
 		$sql .= $hasManufacturer ? ", pe.product_photovoltaic_manufacturer as equipment_manufacturer" : ", '' as equipment_manufacturer";
 		$sql .= " FROM ".$this->db->prefix()."powerplantpv_powerplantcomp AS pc";
 		$sql .= " LEFT JOIN ".$this->db->prefix()."product AS p ON p.rowid = pc.fk_product";
 		if ($hasProductExtra) {
 			$sql .= " LEFT JOIN ".$productExtraTable." AS pe ON pe.fk_object = pc.fk_product";
+			$sql .= " LEFT JOIN ".$this->db->prefix()."c_powerplantpv_categorypv category ON category.rowid = pe.categorie_photovoltaique";
 		}
 		$sql .= " LEFT JOIN ".$this->db->prefix()."powerplantpv_product_inverter AS inv ON inv.fk_product = pc.fk_product";
-		$sql .= " WHERE pc.fk_powerplant IN (".implode(',', $powerplantIds).")";
+		$sql .= " WHERE pc.fk_powerplant IN (".$this->db->sanitize(implode(',', $powerplantIds)).")";
 		$sql .= " AND pc.entity IN (".$this->db->sanitize(getEntity('powerplant')).")";
 		$sql .= " ORDER BY pc.fk_powerplant ASC, pc.rowid ASC";
 
@@ -1846,6 +1869,8 @@ class PowerPlantPVReportBuilder
 				'equipment_type' => $type,
 				'equipment_ref' => (string) $obj->product_ref,
 				'equipment_label' => $productLabel,
+				'equipment_marker' => (string) $obj->equipment_marker,
+				'equipment_identification' => (string) $obj->equipment_identification,
 				'serial_number' => (string) $obj->serial_number,
 				'qty' => (float) $obj->qty,
 				'technical_key' => $technicalKey,
@@ -1971,6 +1996,8 @@ class PowerPlantPVReportBuilder
 			'equipment_key' => (string) $equipmentRow['technical_key'],
 			'inverter_ref' => (string) $equipmentRow['equipment_ref'],
 			'inverter_label' => (string) $equipmentRow['equipment_label'],
+			'inverter_marker' => (string) $equipmentRow['equipment_marker'],
+			'inverter_identification' => (string) $equipmentRow['equipment_identification'],
 			'inverter_serial' => (string) $equipmentRow['serial_number'],
 			'mppt_number' => (int) $mpptNumber,
 			'pv_input_number' => (int) $pvInputNumber,
@@ -1992,11 +2019,13 @@ class PowerPlantPVReportBuilder
 	 */
 	private function guessEquipmentType($obj)
 	{
-		if (!empty($obj->inverter_id)) {
+		if (($obj->category_code ?? '') === 'MODULE') { return 'PANEL'; }
+		if (($obj->category_code ?? '') === 'ONDULE') { return 'INVERTER'; }
+		if (($obj->category_code ?? '') === '' && !empty($obj->inverter_id)) {
 			return 'INVERTER';
 		}
 		$text = strtoupper((string) $obj->product_ref.' '.(string) $obj->product_label);
-		if (strpos($text, 'ONDULEUR') !== false || strpos($text, 'INVERTER') !== false) {
+		if (($obj->category_code ?? '') === '' && (strpos($text, 'ONDULEUR') !== false || strpos($text, 'INVERTER') !== false)) {
 			return 'INVERTER';
 		}
 		if (strpos($text, 'COFFRET AC') !== false || strpos($text, 'AC BOX') !== false) {
@@ -2415,7 +2444,7 @@ class PowerPlantPVReportBuilder
 			return array();
 		}
 
-		$sql = "SELECT rowid, fk_report_powerplant, fk_report_equipment, fk_powerplant, fk_inverter, inverter_ref, inverter_label, inverter_serial";
+		$sql = "SELECT rowid, fk_report_powerplant, fk_report_equipment, fk_powerplant, fk_inverter, inverter_ref, inverter_label, inverter_serial, inverter_marker, inverter_identification";
 		$sql .= ", mppt_number, pv_input_number, string_ref, is_connected, open_circuit_voltage, polarity_checked, insulation_status";
 		$sql .= ", insulation_positive_to_ground, insulation_negative_to_ground, observation, stable_key, position";
 		$sql .= " FROM ".$this->db->prefix()."powerplantpv_report_dc_measure";
@@ -2435,6 +2464,8 @@ class PowerPlantPVReportBuilder
 				'fk_inverter' => isset($obj->fk_inverter) ? (int) $obj->fk_inverter : 0,
 				'inverter_ref' => isset($obj->inverter_ref) ? (string) $obj->inverter_ref : '',
 				'inverter_label' => isset($obj->inverter_label) ? (string) $obj->inverter_label : '',
+				'inverter_marker' => (string) $obj->inverter_marker,
+				'inverter_identification' => (string) $obj->inverter_identification,
 				'inverter_serial' => isset($obj->inverter_serial) ? (string) $obj->inverter_serial : '',
 				'mppt_number' => isset($obj->mppt_number) ? (int) $obj->mppt_number : null,
 				'pv_input_number' => isset($obj->pv_input_number) ? (int) $obj->pv_input_number : null,
@@ -2508,6 +2539,7 @@ class PowerPlantPVReportBuilder
 	 */
 	private function copyStoredValueToDcMeasure(PowerPlantPVReportDcMeasure $measure, $value)
 	{
+		if ((int) $measure->fk_inverter <= 0) {
 		if (!empty($value['inverter_ref'])) {
 			$measure->inverter_ref = (string) $value['inverter_ref'];
 		}
@@ -2516,6 +2548,9 @@ class PowerPlantPVReportBuilder
 		}
 		if (!empty($value['inverter_serial'])) {
 			$measure->inverter_serial = (string) $value['inverter_serial'];
+		}
+			$measure->inverter_marker = (string) ($value['inverter_marker'] ?? '');
+			$measure->inverter_identification = (string) ($value['inverter_identification'] ?? '');
 		}
 		if (isset($value['mppt_number'])) {
 			$measure->mppt_number = $value['mppt_number'] !== null ? (int) $value['mppt_number'] : null;
@@ -2542,13 +2577,15 @@ class PowerPlantPVReportBuilder
 	 */
 	private function assignSubmittedValueToDcMeasure(PowerPlantPVReportDcMeasure $measure, $row)
 	{
+		if (strpos((string) $measure->stable_key, ':dc:manual:') !== false) {
 		$measure->inverter_label = isset($row['inverter_label']) ? dol_string_nohtmltag((string) $row['inverter_label']) : (string) $measure->inverter_label;
 		$measure->mppt_number = isset($row['mppt_number']) && (string) $row['mppt_number'] !== '' ? (int) $row['mppt_number'] : null;
 		$measure->pv_input_number = isset($row['pv_input_number']) && (string) $row['pv_input_number'] !== '' ? (int) $row['pv_input_number'] : null;
-		$measure->string_ref = isset($row['string_ref']) ? dol_string_nohtmltag((string) $row['string_ref']) : '';
 		if (isset($row['is_connected'])) {
 			$measure->is_connected = $this->normalizeDcBooleanValue($row['is_connected'], (int) $measure->is_connected);
 		}
+		}
+		$measure->string_ref = isset($row['string_ref']) ? dol_string_nohtmltag((string) $row['string_ref']) : '';
 		$measure->open_circuit_voltage = (isset($row['open_circuit_voltage']) && (string) $row['open_circuit_voltage'] !== '') ? (float) price2num((string) $row['open_circuit_voltage']) : null;
 		$measure->polarity_checked = isset($row['polarity_checked']) ? $this->normalizeDcTriStateValue($row['polarity_checked'], -1) : -1;
 		$measure->insulation_status = isset($row['insulation_status']) ? dol_string_nohtmltag((string) $row['insulation_status']) : '';

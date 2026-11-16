@@ -50,6 +50,8 @@ class PowerPlantPVReportDcMeasure extends PowerPlantPVReportGeneratedBase
 		'insulation_negative_to_ground' => array('type' => 'double(24,8)', 'label' => 'PowerPlantPVInsulationNegativeToGround', 'enabled' => 1, 'position' => 180, 'notnull' => 0, 'visible' => 1),
 		'observation' => array('type' => 'text', 'label' => 'Observation', 'enabled' => 1, 'position' => 190, 'notnull' => 0, 'visible' => 1),
 		'stable_key' => array('type' => 'varchar(255)', 'label' => 'Code', 'enabled' => 1, 'position' => 200, 'notnull' => 1, 'visible' => 1),
+		'inverter_marker' => array('type' => 'varchar(32)', 'label' => 'PowerPlantPVEquipmentMarker', 'enabled' => 1, 'position' => 91, 'notnull' => 0, 'visible' => 1),
+		'inverter_identification' => array('type' => 'varchar(255)', 'label' => 'PowerPlantPVEquipmentIdentification', 'enabled' => 1, 'position' => 92, 'notnull' => 0, 'visible' => 1),
 		'position' => array('type' => 'integer', 'label' => 'Position', 'enabled' => 1, 'position' => 210, 'notnull' => 1, 'visible' => 1, 'default' => 0),
 		'date_creation' => array('type' => 'datetime', 'label' => 'DateCreation', 'enabled' => 1, 'position' => 500, 'notnull' => 0, 'visible' => -2),
 		'tms' => array('type' => 'timestamp', 'label' => 'DateModification', 'enabled' => 1, 'position' => 501, 'notnull' => 0, 'visible' => -2),
@@ -78,6 +80,8 @@ class PowerPlantPVReportDcMeasure extends PowerPlantPVReportGeneratedBase
 	public $insulation_negative_to_ground;
 	public $observation;
 	public $stable_key;
+	public $inverter_marker;
+	public $inverter_identification;
 	public $position;
 
 	/**

@@ -1,0 +1,142 @@
+<?php
+/* Copyright (C) 2026 Pierre Ardoin <developpeur@lesmetiersdubatiment.fr>
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
+// Isolated behavioral tests. Database/ERP collaborators are simulated; files are real temporary files.
+if (PHP_SAPI !== 'cli') { exit(1); }
+require_once dirname(__DIR__).'/class/powerplantpvreportpresentation.class.php';
+require_once dirname(__DIR__).'/class/powerplantpvequipmentidentity.class.php';
+require_once dirname(__DIR__).'/class/powerplantpvreportserialannex.class.php';
+
+$checks = 0;
+function checkMaintenance($condition, $message)
+{
+	$GLOBALS['checks']++;
+	if (!$condition) { throw new RuntimeException($message); }
+}
+
+$components = array();
+for ($i = 0; $i < 1000; $i++) {
+	$components[] = array('id' => $i + 1, 'fk_powerplant' => 2, 'fk_product' => 10, 'qty' => 1, 'status' => 'Active', 'pmax' => 450, 'serial_number' => 'PV'.$i);
+}
+$components[999]['status'] = 'Inactive';
+$consolidated = PowerPlantPVReportPresentation::consolidate($components);
+checkMaintenance(count($consolidated) === 1, '1000 panels produce one material line');
+checkMaintenance($consolidated[0]['qty'] === 1000.0 && $consolidated[0]['pmax'] === 450, 'Quantity is summed and unit power unchanged');
+checkMaintenance($consolidated[0]['multiple_statuses'] && $consolidated[0]['serial_number'] === '', 'Mixed statuses and no serial list');
+$components[] = array('id' => 2000, 'fk_powerplant' => 3, 'fk_product' => 10, 'qty' => 1, 'status' => 'Active');
+checkMaintenance(count(PowerPlantPVReportPresentation::consolidate($components)) === 2, 'Different owner plants never collapse');
+
+$measures = array();
+foreach (array(10 => 'O10', 2 => 'O2', 1 => 'O1') as $id => $marker) {
+	foreach (array(2, 1) as $mppt) {
+		foreach (array(2, 1) as $input) {
+			$measures[] = (object) array('fk_powerplant' => 2, 'fk_inverter' => $id, 'inverter_marker' => $marker, 'inverter_identification' => 'Identical product', 'inverter_ref' => 'SAME', 'inverter_label' => 'SAME', 'inverter_serial' => 'SN'.$id, 'mppt_number' => $mppt, 'pv_input_number' => $input, 'position' => 0, 'stable_key' => $id.':'.$mppt.':'.$input);
+		}
+	}
+}
+$groups = PowerPlantPVReportPresentation::groupMeasures($measures);
+checkMaintenance(count($groups) === 3, 'Identical catalog products remain three physical inverter groups');
+checkMaintenance(array_keys($groups) === array('2:line:1', '2:line:2', '2:line:10'), 'Natural marker order O1 O2 O10');
+checkMaintenance(array_keys($groups['2:line:1']['mppts']) === array(1, 2), 'MPPTs numerically ordered');
+checkMaintenance($groups['2:line:1']['mppts'][1][0]->pv_input_number === 1, 'Inputs numerically ordered');
+$identity = $groups['2:line:1']['identity'];
+checkMaintenance(PowerPlantPVReportPresentation::identity($identity, false) === 'O1 | Identical product', 'Mobile identity excludes serial');
+checkMaintenance(PowerPlantPVReportPresentation::identity($identity) === 'O1 | Identical product | SN1', 'Desktop identity includes serial');
+$identity->inverter_marker = '';
+$identity->inverter_identification = '';
+checkMaintenance(strpos(PowerPlantPVReportPresentation::identity($identity, false), '#1') !== false, 'Unnamed historic equipment has a distinct source fallback');
+checkMaintenance(PowerPlantPVReportPresentation::csvText('000123') === "'000123", 'Serial leading zeroes protected as text');
+checkMaintenance(PowerPlantPVReportPresentation::csvText("\t=HYPERLINK(\"bad\")")[0] === "'", 'Whitespace-prefixed formula neutralized');
+
+class MaintenanceIdentityTestDb
+{
+	public $rows = array();
+	public $updates = array();
+	public $fail = false;
+	public function prefix() { return 'long_test_prefix_'; }
+	public function escape($value) { return str_replace("'", "''", $value); }
+	public function lasterror() { return 'Expected database failure'; }
+	public function query($sql)
+	{
+		if ($this->fail) { return false; }
+		if (strpos($sql, 'FOR UPDATE') !== false) { return (object) array('rows' => array((object) array('rowid' => 2))); }
+		if (strpos($sql, 'SELECT') === 0) { return (object) array('rows' => $this->rows); }
+		$this->updates[] = $sql;
+		return true;
+	}
+	public function fetch_object($result) { return array_shift($result->rows); }
+}
+$langs = new class {
+	public function transnoentities($key) { return $key === 'PowerPlantPVInverter' ? 'Onduleur' : $key; }
+};
+$db = new MaintenanceIdentityTestDb();
+$db->rows = array(
+	(object) array('rowid' => 1, 'qty' => 1, 'inverter_id' => 20, 'equipment_marker' => 'O1', 'equipment_identification' => 'North'),
+	(object) array('rowid' => 2, 'qty' => 1, 'inverter_id' => 20, 'equipment_marker' => null, 'equipment_identification' => null),
+	(object) array('rowid' => 3, 'qty' => 1, 'inverter_id' => 20, 'equipment_marker' => 'O3', 'equipment_identification' => 'South'),
+);
+$service = new PowerPlantPVEquipmentIdentity($db);
+checkMaintenance($service->save(2, 2, 2, '', '', true) === 1, 'Explicit default allocation succeeds');
+checkMaintenance(strpos(end($db->updates), "equipment_marker = 'O2'") !== false, 'First free marker allocated, existing identities preserved');
+$revision = PowerPlantPVEquipmentIdentity::revision($db->rows[1]);
+$db->updates = array();
+checkMaintenance($service->save(2, 2, 2, ' o1 ', 'Duplicate', false, $revision) < 0 && !$db->updates, 'Case-insensitive trimmed duplicate refused before mutation');
+checkMaintenance($service->save(2, 2, 2, 'O2', 'Changed', false, 'obsolete') < 0 && !$db->updates, 'Stale identity edit refused');
+$db->rows[1]->qty = 2;
+checkMaintenance($service->save(2, 2, 2, 'O2', 'Grouped', false, $revision) < 0 && !$db->updates, 'Grouped quantity cannot acquire an individual identity');
+$db->rows[1]->qty = 1;
+$db->fail = true;
+checkMaintenance($service->save(2, 2, 2, 'O2', 'Changed', false, $revision) < 0, 'Database failure is not success');
+
+$db->fail = false; $db->rows[1]->category_code = 'ONDACC'; $db->updates = array();
+checkMaintenance($service->save(2, 2, 2, '', '', true) === 1 && !$db->updates, 'An inverter accessory does not acquire a physical inverter marker');
+
+// Real filesystem tests for ownership and idempotence of the frozen annex.
+$temporary = sys_get_temp_dir().'/ppv-maintenance-'.bin2hex(random_bytes(8));
+mkdir($temporary.'/entity2', 0777, true);
+define('DOL_DATA_ROOT', $temporary);
+define('DOL_DOCUMENT_ROOT', $temporary);
+mkdir($temporary.'/ecm/class', 0777, true);
+file_put_contents($temporary.'/ecm/class/ecmfiles.class.php', "<?php\n");
+function getMultidirOutput($object, $module, $forobject) { return $GLOBALS['conf']->ficheinter->multidir_output[$object->entity].'/'.$object->ref; }
+function dol_mkdir($dir) { return is_dir($dir) || mkdir($dir, 0777, true) ? 1 : -1; }
+function dol_sanitizeFileName($name) { return preg_replace('/[^a-zA-Z0-9_-]/', '_', $name); }
+function dol_delete_file($path) { return unlink($path); }
+#[AllowDynamicProperties]
+class EcmFiles
+{
+	public static $owners = array();
+	public static $records = array();
+	public $lines = array();
+	public function __construct($db) {}
+	public function fetchAll($sort, $field, $limit, $offset, $filter) {
+		if (strpos($filter, '(t.entity:=:2)') === false) { throw new RuntimeException('Owner entity missing in ECM lookup'); }
+		$this->lines = self::$records; return count($this->lines);
+	}
+	public function create($user) { self::$owners[] = $this->entity; self::$records[] = (object) array('filepath'=>$this->filepath,'filename'=>$this->filename,'src_object_type'=>$this->src_object_type); return 1; }
+}
+$conf = (object) array('entity' => 3, 'ficheinter' => (object) array('multidir_output' => array(2 => $temporary.'/entity2')));
+$user = new stdClass();
+$intervention = (object) array('id' => 99, 'entity' => 2, 'ref' => 'FI-99', 'table_element' => 'fichinter');
+$plant = (object) array('powerplant_ref' => 'PLANT-2', 'technical_snapshot' => json_encode(array('serial_inventory' => array(array('product_ref' => 'PV', 'product_label' => 'Panel', 'serial' => '000123')))));
+$tree = array('powerplants' => array($plant));
+$annex = new PowerPlantPVReportSerialAnnex();
+try {
+	checkMaintenance($annex->generate($intervention, $tree) === 1, 'Frozen annex generated in owner entity');
+	$path = $temporary.'/entity2/FI-99/'.$annex->filename;
+	$contents = file_get_contents($path);
+	checkMaintenance(strpos($contents, "'000123") !== false, 'Historical serial exported as protected text');
+	checkMaintenance(EcmFiles::$owners === array(2), 'ECM index uses owner, not consultation entity');
+	checkMaintenance($annex->generate($intervention, $tree) === 1 && file_get_contents($path) === $contents && EcmFiles::$owners === array(2), 'Repeated generation does not overwrite content');
+	$plant->technical_snapshot = '{}';
+	checkMaintenance($annex->generate($intervention, $tree) < 0, 'Old snapshot cannot borrow current serials');
+	unset($conf->ficheinter->multidir_output[2]);
+	checkMaintenance($annex->generate($intervention, $tree) < 0, 'Missing owner directory refused without fallback');
+} finally {
+	foreach (glob($temporary.'/entity2/FI-99/*') ?: array() as $file) { unlink($file); }
+	if (is_dir($temporary.'/entity2/FI-99')) { rmdir($temporary.'/entity2/FI-99'); }
+	rmdir($temporary.'/entity2'); unlink($temporary.'/ecm/class/ecmfiles.class.php');
+	rmdir($temporary.'/ecm/class'); rmdir($temporary.'/ecm'); rmdir($temporary);
+}
+print 'OK: '.$checks." behavioral checks (ERP/database collaborators simulated).\n";

@@ -1791,3 +1791,24 @@ PowerPlantPVHomePlantStatus3Help=Power plants declared out of service; they are 
 PowerPlantPVHomeMaintenanceTotalHelp=Total contract periods requiring maintenance: to plan, due, scheduled, overdue, covered or incompletely configured. Periods not requiring maintenance are excluded. This is not a count of completed interventions and is not limited to the current year.
 PowerPlantPVHomeMaintenancePlannedHelp=Periods approaching within the configured planning lead time or already started, with no scheduled intervention or covering maintenance. Overdue periods are excluded.
 PowerPlantPVHomeMaintenanceOverdueHelp=Contract periods that have ended, with no covering maintenance or scheduled intervention.
+
+# Installed equipment and maintenance reports 1.8
+PowerPlantPVEquipmentMarker=Marker
+PowerPlantPVEquipmentIdentification=Identification
+PowerPlantPVIdentityRequired=Enter a marker and identification for an individual inverter (quantity 1).
+PowerPlantPVMarkerAlreadyUsed=This marker is already used in this power plant.
+PowerPlantPVConsultPowerplant=View power plant
+PowerPlantPVMultipleStatuses=Multiple statuses
+PowerPlantPVSerialAnnex=PV module serial number annex
+PowerPlantPVSerialAnnexUnavailable=No historical PV module serial inventory is available in this report.
+PowerPlantPVUnsavedChanges=Unsaved changes
+PowerPlantPVSavingReport=Saving…
+PowerPlantPVLeaveUnsaved=There are unsaved changes.
+PowerPlantPVIdentityMissing=Complete the inverter identification in the power plant
+PowerPlantPVReportProgress=Required fields completed
+PowerPlantPVSerialAnnexGenerated=Annex generated.
+
+PowerPlantPVIdentityConcurrentChange=This inverter was renamed by another user. Reload it before retrying.
+PowerPlantPVInitializeIdentities=Suggest markers for existing inverters
+PowerPlantPVInitializeIdentitiesConfirm=Assign O1, O2… to individual inverters without identification? Existing names will be preserved. Check these markers on site afterwards.
+PowerPlantPVDocumentDirectoryUnavailable=The owner entity document directory is unavailable.

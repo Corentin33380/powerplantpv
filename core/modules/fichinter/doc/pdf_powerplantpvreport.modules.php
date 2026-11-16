@@ -18,6 +18,7 @@ require_once DOL_DOCUMENT_ROOT.'/core/lib/company.lib.php';
 require_once DOL_DOCUMENT_ROOT.'/core/lib/files.lib.php';
 require_once DOL_DOCUMENT_ROOT.'/core/lib/pdf.lib.php';
 dol_include_once('/powerplantpv/class/powerplantpvreportpdfdataset.class.php');
+require_once __DIR__.'/../../../../class/powerplantpvreportpresentation.class.php';
 dol_include_once('/powerplantpv/class/powerplantpvpowerplantsummary.class.php');
 
 /**
@@ -626,7 +627,12 @@ class pdf_powerplantpvreport extends ModelePDFFicheinter
 				}
 				$key = (string) $column['key'];
 				$value = isset($row[$key]) ? (string) $row[$key] : '';
-				$html .= '<td>'.dol_htmlentitiesbr($value).'</td>';
+				if ($key === 'serial' && !empty($row['serial_powerplant_id'])) {
+					$url = dol_buildpath('/powerplantpv/powerplant_composition.php', 2).'?id='.(int) $row['serial_powerplant_id'];
+					$html .= '<td><a href="'.dol_escape_htmltag($url).'">'.dol_escape_htmltag($outputlangs->transnoentities('PowerPlantPVConsultPowerplant')).'</a></td>';
+				} else {
+					$html .= '<td>'.dol_htmlentitiesbr($value).'</td>';
+				}
 			}
 			$html .= '</tr>';
 		}
@@ -674,6 +680,9 @@ class pdf_powerplantpvreport extends ModelePDFFicheinter
 		$visibleFields = $this->filterVisibleFields($fields);
 		$dcMeasures = isset($sectionRow['dc_measures']) && is_array($sectionRow['dc_measures']) ? $sectionRow['dc_measures'] : array();
 		$label = PowerPlantPVReportPdfDataset::localizedProperty($section, 'section_label', $outputlangs);
+		if (!empty($sectionRow['equipment']) && (string) $sectionRow['equipment']->equipment_type === 'INVERTER') {
+			$label .= ' · '.PowerPlantPVReportPresentation::identity($sectionRow['equipment']);
+		}
 		$this->renderSectionTitle($pdf, $label, 2);
 
 		if (!empty($sectionRow['equipment']) && is_object($sectionRow['equipment'])) {
@@ -767,14 +776,14 @@ class pdf_powerplantpvreport extends ModelePDFFicheinter
 			$html .= '<td>'.dol_escape_htmltag($outputlangs->transnoentities($key)).'</td>';
 		}
 		$html .= '</tr>';
-		foreach ($measures as $measure) {
-			if (!is_object($measure)) {
-				continue;
+		$orderedMeasures = array();
+		foreach (PowerPlantPVReportPresentation::groupMeasures($measures) as $group) {
+			foreach ($group['mppts'] as $rows) {
+				foreach ($rows as $measure) { $orderedMeasures[] = $measure; }
 			}
-			$inverter = trim((string) $measure->inverter_ref.' '.(string) $measure->inverter_label);
-			if (!empty($measure->inverter_serial)) {
-				$inverter .= ' ('.(string) $measure->inverter_serial.')';
-			}
+		}
+		foreach ($orderedMeasures as $measure) {
+			$inverter = PowerPlantPVReportPresentation::identity($measure, true, $outputlangs->transnoentities('PowerPlantPVManualDcLine'));
 			$html .= '<tr>';
 			$html .= '<td>'.dol_escape_htmltag($inverter).'</td>';
 			$html .= '<td>'.dol_escape_htmltag($this->formatDcMeasureIndex($measure->mppt_number, $outputlangs)).'</td>';
@@ -1056,9 +1065,17 @@ class pdf_powerplantpvreport extends ModelePDFFicheinter
 		if (empty($equipment)) {
 			return;
 		}
+		$groups = array();
+		foreach ($equipment as $row) {
+			$key = (int) $row->fk_powerplant.':'.(int) $row->fk_product;
+			if ((int) $row->fk_product <= 0 || !in_array((string) $row->equipment_type, array('PANEL', 'INVERTER'), true)) { $key .= ':row:'.count($groups); }
+			if (!isset($groups[$key])) { $groups[$key] = clone $row; $groups[$key]->qty = 0; }
+			$groups[$key]->qty += (float) $row->qty;
+		}
+		$equipment = array_values($groups);
 		$html = '<table border="1" cellpadding="3" cellspacing="0" width="100%">';
 		$html .= '<tr style="background-color:#f0f3f5;font-weight:bold;">';
-		foreach (array('PowerPlantPVEquipmentType', 'PowerPlantPVBrand', 'PowerPlantPVModel', 'Ref', 'SerialNumber', 'PowerPlantPVEquipmentPosition') as $key) {
+		foreach (array('PowerPlantPVEquipmentType', 'PowerPlantPVBrand', 'PowerPlantPVModel', 'Ref', 'Qty', 'SerialNumber', 'PowerPlantPVEquipmentPosition') as $key) {
 			$html .= '<td>'.dol_escape_htmltag($outputlangs->transnoentities($key)).'</td>';
 		}
 		$html .= '</tr>';
@@ -1071,7 +1088,13 @@ class pdf_powerplantpvreport extends ModelePDFFicheinter
 			$html .= '<td>'.dol_escape_htmltag((string) $equipmentRow->equipment_brand).'</td>';
 			$html .= '<td>'.dol_escape_htmltag($this->formatEquipmentProductLabel($equipmentRow)).'</td>';
 			$html .= '<td>'.dol_escape_htmltag($this->formatEquipmentProductRef($equipmentRow)).'</td>';
-			$html .= '<td>'.dol_escape_htmltag((string) $equipmentRow->serial_number).'</td>';
+			$html .= '<td>'.dol_escape_htmltag(price($equipmentRow->qty)).'</td>';
+			if (in_array((string) $equipmentRow->equipment_type, array('PANEL', 'INVERTER'), true)) {
+				$url = dol_buildpath('/powerplantpv/powerplant_composition.php', 2).'?id='.(int) $equipmentRow->fk_powerplant;
+				$html .= '<td><a href="'.dol_escape_htmltag($url).'">'.dol_escape_htmltag($outputlangs->transnoentities('PowerPlantPVConsultPowerplant')).'</a></td>';
+			} else {
+				$html .= '<td>'.dol_escape_htmltag((string) $equipmentRow->serial_number).'</td>';
+			}
 			$html .= '<td>'.dol_escape_htmltag((string) $equipmentRow->equipment_position).'</td>';
 			$html .= '</tr>';
 		}
@@ -1095,7 +1118,7 @@ class pdf_powerplantpvreport extends ModelePDFFicheinter
 			array($outputlangs->transnoentities('PowerPlantPVBrand'), (string) $equipment->equipment_brand),
 			array($outputlangs->transnoentities('PowerPlantPVModel'), $this->formatEquipmentProductLabel($equipment)),
 			array($outputlangs->transnoentities('Ref'), $this->formatEquipmentProductRef($equipment)),
-			array($outputlangs->transnoentities('SerialNumber'), (string) $equipment->serial_number),
+			array($outputlangs->transnoentities('SerialNumber'), (string) $equipment->equipment_type === 'PANEL' ? '' : (string) $equipment->serial_number),
 			array($outputlangs->transnoentities('PowerPlantPVEquipmentPosition'), (string) $equipment->equipment_position),
 		);
 		$this->renderKeyValueTable($pdf, $this->filterRows($rows), '');
