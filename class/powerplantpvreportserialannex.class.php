@@ -21,6 +21,7 @@ class PowerPlantPVReportSerialAnnex
 	public function generate($intervention, $tree)
 	{
 		global $conf, $db, $user, $langs;
+		$langs->loadLangs(array('main', 'products', 'powerplantpv@powerplantpv'));
 		$entity = (int) $intervention->entity;
 		$base = $conf->ficheinter->multidir_output[$entity] ?? null;
 		if (!is_string($base) || trim($base) === '' || !is_dir($base)) {
@@ -58,7 +59,7 @@ class PowerPlantPVReportSerialAnnex
 		$stream = fopen('php://temp', 'w+b');
 		if (!$stream) { $this->error = 'ErrorFileNotFound'; return -1; }
 		fwrite($stream, "\xEF\xBB\xBF");
-		$header = array('Ref', 'PowerPlant', 'ProductRef', 'Label', 'SerialNumber');
+		$header = array('Ref', 'PowerPlant', 'Product', 'Label', 'PowerPlantSerialNumber');
 		fputcsv($stream, array_map(static function ($key) use ($langs) { return $langs->transnoentities($key); }, $header), ';', '"', '');
 		foreach ($rows as $row) {
 			if (fputcsv($stream, array_map(array('PowerPlantPVReportPresentation', 'csvText'), $row), ';', '"', '') === false) {

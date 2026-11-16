@@ -68,6 +68,7 @@ class MaintenanceIdentityTestDb
 	public function fetch_object($result) { return array_shift($result->rows); }
 }
 $langs = new class {
+	public function loadLangs($catalogues) {}
 	public function transnoentities($key) { return $key === 'PowerPlantPVInverter' ? 'Onduleur' : $key; }
 };
 $db = new MaintenanceIdentityTestDb();

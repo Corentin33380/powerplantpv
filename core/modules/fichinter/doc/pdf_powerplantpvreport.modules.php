@@ -770,35 +770,34 @@ class pdf_powerplantpvreport extends ModelePDFFicheinter
 			return;
 		}
 
-		$html = '<table border="1" cellpadding="3" cellspacing="0" width="100%">';
-		$html .= '<tr style="background-color:#f0f3f5;font-weight:bold;">';
-		foreach (array('PowerPlantPVInverter', 'PowerPlantPVMPPT', 'PowerPlantPVPVInput', 'PowerPlantPVStringRef', 'PowerPlantPVOpenCircuitVoltage', 'PowerPlantPVPolarityChecked', 'PowerPlantPVInsulationStatus', 'PowerPlantPVInsulationPositiveToGround', 'PowerPlantPVInsulationNegativeToGround', 'Observation') as $key) {
-			$html .= '<td>'.dol_escape_htmltag($outputlangs->transnoentities($key)).'</td>';
-		}
-		$html .= '</tr>';
-		$orderedMeasures = array();
 		foreach (PowerPlantPVReportPresentation::groupMeasures($measures) as $group) {
-			foreach ($group['mppts'] as $rows) {
-				foreach ($rows as $measure) { $orderedMeasures[] = $measure; }
+			$this->ensureSpace($pdf, 45);
+			$inverter = PowerPlantPVReportPresentation::identity($group['identity'], true, $outputlangs->transnoentities('PowerPlantPVManualDcLine'));
+			$html = '<table border="1" cellpadding="3" cellspacing="0" width="100%"><thead>';
+			$html .= '<tr style="background-color:#f0f3f5;font-weight:bold;"><td colspan="9">'.dol_escape_htmltag($inverter).'</td></tr>';
+			$html .= '<tr style="background-color:#f0f3f5;font-weight:bold;">';
+			foreach (array('PowerPlantPVMPPT', 'PowerPlantPVPVInput', 'PowerPlantPVStringRef', 'PowerPlantPVOpenCircuitVoltage', 'PowerPlantPVPolarityChecked', 'PowerPlantPVInsulationStatus', 'PowerPlantPVInsulationPositiveToGround', 'PowerPlantPVInsulationNegativeToGround', 'Observation') as $key) {
+				$html .= '<td>'.dol_escape_htmltag($outputlangs->transnoentities($key)).'</td>';
 			}
+			$html .= '</tr></thead><tbody>';
+			foreach ($group['mppts'] as $rows) {
+				foreach ($rows as $measure) {
+					$html .= '<tr nobr="true">';
+					$html .= '<td>'.dol_escape_htmltag($this->formatDcMeasureIndex($measure->mppt_number, $outputlangs)).'</td>';
+					$html .= '<td>'.dol_escape_htmltag($this->formatDcMeasureIndex($measure->pv_input_number, $outputlangs)).'</td>';
+					$html .= '<td>'.dol_escape_htmltag($this->formatDcMeasureText($measure, $measure->string_ref, $outputlangs)).'</td>';
+					$html .= '<td>'.dol_escape_htmltag($this->formatDcMeasureNumber($measure, $measure->open_circuit_voltage, 'V', $outputlangs)).'</td>';
+					$html .= '<td>'.dol_escape_htmltag($this->formatDcMeasureBoolean($measure, $measure->polarity_checked, $outputlangs)).'</td>';
+					$html .= '<td>'.dol_escape_htmltag($this->formatDcMeasureInsulationStatus($measure, $outputlangs)).'</td>';
+					$html .= '<td>'.dol_escape_htmltag($this->formatDcMeasureNumber($measure, $measure->insulation_positive_to_ground, 'MOhm', $outputlangs)).'</td>';
+					$html .= '<td>'.dol_escape_htmltag($this->formatDcMeasureNumber($measure, $measure->insulation_negative_to_ground, 'MOhm', $outputlangs)).'</td>';
+					$html .= '<td>'.dol_htmlentitiesbr($this->formatDcMeasureText($measure, $measure->observation, $outputlangs, false)).'</td>';
+					$html .= '</tr>';
+				}
+			}
+			$html .= '</tbody></table>';
+			$this->writeHtml($pdf, $html);
 		}
-		foreach ($orderedMeasures as $measure) {
-			$inverter = PowerPlantPVReportPresentation::identity($measure, true, $outputlangs->transnoentities('PowerPlantPVManualDcLine'));
-			$html .= '<tr>';
-			$html .= '<td>'.dol_escape_htmltag($inverter).'</td>';
-			$html .= '<td>'.dol_escape_htmltag($this->formatDcMeasureIndex($measure->mppt_number, $outputlangs)).'</td>';
-			$html .= '<td>'.dol_escape_htmltag($this->formatDcMeasureIndex($measure->pv_input_number, $outputlangs)).'</td>';
-			$html .= '<td>'.dol_escape_htmltag($this->formatDcMeasureText($measure, $measure->string_ref, $outputlangs)).'</td>';
-			$html .= '<td>'.dol_escape_htmltag($this->formatDcMeasureNumber($measure, $measure->open_circuit_voltage, 'V', $outputlangs)).'</td>';
-			$html .= '<td>'.dol_escape_htmltag($this->formatDcMeasureBoolean($measure, $measure->polarity_checked, $outputlangs)).'</td>';
-			$html .= '<td>'.dol_escape_htmltag($this->formatDcMeasureInsulationStatus($measure, $outputlangs)).'</td>';
-			$html .= '<td>'.dol_escape_htmltag($this->formatDcMeasureNumber($measure, $measure->insulation_positive_to_ground, 'MOhm', $outputlangs)).'</td>';
-			$html .= '<td>'.dol_escape_htmltag($this->formatDcMeasureNumber($measure, $measure->insulation_negative_to_ground, 'MOhm', $outputlangs)).'</td>';
-			$html .= '<td>'.dol_htmlentitiesbr($this->formatDcMeasureText($measure, $measure->observation, $outputlangs, false)).'</td>';
-			$html .= '</tr>';
-		}
-		$html .= '</table>';
-		$this->writeHtml($pdf, $html);
 	}
 
 	/**

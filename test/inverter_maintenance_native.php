@@ -122,6 +122,20 @@ $render = new ReflectionMethod($pdfModel, 'renderEquipmentSummary'); $render->se
 $panel = (object) array('equipment_type'=>'PANEL','equipment_brand'=>'Brand','equipment_model'=>'450 W','product_label'=>'Panel','product_ref'=>'PV-450','equipment_ref'=>'PV-450','serial_number'=>'SECRET-PANEL-SERIAL','equipment_position'=>'');
 $render->invokeArgs($pdfModel, array(&$capture, $panel, $langs));
 nativeMaintenanceCheck(strpos($capture->html, 'SECRET-PANEL-SERIAL') === false, 'Individual panel control summary does not leak a panel serial');
+$capture->html = '';
+$dcRows = array();
+foreach (array(2, 1) as $id) {
+	$dc = (new ReflectionClass('PowerPlantPVReportDcMeasure'))->newInstanceWithoutConstructor();
+	$dc->fk_powerplant = 21; $dc->fk_inverter = $id;
+	$dc->inverter_marker = 'OND0'.$id; $dc->inverter_identification = 'Roof '.$id;
+	$dc->inverter_serial = 'SERIAL-'.$id; $dc->mppt_number = 1; $dc->pv_input_number = 1;
+	$dc->string_ref = 'PV00'; $dc->is_connected = 1;
+	$dcRows[] = $dc;
+}
+$dcRender = new ReflectionMethod($pdfModel, 'renderDcMeasures'); $dcRender->setAccessible(true);
+$dcRender->invokeArgs($pdfModel, array(&$capture, $dcRows, $langs));
+nativeMaintenanceCheck(substr_count($capture->html, '<thead>') === 2 && strpos($capture->html, 'nobr="true"') !== false, 'PDF groups repeat their headers and keep measurement rows together');
+nativeMaintenanceCheck(strpos($capture->html, 'OND01 | Roof 1 | SERIAL-1') < strpos($capture->html, 'OND02 | Roof 2 | SERIAL-2'), 'PDF physical inverter groups retain their complete identity in natural order');
 require_once DOL_DOCUMENT_ROOT.'/ecm/class/ecmfiles.class.php';
 $db = $schema;
 $filterError = '';
