@@ -5,6 +5,7 @@
 - Onduleurs installés : repère et identification individuels, repris dans les rapports, avec édition native et masques de numérotation par entité ; les chaînes sont numérotées par onduleur.
 - Configuration MPPT / chaînes : ajout et modification dans des modales natives, sélection des modules de la composition, puissance automatique de chaîne et suivi des modules raccordés / restants.
 - Rapports : matériels regroupés par référence, lien « Consulter la centrale » à la place des séries, mesures organisées par onduleur / MPPT / chaîne et séries des panneaux dans une annexe CSV séparée ; PDF lisibles par onduleur.
+- Rapports existants : regroupement des anciens instantanés sans recalcul de leurs données historiques ni répétition des modules dans la composition. L’absence de repère ou d’identification historique ne bloque plus la finalisation ; les réponses obligatoires du modèle restent contrôlées.
 - Mobile : enregistrement par pictogramme, réduction et passage à la section suivante, conservation des sections ouvertes et du défilement après rechargement.
 - Accès : filtrage des listes de centrales par affectation commerciale avant comptage et pagination. Actualiser le module par le parcours natif dans chaque entité pour appliquer les migrations conservatrices, sans perte des réglages ni des références existantes.
 

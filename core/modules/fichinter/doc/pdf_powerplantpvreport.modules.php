@@ -530,7 +530,7 @@ class pdf_powerplantpvreport extends ModelePDFFicheinter
 	{
 		$summary = new PowerPlantPVPowerPlantSummary($this->db);
 		if (is_object($powerplant) && !empty($powerplant->technical_snapshot)) {
-			$snapshot = $summary->decodeSnapshot((string) $powerplant->technical_snapshot);
+			$snapshot = $summary->decodeSnapshot((string) $powerplant->technical_snapshot, $outputlangs);
 			if (!$summary->isEmptySnapshot($snapshot)) {
 				return $snapshot;
 			}

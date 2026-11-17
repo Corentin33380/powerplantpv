@@ -868,14 +868,8 @@ function powerplantpvReportFindMissingRequiredFields($reportId)
 		}
 	}
 
-	$equipmentObject = new PowerPlantPVReportEquipment($db);
-	$equipmentRows = $equipmentObject->fetchAllByReport((int) $reportId, 'position', 'ASC');
-	if (!is_array($equipmentRows)) { return -1; }
-	foreach ($equipmentRows as $equipment) {
-		if ((string) $equipment->equipment_type === 'INVERTER' && (trim((string) $equipment->equipment_marker) === '' || trim((string) $equipment->equipment_identification) === '' || (float) $equipment->qty !== 1.0)) {
-			$missing[] = $GLOBALS['langs']->trans('PowerPlantPVIdentityMissing').' : '.PowerPlantPVReportPresentation::identity($equipment, false);
-		}
-	}
+	// Optional installed identities must not become required report answers.
+
 	return $missing;
 }
 

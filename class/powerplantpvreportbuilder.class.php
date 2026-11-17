@@ -337,17 +337,6 @@ class PowerPlantPVReportBuilder
 			return -1;
 		}
 
-		if ((string) $status === PowerPlantPVReport::STATUS_SAVED) {
-			$equipmentObject = new PowerPlantPVReportEquipment($this->db);
-			$equipmentRows = $equipmentObject->fetchAllByReport((int) $report->id);
-			if (!is_array($equipmentRows)) { $this->copyErrorsFrom($equipmentObject); return -1; }
-			foreach ($equipmentRows as $equipment) {
-				if ((string) $equipment->equipment_type === 'INVERTER' && (trim((string) $equipment->equipment_marker) === '' || trim((string) $equipment->equipment_identification) === '' || (float) $equipment->qty !== 1.0)) {
-					$this->setError('PowerPlantPVIdentityMissing'); return -1;
-				}
-			}
-		}
-
 		$fieldObject = new PowerPlantPVReportField($this->db);
 		$fields = $fieldObject->fetchAllByReport((int) $report->id, 'position', 'ASC');
 		if (!is_array($fields)) {

@@ -206,9 +206,10 @@ class PowerPlantPVPowerPlantSummary
 	 * Decode a stored JSON snapshot.
 	 *
 	 * @param	mixed	$json	Stored JSON
+	 * @param Translate|null $outputlangs Display language, defaults to the current language
 	 * @return	array<string,mixed>	Snapshot
 	 */
-	public function decodeSnapshot($json)
+	public function decodeSnapshot($json, $outputlangs = null)
 	{
 		$json = trim((string) $json);
 		if ($json === '') {
@@ -218,6 +219,65 @@ class PowerPlantPVPowerPlantSummary
 		$data = json_decode($json, true);
 		if (!is_array($data)) {
 			return array();
+		}
+
+		// Version 1 stored already formatted rows, including individual serials and a
+		// duplicate full composition. Adapt only the display; never refresh frozen data.
+		if ((int) ($data['version'] ?? 1) < 2 && isset($data['sections']) && is_array($data['sections'])) {
+			global $langs;
+			$translator = is_object($outputlangs) ? $outputlangs : $langs;
+			if (!is_object($translator)) { return $data; }
+			$materialProducts = array();
+			foreach ($data['sections'] as &$section) {
+				if (!is_array($section) || ($section['code'] ?? '') !== 'material' || !is_array($section['tables'] ?? null)) { continue; }
+				foreach ($section['tables'] as &$table) {
+					if (!is_array($table) || !in_array($table['title_key'] ?? '', array('PowerPlantPDFModules', 'PowerPlantPDFInverters'), true) || !is_array($table['rows'] ?? null)) { continue; }
+					$groups = array();
+					foreach ($table['rows'] as $index => $row) {
+						if (!is_array($row)) { continue; }
+						$product = (string) ($row['product'] ?? '');
+						if ($product !== '') { $materialProducts[$product] = true; }
+						// The old formatter always wrote two decimal places. Decode that
+						// persisted format independently of the current reader's language.
+						$quantity = preg_replace('/[\s\x{00A0}\x{202F}]/u', '', (string) ($row['qty'] ?? ''));
+						$numericQuantity = null;
+						if (preg_match('/^(-?[0-9.,]+)[.,]([0-9]{2})$/', (string) $quantity, $parts)) {
+							$integer = str_replace(array('.', ','), '', $parts[1]);
+							if (preg_match('/^-?[0-9]+$/', $integer)) {
+								$numericQuantity = (float) price2num($integer.'.'.$parts[2], '', 1);
+							}
+						} elseif (preg_match('/^-?[0-9]+$/', (string) $quantity)) {
+							$numericQuantity = (float) price2num($quantity, '', 1);
+						}
+						$key = $product !== '' && $numericQuantity !== null ? $product : ':row:'.$index;
+						$row['serial'] = $translator->transnoentities('PowerPlantPVConsultPowerplant');
+						$row['serial_powerplant_id'] = (int) ($data['source_powerplant_id'] ?? 0);
+						if (!isset($groups[$key])) {
+							$groups[$key] = array('row' => $row, 'quantity' => $numericQuantity);
+						} else {
+							$groups[$key]['quantity'] += $numericQuantity;
+							if (($groups[$key]['row']['status'] ?? '') !== ($row['status'] ?? '')) {
+								$groups[$key]['row']['status'] = $translator->transnoentities('PowerPlantPVMultipleStatuses');
+							}
+						}
+					}
+					$table['rows'] = array();
+					foreach ($groups as $group) {
+						if ($group['quantity'] !== null) { $group['row']['qty'] = $this->formatNumber($group['quantity'], 2, $translator); }
+						$table['rows'][] = $group['row'];
+					}
+				}
+				unset($table);
+			}
+			unset($section);
+			foreach ($data['sections'] as &$section) {
+				if (is_array($section) && ($section['code'] ?? '') === 'composition' && is_array($section['rows'] ?? null)) {
+					$section['rows'] = array_values(array_filter($section['rows'], static function ($row) use ($materialProducts) {
+						return !is_array($row) || !isset($materialProducts[(string) ($row['product'] ?? '')]);
+					}));
+				}
+			}
+			unset($section);
 		}
 
 		return $data;

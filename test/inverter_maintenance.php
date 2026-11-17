@@ -171,4 +171,32 @@ try {
 	rmdir($temporary.'/entity2'); unlink($temporary.'/ecm/class/ecmfiles.class.php');
 	rmdir($temporary.'/ecm/class'); rmdir($temporary.'/ecm'); rmdir($temporary);
 }
+// Execute the real page validators without bootstrapping a web session.
+$reportPage = file_get_contents(dirname(__DIR__).'/maintenance_intervention_report.php');
+foreach (array('powerplantpvReportFindMissingRequiredFields', 'powerplantpvReportRequiredFieldIsEmpty', 'powerplantpvReportIsHtmlTextEmpty', 'powerplantpvReportLocalizedObjectLabel', 'powerplantpvReportFieldIsPreviousReading', 'powerplantpvReportIsNumericFieldType') as $functionName) {
+	if (!preg_match('/^function '.preg_quote($functionName, '/').'\([^\n]*\)\R\{.*?^\}/ms', $reportPage, $match)) { throw new RuntimeException('Missing report validator '.$functionName); }
+	eval($match[0]);
+}
+class PowerPlantPVReportField
+{
+	public static $rows = array();
+	public function __construct($db) {}
+	public function fetchAllByReport($id, $sort = '', $order = '') { return self::$rows; }
+}
+class PowerPlantPVReportEquipment
+{
+	public function __construct($db) {}
+	public function fetchAllByReport($id, $sort = '', $order = '') { return array((object) array('equipment_type' => 'INVERTER', 'equipment_marker' => '', 'equipment_identification' => '', 'qty' => 2, 'fk_powerplant_line' => 9232)); }
+}
+$langs = new class {
+	public $defaultlang = 'fr_FR';
+	public function trans($key) { return $key; }
+};
+$requiredField = (object) array('is_required' => 1, 'readonly' => 0, 'visible_form' => 1, 'field_type' => 'number', 'field_code' => 'TEST', 'field_label' => 'Mesure requise', 'value_number' => 0);
+PowerPlantPVReportField::$rows = array($requiredField);
+checkMaintenance(powerplantpvReportFindMissingRequiredFields(1) === array(), 'Completed report with zero measurement and legacy unnamed inverters may finalize');
+$requiredField->value_number = null;
+checkMaintenance(powerplantpvReportFindMissingRequiredFields(1) === array('Mesure requise'), 'Missing required measurement still blocks finalization');
+$requiredField->field_type = 'yesno'; $requiredField->value_text = '0';
+checkMaintenance(powerplantpvReportFindMissingRequiredFields(1) === array(), 'Explicit No remains a completed required answer');
 print 'OK: '.$checks." behavioral checks (ERP/database collaborators simulated).\n";

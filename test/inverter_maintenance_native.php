@@ -47,6 +47,32 @@ nativeMaintenanceCheck(price2num($rows[0]['qty']) == 2, 'Native locale quantity 
 nativeMaintenanceCheck($rows[0]['power'] === '450 W', 'Unit power remains 450 W');
 nativeMaintenanceCheck($rows[0]['serial'] === 'Consulter la centrale' && $rows[0]['serial_powerplant_id'] === 22, 'Native summary carries a safe plant target, not serial data');
 nativeMaintenanceCheck(strpos(json_encode($rows), 'SECRET-SERIES') === false, 'No serial leaked in display rows');
+// Legacy frozen reports keep their historical values but use the current material presentation.
+$legacyRow = array('product' => 'PV-450 - Panneau historique', 'qty' => '1,00', 'power' => '450 W', 'serial' => 'OLD-SERIAL', 'status' => 'Actif');
+$legacy = array('version' => 1, 'source_powerplant_id' => 22, 'sections' => array(
+	array('code' => 'material', 'type' => 'grouped_tables', 'tables' => array(
+		array('title_key' => 'PowerPlantPDFModules', 'rows' => array($legacyRow, $legacyRow)),
+	)),
+	array('code' => 'composition', 'rows' => array($legacyRow, array('product' => 'CABLE - Accessoire', 'qty' => '1,00', 'serial' => 'CABLE-SERIAL'))),
+));
+$legacyJson = json_encode($legacy);
+$legacyDisplay = $summary->decodeSnapshot($legacyJson);
+$legacyRows = $legacyDisplay['sections'][0]['tables'][0]['rows'];
+nativeMaintenanceCheck(count($legacyRows) === 1 && price2num($legacyRows[0]['qty']) == 2, 'Legacy frozen duplicate material rows consolidate with their original quantities');
+nativeMaintenanceCheck($legacyRows[0]['serial'] === 'Consulter la centrale' && $legacyRows[0]['serial_powerplant_id'] === 22, 'Legacy material serials become a link to their own plant');
+nativeMaintenanceCheck(count($legacyDisplay['sections'][1]['rows']) === 1 && $legacyDisplay['sections'][1]['rows'][0]['product'] === 'CABLE - Accessoire', 'Legacy composition no longer repeats panels and inverters; accessories remain');
+nativeMaintenanceCheck($legacyJson === json_encode($legacy), 'Legacy decoding does not rewrite the stored report');
+nativeMaintenanceCheck($summary->decodeSnapshot(json_encode($legacyDisplay)) === $legacyDisplay, 'Legacy display normalization is idempotent');
+$legacy['sections'][0]['tables'][0]['rows'][0]['qty'] = '1,234.00';
+$legacy['sections'][0]['tables'][0]['rows'][1]['qty'] = '2.00';
+$legacy['sections'][0]['tables'][0]['rows'][1]['status'] = 'Remplacé';
+$legacyDisplay = $summary->decodeSnapshot(json_encode($legacy));
+$legacyRows = $legacyDisplay['sections'][0]['tables'][0]['rows'];
+nativeMaintenanceCheck(price2num($legacyRows[0]['qty']) == 1236, 'Legacy English formatted quantities survive a French reader');
+nativeMaintenanceCheck($legacyRows[0]['status'] === 'États multiples', 'Legacy consolidation reports mixed statuses without splitting the reference');
+$modern = array('version' => 2, 'source_powerplant_id' => 22, 'sections' => array(array('code' => 'material', 'tables' => array(array('rows' => array($legacyRow))))));
+nativeMaintenanceCheck($summary->decodeSnapshot(json_encode($modern)) === $modern, 'Current snapshots are not reformatted by the legacy adapter');
+
 $other = $base; $other['status'] = 'Inactif';
 $rows = $method->invoke($summary, array($base, $other), array('MODULE'), $langs, 'module', 22);
 nativeMaintenanceCheck($rows[0]['status'] === 'États multiples', 'Mixed equipment statuses consolidated');
