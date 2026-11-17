@@ -14,6 +14,7 @@ trait PowerPlantPVReportVisualPdf
 	/** @param TCPDF|TCPDI $pdf @return void */
 	protected function visualNewPage(&$pdf)
 	{
+		if ($pdf->GetY() <= 34) { return; }
 		$this->completePageFooter($pdf, 1);
 		$pdf->AddPage();
 		$this->reserveFooterSpace($pdf);
@@ -29,12 +30,14 @@ trait PowerPlantPVReportVisualPdf
 			$this->visualCover($pdf, $plant, $dataset, $outputlangs);
 		}
 		$general = array_filter($dataset['general_sections'], function ($row) {
-			return in_array((string) $row['section']->section_code, array('GENERAL_INFORMATION', 'GENERAL_OBSERVATIONS'), true);
+			return !empty($row['section']->visible_pdf) && in_array((string) $row['section']->section_code, array('GENERAL_INFORMATION', 'GENERAL_OBSERVATIONS'), true);
 		});
 		if ($general) {
 			$this->visualNewPage($pdf);
 			foreach ($general as $row) {
 				foreach ($this->filterVisibleFields($row['fields']) as $field) {
+					if (PowerPlantPVReportPdfDataset::isFileField($field)) { $this->renderFieldFiles($pdf, $field, $dataset, $outputlangs); continue; }
+					if (PowerPlantPVReportPdfDataset::isSignatureField($field)) { $this->renderSignatureField($pdf, $field, $dataset, $outputlangs); continue; }
 					$value = PowerPlantPVReportPdfDataset::formatFieldValue($field, $outputlangs);
 					if (trim(dol_string_nohtmltag($value)) === '') { continue; }
 					$this->visualNote($pdf, PowerPlantPVReportPdfDataset::localizedProperty($field, 'field_label', $outputlangs), $value);
@@ -117,7 +120,7 @@ trait PowerPlantPVReportVisualPdf
 	/** @param TCPDF|TCPDI $pdf @param PowerPlantPVReportPowerPlant $plant @param array<string,mixed> $dataset @param Translate $langs @return void */
 	protected function visualCover(&$pdf, $plant, $dataset, $langs)
 	{
-		$rows = $dataset['sections_by_powerplant'][(int) $plant->id] ?? array();
+		$rows = array_filter($dataset['sections_by_powerplant'][(int) $plant->id] ?? array(), function ($row) { return !empty($row['section']->visible_pdf); });
 		$stats = PowerPlantPVReportPresentation::indicators($rows);
 		$valid = 0; $applicable = 0; $dcValid = 0; $index = null; $vigilance = array();
 		foreach ($rows as $row) {
@@ -144,6 +147,7 @@ trait PowerPlantPVReportVisualPdf
 		$this->renderSectionTitle($pdf, $langs->transnoentities('PowerPlantPVVisualClientPlant'), 2);
 		$client = $dataset['thirdparty'];
 		$left = array(array('label'=>$langs->transnoentities('Customer'), 'value'=>is_object($client) ? (string) $client->name : $missing), array('label'=>$langs->transnoentities('Address'), 'value'=>is_object($client) ? dol_format_address($client, 1, "\n", $langs) : $missing));
+		$project = $dataset['project'] ?? null; if (is_object($project)) { $left[] = array('label'=>$langs->transnoentities('Project'), 'value'=>trim((string) $project->ref.' - '.(string) $project->title)); }
 		$contract = $this->joinContractRefs($dataset['contracts']); if ($contract !== '') { $left[] = array('label'=>$langs->transnoentities('Contract'), 'value'=>$contract); }
 		$left[] = array('label'=>$langs->transnoentities('Intervention'), 'value'=>PowerPlantPVReportPdfDataset::localizedProperty($dataset['report'], 'intervention_nature_label', $langs));
 		$right = array();
@@ -246,7 +250,7 @@ trait PowerPlantPVReportVisualPdf
 					if (!empty($panel['info']) || ($row['status'] ?? '') === 'text') { $pdf->SetTextColor(25,39,60); $pdf->SetXY($vx,$cy); $pdf->MultiCell($valueWidth,$row['height'],$value,0,'L'); }
 					else {
 						$status=$row['status'] ?? 'neutral'; $bg=$status==='good'?array(224,245,237):($status==='warning'?array(255,244,218):array(239,242,246)); $fg=$status==='good'?array(0,137,99):($status==='warning'?array(166,103,0):array(100,116,139));
-						$pdf->SetFont('', '', 7.5); $bw=min($valueWidth,max(16,$pdf->GetStringWidth($value)+5)); $bh=max(4,$pdf->getStringHeight($bw-3,$value)); $pdf->SetFillColor($bg[0],$bg[1],$bg[2]); $pdf->RoundedRect($vx+$valueWidth-$bw,$cy,$bw,$bh+0.6,1.5,'1111','F'); $pdf->SetTextColor($fg[0],$fg[1],$fg[2]); $pdf->SetXY($vx+$valueWidth-$bw+1.5,$cy); $pdf->MultiCell($bw-3,$bh,$value,0,'C');
+						$pdf->SetFont('', '', 7.5); $bw=min($valueWidth,max(18,$pdf->GetStringWidth($value)+8)); $bh=max(4,$pdf->getStringHeight($bw-2,$value)); $pdf->SetFillColor($bg[0],$bg[1],$bg[2]); $pdf->RoundedRect($vx+$valueWidth-$bw,$cy,$bw,$bh+0.6,1.5,'1111','F'); $pdf->SetTextColor($fg[0],$fg[1],$fg[2]); $pdf->SetXY($vx+$valueWidth-$bw+1.5,$cy); $pdf->MultiCell($bw-2,$bh,$value,0,'C');
 					}
 					$cy+=$row['height'];
 					if ($j<count($panel['rows'])-1) { $pdf->SetDrawColor(231,236,244); $pdf->Line($x+4,$cy-0.3,$x+$width-4,$cy-0.3); }
@@ -318,7 +322,7 @@ trait PowerPlantPVReportVisualPdf
 		$this->renderSectionTitle($pdf,PowerPlantPVReportPresentation::identity($group['identity'],true),3);
 		$html='<table width="100%" cellpadding="3" cellspacing="0" style="font-size:8pt;"><thead><tr style="color:#64748b;">';
 		$columns=array(array('PowerPlantPVMPPT',7),array('PowerPlantPVPVInput',7),array('PowerPlantPVStringRef',13),array('PowerPlantPVOpenCircuitVoltage',11),array('PowerPlantPVPolarityChecked',12),array('PowerPlantPVInsulationStatus',18),array('PowerPlantPVInsulationPositiveToGround',16),array('PowerPlantPVInsulationNegativeToGround',16));
-		foreach($columns as $column){$html.='<td width="'.$column[1].'%">'.dol_escape_htmltag($langs->transnoentities($column[0])).'</td>';}$html.='</tr></thead><tbody>';$n=0;$notes=array();
+		foreach($columns as $column){$html.='<td width="'.$column[1].'%">'.dol_escape_htmltag($langs->transnoentities($column[0]).(in_array($column[0], array('PowerPlantPVInsulationPositiveToGround', 'PowerPlantPVInsulationNegativeToGround'), true) ? ' (MOhm)' : ($column[0] === 'PowerPlantPVOpenCircuitVoltage' ? ' (V)' : ''))).'</td>';}$html.='</tr></thead><tbody>';$n=0;$notes=array();
 		foreach($group['mppts'] as $inputs){foreach($inputs as $row){$html.='<tr nobr="true" style="background-color:'.($n++%2?'#f6f8fc':'#ffffff').';"><td>'.dol_escape_htmltag((string)$row->mppt_number).'</td><td>'.dol_escape_htmltag((string)$row->pv_input_number).'</td><td>'.dol_escape_htmltag((string)$row->string_ref).'</td>';if(!(int)$row->is_connected){$html.='<td colspan="5" style="color:#64748b;">'.dol_escape_htmltag($langs->transnoentities('PowerPlantPVNotUsedByPowerPlant')).'</td></tr>';continue;}
 			$html.='<td>'.dol_escape_htmltag($row->open_circuit_voltage===null || $row->open_circuit_voltage===''?'—':price($row->open_circuit_voltage)).'</td>';
 			foreach(array('polarity_checked','insulation_status') as $key){$good=$key==='polarity_checked'?(string)$row->{$key}==='1':(string)$row->{$key}==='valid';$value=$key==='polarity_checked'?$this->formatDcMeasureBoolean($row,$row->{$key},$langs):$this->formatDcMeasureInsulationStatus($row,$langs);$html.='<td style="color:'.($good?'#008963':'#64748b').';">'.dol_escape_htmltag($value).'</td>';}
