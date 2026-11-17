@@ -1,5 +1,13 @@
 # CHANGELOG MODULE POWERPLANTPV FOR [DOLIBARR ERP CRM](https://www.dolibarr.org)
 
+## 1.8.0 — en préparation
+
+- Onduleurs installés : repère et identification individuels, repris dans les rapports, avec édition native et masques de numérotation par entité ; les chaînes sont numérotées par onduleur.
+- Configuration MPPT / chaînes : ajout et modification dans des modales natives, sélection des modules de la composition, puissance automatique de chaîne et suivi des modules raccordés / restants.
+- Rapports : matériels regroupés par référence, lien « Consulter la centrale » à la place des séries, mesures organisées par onduleur / MPPT / chaîne et séries des panneaux dans une annexe CSV séparée ; PDF lisibles par onduleur.
+- Mobile : enregistrement par pictogramme, réduction et passage à la section suivante, conservation des sections ouvertes et du défilement après rechargement.
+- Accès : filtrage des listes de centrales par affectation commerciale avant comptage et pagination. Actualiser le module par le parcours natif dans chaque entité pour appliquer les migrations conservatrices, sans perte des réglages ni des références existantes.
+
 ## Correctif en attente — infobulles, version 1.7.0 conservée
 
 - Accueil : infobulles explicatives au survol des six badges, avec distinction entre statut des centrales, périodes contractuelles de maintenance et interventions réalisées.

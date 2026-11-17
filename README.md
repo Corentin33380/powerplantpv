@@ -25,7 +25,7 @@
 
 Other external modules are available on [Dolistore.com](https://www.dolistore.com).
 
-## Maintenance reports: development for 1.8
+## Maintenance reports — 1.8.0
 
 The development branch adds installed inverter markers and identification, frozen report identities,
 DC groups by physical inverter, and material summaries consolidated by product reference.
@@ -33,7 +33,7 @@ Desktop section titles include marker, identification and serial; mobile titles 
 Panel serials are available in a separate CSV attachment generated from the report snapshot.
 See [the implementation and validation notes](docs/release/v1.8-maintenance-development.md)
 for activation, historic reports, naming existing equipment and validation limits.
-This work is not a published 1.8 release; published version metadata and ChangeLog remain unchanged.
+The descriptor identifies version 1.8.0, currently under acceptance testing. No stable 1.8.0 release has been published.
 
 ## Translations
 
