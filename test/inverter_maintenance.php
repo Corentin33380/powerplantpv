@@ -131,7 +131,7 @@ define('DOL_DATA_ROOT', $temporary);
 define('DOL_DOCUMENT_ROOT', $temporary);
 mkdir($temporary.'/ecm/class', 0777, true);
 file_put_contents($temporary.'/ecm/class/ecmfiles.class.php', "<?php\n");
-function getMultidirOutput($object, $module, $forobject) { return $GLOBALS['conf']->ficheinter->multidir_output[$object->entity].'/'.$object->ref; }
+function getMultidirOutput($object, $module, $forobject) { return $GLOBALS['conf']->{$module}->multidir_output[$object->entity].($forobject ? '/'.$object->ref : ''); }
 function dol_mkdir($dir) { return is_dir($dir) || mkdir($dir, 0777, true) ? 1 : -1; }
 function dol_sanitizeFileName($name) { return preg_replace('/[^a-zA-Z0-9_-]/', '_', $name); }
 function dol_delete_file($path) { return unlink($path); }
@@ -235,4 +235,25 @@ checkMaintenance(PowerPlantPVReportIllustration::imagePath($testDirectory, 'phot
 checkMaintenance(PowerPlantPVReportIllustration::imagePath($testDirectory, '../photo.png') === '', 'Parent traversal cannot select another plant image');
 checkMaintenance(PowerPlantPVReportIllustration::imagePath($testDirectory, 'false.png') === '', 'Filename extension cannot disguise non-image content');
 unlink($testDirectory.'/photo.png'); unlink($testDirectory.'/false.png'); rmdir($testDirectory);
+
+// ECM may use the table name as source type and a logical path through a symlinked data root.
+$ownerRoot = DOL_DATA_ROOT.'/module'; $ownerDir = $ownerRoot.'/powerplant/OWNER';
+mkdir($ownerDir, 0777, true);
+file_put_contents($ownerDir.'/photo.png', base64_decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII='));
+$conf->powerplantpv = (object) array('multidir_output' => array(2 => $ownerRoot));
+if (!defined('MAIN_DB_PREFIX')) { define('MAIN_DB_PREFIX', 'fixture_'); }
+$imageDb = new class {
+ public $rows; public $sql;
+ public function escape($value) { return str_replace("'", "''", $value); }
+ public function query($sql) { $this->sql = $sql; return (object) array(); }
+ public function fetch_object($result) { return array_shift($this->rows); }
+ public function free($result) {}
+};
+$imageDb->rows = array((object) array('rowid' => 1, 'filename' => 'photo.png', 'filepath' => 'module/powerplant/OWNER'), (object) array('rowid' => 2, 'filename' => 'photo.png', 'filepath' => 'module/powerplant/OTHER'));
+$plantImage = (object) array('id' => 6, 'ref' => 'OWNER', 'entity' => 2, 'element' => 'powerplant', 'table_element' => 'powerplantpv_powerplant');
+$imageService = new PowerPlantPVReportIllustration($imageDb);
+$eligible = $imageService->files($plantImage);
+checkMaintenance(is_array($eligible) && array_keys($eligible) === array(1), 'ECM source association never admits an image outside the owning plant directory');
+checkMaintenance(strpos($imageDb->sql, "'powerplantpv_powerplant'") !== false && strpos($imageDb->sql, 'entity = 2') !== false, 'Image lookup supports the native table source type and exact owner entity');
+unlink($ownerDir.'/photo.png'); rmdir($ownerDir); rmdir(dirname($ownerDir)); rmdir($ownerRoot); rmdir(DOL_DATA_ROOT);
 print 'OK: '.$checks." behavioral checks (ERP/database collaborators simulated).\n";

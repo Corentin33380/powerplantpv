@@ -35,12 +35,16 @@ class PowerPlantPVReportIllustration
 		$dataRoot = realpath(DOL_DATA_ROOT);
 		if ($dataRoot === false || strpos(str_replace('\\', '/', $directory).'/', str_replace('\\', '/', $dataRoot).'/') !== 0) { $this->error = 'PowerPlantPVReportImageMissing'; return -1; }
 		$relative = substr(str_replace('\\', '/', $directory), strlen(str_replace('\\', '/', $dataRoot)) + 1);
-		$sql = "SELECT rowid, filename FROM ".MAIN_DB_PREFIX."ecm_files WHERE entity = ".$entity;
-		$sql .= " AND filepath = '".$this->db->escape($relative)."' ORDER BY filename ASC";
+		$logicalRelative = ltrim(str_replace('\\', '/', substr($ownerDirectory, strlen(DOL_DATA_ROOT))), '/');
+		$sql = "SELECT rowid, filename, filepath FROM ".MAIN_DB_PREFIX."ecm_files WHERE entity = ".$entity;
+		$sql .= " AND (filepath = '".$this->db->escape($relative)."' OR filepath = '".$this->db->escape($logicalRelative)."'";
+		$sql .= " OR (src_object_type IN ('".$this->db->escape((string) $plant->element)."', '".$this->db->escape((string) $plant->table_element)."') AND src_object_id = ".((int) $plant->id).")) ORDER BY filename ASC";
 		$result = $this->db->query($sql);
 		if (!$result) { $this->error = $this->db->lasterror(); return -1; }
 		$files = array();
 		while (is_object($row = $this->db->fetch_object($result))) {
+			// A source-object relation alone never authorizes a path outside the owner directory.
+			if (realpath(DOL_DATA_ROOT.'/'.(string) $row->filepath) !== $directory) { continue; }
 			$path = self::imagePath($directory, (string) $row->filename);
 			if ($path !== '') { $files[(int) $row->rowid] = array('label' => (string) $row->filename, 'path' => $path); }
 		}
