@@ -264,6 +264,16 @@ class PowerPlantPVReportBuilder
 	 */
 	public function recalculateSnapshot(PowerPlantPVReport $report, $intervention, User $user, $manualServiceIds = array(), $status = PowerPlantPVReport::STATUS_DRAFT)
 	{
+		// A recalculation without a new selection must retain the manually selected services.
+		if (!$manualServiceIds && (string) $report->source_mode === 'manual') {
+			$source = new PowerPlantPVReportSourceService($this->db);
+			$previousServices = $source->fetchAllByReport((int) $report->id);
+			if (!is_array($previousServices)) { $this->copyErrorsFrom($source); return -1; }
+			foreach ($previousServices as $service) {
+				if ((int) $service->fk_maintenance_service > 0) { $manualServiceIds[(int) $service->fk_maintenance_service] = (int) $service->fk_maintenance_service; }
+			}
+		}
+
 		$context = $this->buildGenerationContext($intervention, $manualServiceIds);
 		if (empty($context['can_generate'])) {
 			$this->errors = isset($context['messages']) && is_array($context['messages']) ? $context['messages'] : array('PowerPlantPVReportCannotBeGenerated');
