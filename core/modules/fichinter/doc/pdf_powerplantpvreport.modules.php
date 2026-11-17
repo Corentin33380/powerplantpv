@@ -527,7 +527,7 @@ class pdf_powerplantpvreport extends ModelePDFFicheinter
 		$html = '<table border="0" cellpadding="4" cellspacing="0" width="100%">';
 		$html .= '<tr style="background-color:#e9f3ff;font-weight:bold;">';
 		foreach ($columns as $column) {
-			if (!is_array($column) || empty($column['key'])) {
+			if (empty($column['key'])) {
 				continue;
 			}
 			$labelKey = !empty($column['label_key']) ? (string) $column['label_key'] : (string) $column['key'];
@@ -540,7 +540,7 @@ class pdf_powerplantpvreport extends ModelePDFFicheinter
 			}
 			$html .= '<tr>';
 			foreach ($columns as $column) {
-				if (!is_array($column) || empty($column['key'])) {
+				if (empty($column['key'])) {
 					continue;
 				}
 				$key = (string) $column['key'];
