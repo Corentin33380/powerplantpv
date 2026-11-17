@@ -21,6 +21,7 @@ dol_include_once('/powerplantpv/class/powerplantpvreportpdfdataset.class.php');
 require_once __DIR__.'/../../../../class/powerplantpvreportpresentation.class.php';
 require_once __DIR__.'/../../../../class/powerplantpvreportillustration.class.php';
 require_once __DIR__.'/../../../../class/powerplant.class.php';
+require_once __DIR__.'/powerplantpvreportvisualpdf.trait.php';
 dol_include_once('/powerplantpv/class/powerplantpvpowerplantsummary.class.php');
 
 /**
@@ -28,6 +29,7 @@ dol_include_once('/powerplantpv/class/powerplantpvpowerplantsummary.class.php');
  */
 class pdf_powerplantpvreport extends ModelePDFFicheinter
 {
+	use PowerPlantPVReportVisualPdf;
 	/**
 	 * @var DoliDB Database handler
 	 */
@@ -229,7 +231,7 @@ class pdf_powerplantpvreport extends ModelePDFFicheinter
 			$pdf->SetAutoPageBreak(true, 0);
 		}
 		$pdf->SetFont(pdf_getPDFFont($outputlangs), '', $this->defaultFontSize);
-		$pdf->SetMargins($this->marge_gauche, $this->marge_haute, $this->marge_droite);
+		$pdf->SetMargins($this->marge_gauche, 34, $this->marge_droite);
 		$pdf->SetTitle($outputlangs->convToOutputCharset($object->ref));
 		$pdf->SetSubject($outputlangs->convToOutputCharset($outputlangs->transnoentities('PowerPlantPVReportPdfTitle')));
 		$pdf->SetCreator('Dolibarr '.DOL_VERSION);
@@ -243,11 +245,13 @@ class pdf_powerplantpvreport extends ModelePDFFicheinter
 		$this->currentObject = $object;
 		$this->currentOutputLangs = $outputlangs;
 		$this->completedPageFooters = array();
+		$this->visualHeaders = array();
+		$this->visualReportTitle = PowerPlantPVReportPdfDataset::localizedProperty($dataset['report'], 'report_template_label', $outputlangs);
 
 		$pdf->Open();
 		$pdf->AddPage();
 		$this->reserveFooterSpace($pdf);
-		$this->renderHeader($pdf, $object, $dataset, $outputlangs);
+		if (!isset($this->visualHeaders[(int) $pdf->getPage()])) { $this->renderHeader($pdf, $object, $dataset, $outputlangs); }
 		$this->renderReport($pdf, $object, $dataset, $outputlangs);
 		$this->renderFooters($pdf, $object, $outputlangs);
 
@@ -310,7 +314,7 @@ class pdf_powerplantpvreport extends ModelePDFFicheinter
 					$logo = $logodir.'/logos/thumbs/'.$this->emetteur->logo_small;
 				}
 				if (is_readable($logo)) {
-					$height = pdf_getHeightForLogo($logo);
+					$height = min(14, pdf_getHeightForLogo($logo));
 					$pdf->Image($logo, $this->marge_gauche, $posy, 0, $height);
 					$logoBottom = $posy + $height;
 				}
@@ -323,7 +327,7 @@ class pdf_powerplantpvreport extends ModelePDFFicheinter
 			}
 		}
 
-		$title = $outputlangs->transnoentities('PowerPlantPVReportPdfTitle');
+		$title = $this->visualReportTitle !== '' ? $this->visualReportTitle : $outputlangs->transnoentities('PowerPlantPVReportPdfTitle');
 		$pdf->SetTextColor(0, 0, 60);
 		$pdf->SetFont('', 'B', $this->defaultFontSize + 5);
 		$pdf->SetXY($this->marge_gauche + 55, $posy);
@@ -337,209 +341,13 @@ class pdf_powerplantpvreport extends ModelePDFFicheinter
 			$pdf->MultiCell(0, 5, $outputlangs->convToOutputCharset(dol_print_date($dateIntervention, 'day', 'tzuser', $outputlangs)), 0, 'R');
 		}
 
-		$pdf->SetY(max($logoBottom, $pdf->GetY()) + 5);
-		$customer = is_object($dataset['thirdparty']) ? $dataset['thirdparty'] : null;
-		$project = is_object($dataset['project']) ? $dataset['project'] : null;
-		$report = is_object($dataset['report']) ? $dataset['report'] : null;
-		$rows = array(
-			array($outputlangs->transnoentities('Customer'), is_object($customer) ? $customer->name : ''),
-			array($outputlangs->transnoentities('Address'), is_object($customer) ? dol_format_address($customer, 1, "\n", $outputlangs) : ''),
-			array($outputlangs->transnoentities('Project'), is_object($project) ? trim((string) $project->ref.' - '.(string) $project->title) : ''),
-			array($outputlangs->transnoentities('PowerPlantPVInterventionNature'), PowerPlantPVReportPdfDataset::localizedProperty($report, 'intervention_nature_label', $outputlangs)),
-			array($outputlangs->transnoentities('PowerPlantPVReportTemplate'), PowerPlantPVReportPdfDataset::localizedProperty($report, 'report_template_label', $outputlangs)),
-			array($outputlangs->transnoentities('PowerPlantPVReportContracts'), $this->joinContractRefs($dataset['contracts'])),
-			array($outputlangs->transnoentities('PowerPlantPVReportPowerPlants'), $this->joinPowerplantLabels($dataset['powerplants'])),
-		);
-		$this->renderKeyValueTable($pdf, $this->filterRows($rows), '');
-		$pdf->Ln(3);
+		$pdf->SetY(max(34, $logoBottom + 4, $pdf->GetY() + 4));
+		$this->visualHeaders[(int) $pdf->getPage()] = true;
+		$pdf->SetFont('', '', $this->defaultFontSize);
 	}
 
-	/**
-	 * Render all report content.
-	 *
-	 * @param	TCPDF|TCPDI		$pdf			PDF handler
-	 * @param	CommonObject	$object			Intervention
-	 * @param	array<string,mixed>	$dataset	Dataset
-	 * @param	Translate		$outputlangs	Output language
-	 * @return	void
-	 */
-	protected function renderReport(&$pdf, $object, $dataset, $outputlangs)
-	{
-		if (empty($dataset['report_found'])) {
-			$this->renderSectionTitle($pdf, $outputlangs->transnoentities('PowerPlantPVReport'), 1);
-			$this->renderEmptyBlock($pdf, $outputlangs->transnoentities('PowerPlantPVReportNoSnapshot'));
-			return;
-		}
 
-		$customerSignatureSections = $this->extractCustomerSignatureSections($dataset);
 
-		if (empty($dataset['powerplants']) || !is_array($dataset['powerplants'])) {
-		if (!empty($dataset['general_sections']) && is_array($dataset['general_sections'])) {
-			foreach ($dataset['general_sections'] as $sectionRow) {
-				if ($this->isCustomerSignatureSectionRow($sectionRow)) {
-					continue;
-				}
-				if ($this->isPowerplantTechnicalSummarySectionRow($sectionRow)) {
-					continue;
-				}
-				$this->renderSection($pdf, $sectionRow, $dataset, $outputlangs);
-			}
-		}
-			$this->renderTechnicianFallback($pdf, $dataset, $outputlangs);
-			$this->renderCustomerSignatureSections($pdf, $customerSignatureSections, $dataset, $outputlangs);
-			return;
-		}
-
-		foreach ($dataset['powerplants'] as $powerplant) {
-			if (!is_object($powerplant)) {
-				continue;
-			}
-			$this->ensureSpace($pdf, 28);
-			$this->renderSectionTitle($pdf, $this->powerplantLabel($powerplant), 1);
-			$this->renderPlantOverview($pdf, $powerplant, $dataset, $outputlangs);
-			$this->renderPowerplantTechnicalSummary($pdf, $powerplant, $outputlangs);
-
-			$sourceServices = $this->filterSourceServicesByPowerplant($dataset['source_services'], (int) $powerplant->id);
-			if (!empty($sourceServices)) {
-				$this->renderSourceServices($pdf, $sourceServices, $outputlangs);
-			}
-
-			$sections = isset($dataset['sections_by_powerplant'][(int) $powerplant->id]) ? $dataset['sections_by_powerplant'][(int) $powerplant->id] : array();
-			if (empty($sections)) {
-				$this->renderEmptyBlock($pdf, $outputlangs->transnoentities('NoRecordFound'));
-			} else {
-				foreach ($sections as $sectionRow) {
-					if ($this->isCustomerSignatureSectionRow($sectionRow)) {
-						continue;
-					}
-					if ($this->isPowerplantTechnicalSummarySectionRow($sectionRow)) {
-						continue;
-					}
-					$this->renderSection($pdf, $sectionRow, $dataset, $outputlangs);
-				}
-			}
-		}
-		if (!empty($dataset['general_sections']) && is_array($dataset['general_sections'])) {
-			foreach ($dataset['general_sections'] as $sectionRow) {
-				if ($this->isCustomerSignatureSectionRow($sectionRow)) {
-					continue;
-				}
-				if ($this->isPowerplantTechnicalSummarySectionRow($sectionRow)) {
-					continue;
-				}
-				$this->renderSection($pdf, $sectionRow, $dataset, $outputlangs);
-			}
-		}
-
-		$this->renderTechnicianFallback($pdf, $dataset, $outputlangs);
-		$this->renderCustomerSignatureSections($pdf, $customerSignatureSections, $dataset, $outputlangs);
-	}
-
-	/**
-	 * Plant-specific overview; summary numbers come exclusively from the frozen report.
-	 * @param TCPDF|TCPDI $pdf PDF handler
-	 * @param PowerPlantPVReportPowerPlant $powerplant Snapshot
-	 * @param array<string,mixed> $dataset Report dataset
-	 * @param Translate $outputlangs Language
-	 * @return void
-	 */
-	protected function renderPlantOverview(&$pdf, $powerplant, $dataset, $outputlangs)
-	{
-		global $user;
-		$sections = $dataset['sections_by_powerplant'][(int) $powerplant->id] ?? array();
-		$stats = PowerPlantPVReportPresentation::indicators($sections);
-		$power = $outputlangs->transnoentities('PowerPlantPVDataNotFilled');
-		$snapshot = $this->resolvePowerplantTechnicalSummarySnapshot($powerplant, $outputlangs);
-		foreach (($snapshot['sections'] ?? array()) as $section) {
-			foreach (($section['rows'] ?? array()) as $row) {
-				if (($row['label_key'] ?? '') === 'PowerPlantPDFInstalledPower') { $power = (string) $row['value']; }
-			}
-		}
-		$cards = array(
-			array($power, $outputlangs->transnoentities('PowerPlantInstalledPower')),
-			array($stats['completed'].' / '.$stats['checks'], $outputlangs->transnoentities('PowerPlantPVReportControlSummary')),
-			array($stats['connected'].' / '.$stats['inputs'], $outputlangs->transnoentities('PowerPlantPVReportDcSummary')),
-			array((string) $stats['observations'], $outputlangs->transnoentities('PowerPlantPVReportObservationsCount')),
-		);
-		$this->ensureSpace($pdf, 24);
-		$html = '<table width="100%" cellpadding="5" cellspacing="3"><tr nobr="true">';
-		foreach ($cards as $card) {
-			$html .= '<td width="25%" style="background-color:#e9f3ff;color:#183252;"><b style="font-size:14pt;">'.dol_escape_htmltag($card[0]).'</b><br><span style="font-size:8pt;">'.dol_escape_htmltag($card[1]).'</span></td>';
-		}
-		$this->writeHtml($pdf, $html.'</tr></table>');
-		$pdf->Ln(2);
-		// Illustration is an optional enrichment: report access never grants access to a source plant.
-		if (!$user->hasRight('powerplantpv', 'powerplant', 'read')) { return; }
-		$plant = new PowerPlant($this->db);
-		if ($plant->fetch((int) $powerplant->fk_powerplant) <= 0 || (int) $plant->fk_report_illustration <= 0) { return; }
-		if (!restrictedArea($user, 'powerplantpv', $plant, $plant->table_element.'&'.$plant->element, $plant->element, 'fk_soc', 'rowid', (int) ((int) $plant->status === PowerPlant::STATUS_DRAFT), 1)) { return; }
-		$illustration = new PowerPlantPVReportIllustration($this->db);
-		$files = $illustration->files($plant);
-		if (!is_array($files) || !isset($files[(int) $plant->fk_report_illustration])) {
-			$this->renderEmptyBlock($pdf, $outputlangs->transnoentities('PowerPlantPVReportIllustrationInvalid')); return;
-		}
-		$this->renderImage($pdf, $files[(int) $plant->fk_report_illustration]['path'], $this->powerplantLabel($powerplant), $outputlangs, $this->page_largeur - $this->marge_gauche - $this->marge_droite);
-	}
-
-	/**
-	 * Draw dynamic DC profiles, separated by physical inverter and by unit.
-	 * @param TCPDF|TCPDI $pdf PDF handler
-	 * @param array<string,mixed> $group Inverter group
-	 * @param Translate $outputlangs Language
-	 * @return void
-	 */
-	protected function renderDcProfile(&$pdf, $group, $outputlangs)
-	{
-		$rows = array();
-		foreach ($group['mppts'] as $inputs) {
-			foreach ($inputs as $row) { if ((int) $row->is_connected === 1) { $rows[] = $row; } }
-		}
-		foreach (array_chunk($rows, 16) as $chunk) {
-			$numeric = false;
-			foreach ($chunk as $row) {
-				foreach (array('open_circuit_voltage', 'insulation_positive_to_ground', 'insulation_negative_to_ground') as $field) {
-					if ($row->{$field} !== null && $row->{$field} !== '' && is_numeric($row->{$field})) { $numeric = true; }
-				}
-			}
-			if (!$numeric) { continue; }
-			$this->ensureSpace($pdf, 105);
-			$this->renderSectionTitle($pdf, $outputlangs->transnoentities('PowerPlantPVReportDcChart').' - '.PowerPlantPVReportPresentation::identity($group['identity']), 3);
-			foreach (array(array('V', 'open_circuit_voltage'), array('MOhm', 'insulation_positive_to_ground', 'insulation_negative_to_ground')) as $series) {
-				$max = 0.0;
-				foreach ($chunk as $row) {
-					foreach (array_slice($series, 1) as $field) { if (is_numeric($row->{$field})) { $max = max($max, (float) $row->{$field}); } }
-				}
-				$scale = $max > 0 ? $max : 1;
-				$x = $this->marge_gauche + 14; $y = $pdf->GetY() + 4;
-				$width = $this->page_largeur - $this->marge_droite - $x; $height = 24;
-				$pdf->SetFont('', '', 7); $pdf->SetTextColor(70, 80, 95);
-				$pdf->SetXY($this->marge_gauche, $y); $pdf->Cell(14, 4, price($max, 0, $outputlangs, 1, -1, 2).' '.$series[0]);
-				$pdf->SetDrawColor(210, 220, 230); $pdf->Line($x, $y + $height, $x + $width, $y + $height);
-				$step = $width / count($chunk);
-				foreach (array_slice($series, 1) as $index => $field) {
-					$previous = null;
-					$pdf->SetDrawColor($index === 0 ? 0 : 230, $index === 0 ? 136 : 145, $index === 0 ? 210 : 30);
-					foreach ($chunk as $i => $row) {
-						$value = $row->{$field};
-						if ($value === null || $value === '' || !is_numeric($value) || (float) $value < 0) { $previous = null; continue; }
-						$px = $x + ($i + 0.5) * $step; $py = $y + $height - (float) $value / $scale * $height;
-						if (is_array($previous)) { $pdf->Line($previous[0], $previous[1], $px, $py); }
-						$pdf->Circle($px, $py, 0.7);
-						$previous = array($px, $py);
-					}
-				}
-				foreach ($chunk as $i => $row) {
-					$label = trim((string) $row->string_ref) !== '' ? (string) $row->string_ref : 'MPPT'.$row->mppt_number.'/'.$row->pv_input_number;
-					$pdf->SetXY($x + $i * $step, $y + $height + 1); $pdf->Cell($step, 4, $outputlangs->convToOutputCharset(dol_trunc($label, 8)), 0, 0, 'C');
-				}
-				$pdf->SetY($y + $height + 6);
-				$legend = count($series) === 2 ? $outputlangs->transnoentities('PowerPlantPVOpenCircuitVoltage') : $outputlangs->transnoentities('PowerPlantPVInsulationPositiveToGround').' / '.$outputlangs->transnoentities('PowerPlantPVInsulationNegativeToGround');
-				$pdf->MultiCell(0, 4, $outputlangs->convToOutputCharset($legend.' ('.$series[0].')'), 0, 'L');
-			}
-			$pdf->MultiCell(0, 4, $outputlangs->convToOutputCharset($outputlangs->transnoentities('PowerPlantPVReportChartMissing')), 0, 'L');
-			$pdf->SetFont('', '', $this->defaultFontSize); $pdf->SetTextColor(0, 0, 0); $pdf->Ln(3);
-		}
-	}
 
 	/**
 	 * Extract customer signature sections from the dataset.
@@ -711,6 +519,8 @@ class pdf_powerplantpvreport extends ModelePDFFicheinter
 	 */
 	protected function renderPowerplantSummaryTable(&$pdf, $columns, $rows, $outputlangs)
 	{
+		// Detailed traceability belongs to the appendix; keep the material overview compact.
+		$columns = array_values(array_filter($columns, function ($column) { return is_array($column) && ($column['key'] ?? '') !== 'serial'; }));
 		if (empty($columns) || empty($rows)) {
 			return;
 		}
@@ -735,12 +545,7 @@ class pdf_powerplantpvreport extends ModelePDFFicheinter
 				}
 				$key = (string) $column['key'];
 				$value = isset($row[$key]) ? (string) $row[$key] : '';
-				if ($key === 'serial' && !empty($row['serial_powerplant_id'])) {
-					$url = dol_buildpath('/powerplantpv/powerplant_composition.php', 2).'?id='.(int) $row['serial_powerplant_id'];
-					$html .= '<td><a href="'.dol_escape_htmltag($url).'">'.dol_escape_htmltag($outputlangs->transnoentities('PowerPlantPVConsultPowerplant')).'</a></td>';
-				} else {
-					$html .= '<td>'.dol_htmlentitiesbr($value).'</td>';
-				}
+				$html .= '<td>'.dol_htmlentitiesbr($value).'</td>';
 			}
 			$html .= '</tr>';
 		}
@@ -761,7 +566,11 @@ class pdf_powerplantpvreport extends ModelePDFFicheinter
 	protected function renderCustomerSignatureSections(&$pdf, $sections, $dataset, $outputlangs)
 	{
 		foreach ($sections as $sectionRow) {
-			$this->renderSection($pdf, $sectionRow, $dataset, $outputlangs);
+			$hasContent = false;
+			foreach ($this->filterVisibleFields($sectionRow['fields'] ?? array()) as $field) {
+				if (PowerPlantPVReportPdfDataset::formatFieldValue($field, $outputlangs) !== '' || !empty($field->files)) { $hasContent = true; break; }
+			}
+			if ($hasContent) { $this->renderSection($pdf, $sectionRow, $dataset, $outputlangs); }
 		}
 	}
 
@@ -881,7 +690,6 @@ class pdf_powerplantpvreport extends ModelePDFFicheinter
 		}
 
 		foreach (PowerPlantPVReportPresentation::groupMeasures($measures) as $group) {
-			$this->renderDcProfile($pdf, $group, $outputlangs);
 			$this->ensureSpace($pdf, 45);
 			$inverter = PowerPlantPVReportPresentation::identity($group['identity'], true, $outputlangs->transnoentities('PowerPlantPVManualDcLine'));
 			$html = '<table border="1" cellpadding="3" cellspacing="0" width="100%"><thead>';
@@ -896,7 +704,11 @@ class pdf_powerplantpvreport extends ModelePDFFicheinter
 					$html .= '<tr nobr="true">';
 					$html .= '<td>'.dol_escape_htmltag($this->formatDcMeasureIndex($measure->mppt_number, $outputlangs)).'</td>';
 					$html .= '<td>'.dol_escape_htmltag($this->formatDcMeasureIndex($measure->pv_input_number, $outputlangs)).'</td>';
-					$html .= '<td>'.dol_escape_htmltag($this->formatDcMeasureText($measure, $measure->string_ref, $outputlangs)).'</td>';
+					$html .= '<td>'.dol_escape_htmltag((string) $measure->string_ref).'</td>';
+					if (!$this->isDcMeasureUsed($measure)) {
+						$html .= '<td colspan="6">'.dol_escape_htmltag($outputlangs->transnoentities('PowerPlantPVNotUsedByPowerPlant')).'</td></tr>';
+						continue;
+					}
 					$html .= '<td>'.dol_escape_htmltag($this->formatDcMeasureNumber($measure, $measure->open_circuit_voltage, 'V', $outputlangs)).'</td>';
 					$html .= '<td>'.dol_escape_htmltag($this->formatDcMeasureBoolean($measure, $measure->polarity_checked, $outputlangs)).'</td>';
 					$html .= '<td>'.dol_escape_htmltag($this->formatDcMeasureInsulationStatus($measure, $outputlangs)).'</td>';
@@ -1185,7 +997,7 @@ class pdf_powerplantpvreport extends ModelePDFFicheinter
 		$equipment = array_values($groups);
 		$html = '<table border="0" cellpadding="4" cellspacing="0" width="100%">';
 		$html .= '<tr style="background-color:#e9f3ff;font-weight:bold;">';
-		foreach (array('PowerPlantPVEquipmentType', 'PowerPlantPVBrand', 'PowerPlantPVModel', 'Ref', 'Qty', 'PowerPlantSerialNumber', 'PowerPlantPVEquipmentPosition') as $key) {
+		foreach (array('PowerPlantPVEquipmentType', 'PowerPlantPVBrand', 'PowerPlantPVModel', 'Ref', 'Qty', 'PowerPlantPVEquipmentPosition') as $key) {
 			$html .= '<td>'.dol_escape_htmltag($outputlangs->transnoentities($key)).'</td>';
 		}
 		$html .= '</tr>';
@@ -1199,12 +1011,6 @@ class pdf_powerplantpvreport extends ModelePDFFicheinter
 			$html .= '<td>'.dol_escape_htmltag($this->formatEquipmentProductLabel($equipmentRow)).'</td>';
 			$html .= '<td>'.dol_escape_htmltag($this->formatEquipmentProductRef($equipmentRow)).'</td>';
 			$html .= '<td>'.dol_escape_htmltag(price($equipmentRow->qty)).'</td>';
-			if (in_array((string) $equipmentRow->equipment_type, array('PANEL', 'INVERTER'), true)) {
-				$url = dol_buildpath('/powerplantpv/powerplant_composition.php', 2).'?id='.(int) $equipmentRow->fk_powerplant;
-				$html .= '<td><a href="'.dol_escape_htmltag($url).'">'.dol_escape_htmltag($outputlangs->transnoentities('PowerPlantPVConsultPowerplant')).'</a></td>';
-			} else {
-				$html .= '<td>'.dol_escape_htmltag((string) $equipmentRow->serial_number).'</td>';
-			}
 			$html .= '<td>'.dol_escape_htmltag((string) $equipmentRow->equipment_position).'</td>';
 			$html .= '</tr>';
 		}
@@ -1276,20 +1082,25 @@ class pdf_powerplantpvreport extends ModelePDFFicheinter
 	 */
 	protected function renderSourceServices(&$pdf, $sourceServices, $outputlangs)
 	{
-		$rows = array();
+
+		$labels = array();
 		foreach ($sourceServices as $sourceService) {
-			if (!is_object($sourceService)) {
-				continue;
-			}
+			if (!is_object($sourceService)) { continue; }
 			$service = PowerPlantPVReportPdfDataset::localizedProperty($sourceService, 'maintenance_service_label', $outputlangs);
-			if ($service === '') {
-				$service = trim((string) $sourceService->product_ref.' '.(string) $sourceService->product_label);
-			}
-			$rows[] = array((string) $sourceService->contract_ref, $service);
+			if ($service === '') { $service = trim((string) $sourceService->product_ref.' '.(string) $sourceService->product_label); }
+			$contract = trim((string) $sourceService->contract_ref);
+			$labels[] = ($contract !== '' ? $contract.' - ' : '').$service;
 		}
-		if (!empty($rows)) {
-			$this->renderKeyValueTable($pdf, $rows, $outputlangs->transnoentities('PowerPlantPVReportSourceServices'));
+		if (!$labels) { return; }
+		$this->renderSectionTitle($pdf, $outputlangs->transnoentities('PowerPlantPVReportSourceServices'), 3);
+		$html = '<table width="100%" cellpadding="4" cellspacing="2">';
+		foreach (array_chunk($labels, 2) as $pair) {
+			$html .= '<tr nobr="true">';
+			foreach ($pair as $label) { $html .= '<td width="50%" style="background-color:#e9f3ff;">'.dol_escape_htmltag($label).'</td>'; }
+			$html .= '</tr>';
 		}
+		$this->writeHtml($pdf, $html.'</table>');
+		$pdf->Ln(2);
 	}
 
 	/**
@@ -1445,6 +1256,9 @@ class pdf_powerplantpvreport extends ModelePDFFicheinter
 	{
 		if (method_exists($pdf, 'setPageOrientation')) {
 			$pdf->setPageOrientation('', true, $this->heightforfooter);
+		}
+		if ($this->visualReportTitle !== '' && !isset($this->visualHeaders[(int) $pdf->getPage()])) {
+			$this->renderHeader($pdf, $this->currentObject, array(), $this->currentOutputLangs);
 		}
 	}
 

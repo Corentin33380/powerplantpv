@@ -146,7 +146,7 @@ $capture = new class {
 $_SERVER['HTTP_HOST'] = 'example.test'; $_SERVER['SERVER_PORT'] = 443; $_SERVER['HTTPS'] = 'on';
 $render = new ReflectionMethod($pdfModel, 'renderPowerplantSummaryTable'); $render->setAccessible(true);
 $render->invokeArgs($pdfModel, array(&$capture, array(array('key'=>'serial','label_key'=>'SerialNumber')), $rows, $langs));
-nativeMaintenanceCheck(strpos($capture->html, 'href=') !== false && strpos($capture->html, 'id=22') !== false && strpos($capture->html, 'SECRET-SERIES') === false, 'PDF summary emits the plant link instead of serials');
+nativeMaintenanceCheck(strpos($capture->html, 'href=') === false && strpos($capture->html, 'SerialNumber') === false && strpos($capture->html, 'SECRET-SERIES') === false, 'PDF material table omits the serial column and its link reserved for the appendix');
 $capture->html = '';
 $render = new ReflectionMethod($pdfModel, 'renderEquipmentSummary'); $render->setAccessible(true);
 $panel = (object) array('equipment_type'=>'PANEL','equipment_brand'=>'Brand','equipment_model'=>'450 W','product_label'=>'Panel','product_ref'=>'PV-450','equipment_ref'=>'PV-450','serial_number'=>'SECRET-PANEL-SERIAL','equipment_position'=>'');
