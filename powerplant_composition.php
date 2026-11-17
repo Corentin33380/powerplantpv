@@ -597,6 +597,10 @@ if ($action === 'updateline' && $canmanagecomposition && $lineid > 0) {
 			if ((string) $oldline->{$field} !== (string) $newline->{$field}) { $changedFields[] = $field; }
 		}
 	} elseif ($resupdate) { $resupdate = false; }
+	if ($resupdate && in_array('fk_status', $changedFields, true)) {
+		// Keep the plant power consistent with counted component statuses before commit/redirect.
+		$resupdate = powerplantRecalculateInstalledPower($object) >= 0;
+	}
 	if ($resupdate && $changedFields) {
 		$previousContext = $object->context;
 		$object->context['trigger_reason'] = 'equipment_update';
