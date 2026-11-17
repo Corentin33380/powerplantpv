@@ -107,6 +107,8 @@ class pdf_powerplantpvreport extends ModelePDFFicheinter
 	 * @var Translate|null Current output language
 	 */
 	protected $currentOutputLangs;
+	/** @var array<int,bool> Footer state during one generation. */
+	protected $completedPageFooters = array();
 
 	/**
 	 * Constructor.
@@ -166,7 +168,7 @@ class pdf_powerplantpvreport extends ModelePDFFicheinter
 		if (getDolGlobalInt('MAIN_USE_FPDF')) {
 			$outputlangs->charset_output = 'ISO-8859-1';
 		}
-		$outputlangs->loadLangs(array('main', 'companies', 'interventions', 'dict', 'powerplantpv@powerplantpv'));
+		$outputlangs->loadLangs(array('main', 'companies', 'interventions', 'products', 'dict', 'powerplantpv@powerplantpv'));
 
 		if (empty($object->ref)) {
 			$this->error = $outputlangs->transnoentities('ErrorUnknown');
@@ -240,6 +242,7 @@ class pdf_powerplantpvreport extends ModelePDFFicheinter
 		$this->heightforfooter = $this->computeFooterHeight();
 		$this->currentObject = $object;
 		$this->currentOutputLangs = $outputlangs;
+		$this->completedPageFooters = array();
 
 		$pdf->Open();
 		$pdf->AddPage();
@@ -275,26 +278,10 @@ class pdf_powerplantpvreport extends ModelePDFFicheinter
 	{
 		global $conf;
 
-		$dir = '';
-		if (function_exists('getMultidirOutput')) {
-			$dir = getMultidirOutput($object, 'ficheinter', 1);
-		}
-		if (!empty($dir)) {
-			return $dir;
-		}
-
-		$objectEntity = !empty($object->entity) ? (int) $object->entity : (int) $conf->entity;
-		$moduleOutput = '';
-		if (!empty($conf->ficheinter->multidir_output[$objectEntity])) {
-			$moduleOutput = $conf->ficheinter->multidir_output[$objectEntity];
-		} elseif (!empty($conf->ficheinter->dir_output)) {
-			$moduleOutput = $conf->ficheinter->dir_output;
-		}
-		if ($moduleOutput === '') {
-			return '';
-		}
-
-		return rtrim($moduleOutput, '/').'/'.dol_sanitizeFileName($object->ref);
+		$entity = (int) $object->entity;
+		if ($entity <= 0 || !isset($conf->ficheinter->multidir_output[$entity]) || trim((string) $conf->ficheinter->multidir_output[$entity]) === '') { return ''; }
+		$dir = getMultidirOutput($object, 'ficheinter', 1);
+		return is_string($dir) && $dir !== '' && strpos($dir, 'error-') !== 0 ? $dir : '';
 	}
 
 	/**
@@ -385,6 +372,8 @@ class pdf_powerplantpvreport extends ModelePDFFicheinter
 		}
 
 		$customerSignatureSections = $this->extractCustomerSignatureSections($dataset);
+
+		if (empty($dataset['powerplants']) || !is_array($dataset['powerplants'])) {
 		if (!empty($dataset['general_sections']) && is_array($dataset['general_sections'])) {
 			foreach ($dataset['general_sections'] as $sectionRow) {
 				if ($this->isCustomerSignatureSectionRow($sectionRow)) {
@@ -396,8 +385,6 @@ class pdf_powerplantpvreport extends ModelePDFFicheinter
 				$this->renderSection($pdf, $sectionRow, $dataset, $outputlangs);
 			}
 		}
-
-		if (empty($dataset['powerplants']) || !is_array($dataset['powerplants'])) {
 			$this->renderTechnicianFallback($pdf, $dataset, $outputlangs);
 			$this->renderCustomerSignatureSections($pdf, $customerSignatureSections, $dataset, $outputlangs);
 			return;
@@ -432,6 +419,18 @@ class pdf_powerplantpvreport extends ModelePDFFicheinter
 				}
 			}
 		}
+		if (!empty($dataset['general_sections']) && is_array($dataset['general_sections'])) {
+			foreach ($dataset['general_sections'] as $sectionRow) {
+				if ($this->isCustomerSignatureSectionRow($sectionRow)) {
+					continue;
+				}
+				if ($this->isPowerplantTechnicalSummarySectionRow($sectionRow)) {
+					continue;
+				}
+				$this->renderSection($pdf, $sectionRow, $dataset, $outputlangs);
+			}
+		}
+
 		$this->renderTechnicianFallback($pdf, $dataset, $outputlangs);
 		$this->renderCustomerSignatureSections($pdf, $customerSignatureSections, $dataset, $outputlangs);
 	}
@@ -449,7 +448,7 @@ class pdf_powerplantpvreport extends ModelePDFFicheinter
 		global $user;
 		$sections = $dataset['sections_by_powerplant'][(int) $powerplant->id] ?? array();
 		$stats = PowerPlantPVReportPresentation::indicators($sections);
-		$power = $outputlangs->transnoentities('PowerPlantPVReportNotProvided');
+		$power = $outputlangs->transnoentities('PowerPlantPVDataNotFilled');
 		$snapshot = $this->resolvePowerplantTechnicalSummarySnapshot($powerplant, $outputlangs);
 		foreach (($snapshot['sections'] ?? array()) as $section) {
 			foreach (($section['rows'] ?? array()) as $row) {
@@ -715,7 +714,7 @@ class pdf_powerplantpvreport extends ModelePDFFicheinter
 		if (empty($columns) || empty($rows)) {
 			return;
 		}
-		$html = '<table border="1" cellpadding="4" cellspacing="0" width="100%" style="border-color:#dce7f1;">';
+		$html = '<table border="0" cellpadding="4" cellspacing="0" width="100%">';
 		$html .= '<tr style="background-color:#e9f3ff;font-weight:bold;">';
 		foreach ($columns as $column) {
 			if (!is_array($column) || empty($column['key'])) {
@@ -953,7 +952,7 @@ class pdf_powerplantpvreport extends ModelePDFFicheinter
 			return;
 		}
 
-		$html = '<table border="1" cellpadding="4" cellspacing="0" width="100%" style="border-color:#dce7f1;">';
+		$html = '<table border="0" cellpadding="4" cellspacing="0" width="100%">';
 		$html .= '<tr style="background-color:#e9f3ff;font-weight:bold;">';
 		foreach (array('Type', 'Date', 'N-1', 'N', 'PowerPlantPVReadingDelta', 'Unit') as $key) {
 			$html .= '<td>'.dol_escape_htmltag($outputlangs->transnoentities($key)).'</td>';
@@ -1184,9 +1183,9 @@ class pdf_powerplantpvreport extends ModelePDFFicheinter
 			$groups[$key]->qty += (float) $row->qty;
 		}
 		$equipment = array_values($groups);
-		$html = '<table border="1" cellpadding="4" cellspacing="0" width="100%" style="border-color:#dce7f1;">';
+		$html = '<table border="0" cellpadding="4" cellspacing="0" width="100%">';
 		$html .= '<tr style="background-color:#e9f3ff;font-weight:bold;">';
-		foreach (array('PowerPlantPVEquipmentType', 'PowerPlantPVBrand', 'PowerPlantPVModel', 'Ref', 'Qty', 'SerialNumber', 'PowerPlantPVEquipmentPosition') as $key) {
+		foreach (array('PowerPlantPVEquipmentType', 'PowerPlantPVBrand', 'PowerPlantPVModel', 'Ref', 'Qty', 'PowerPlantSerialNumber', 'PowerPlantPVEquipmentPosition') as $key) {
 			$html .= '<td>'.dol_escape_htmltag($outputlangs->transnoentities($key)).'</td>';
 		}
 		$html .= '</tr>';
@@ -1229,7 +1228,7 @@ class pdf_powerplantpvreport extends ModelePDFFicheinter
 			array($outputlangs->transnoentities('PowerPlantPVBrand'), (string) $equipment->equipment_brand),
 			array($outputlangs->transnoentities('PowerPlantPVModel'), $this->formatEquipmentProductLabel($equipment)),
 			array($outputlangs->transnoentities('Ref'), $this->formatEquipmentProductRef($equipment)),
-			array($outputlangs->transnoentities('SerialNumber'), (string) $equipment->equipment_type === 'PANEL' ? '' : (string) $equipment->serial_number),
+			array($outputlangs->transnoentities('PowerPlantSerialNumber'), (string) $equipment->equipment_type === 'PANEL' ? '' : (string) $equipment->serial_number),
 			array($outputlangs->transnoentities('PowerPlantPVEquipmentPosition'), (string) $equipment->equipment_position),
 		);
 		$this->renderKeyValueTable($pdf, $this->filterRows($rows), '');
@@ -1335,11 +1334,11 @@ class pdf_powerplantpvreport extends ModelePDFFicheinter
 		if ($title !== '') {
 			$this->renderSectionTitle($pdf, $title, 3);
 		}
-		$html = '<table border="1" cellpadding="4" cellspacing="0" width="100%" style="border-color:#dce7f1;">';
+		$html = '<table border="0" cellpadding="4" cellspacing="0" width="100%">';
 		foreach ($rows as $row) {
 			$html .= '<tr>';
-			$html .= '<td width="32%" style="background-color:#e9f3ff;font-weight:bold;">'.dol_escape_htmltag((string) $row[0]).'</td>';
-			$html .= '<td width="68%">'.dol_htmlentitiesbr((string) $row[1]).'</td>';
+			$html .= '<td width="32%" style="border:0.2px solid #dce7f1;background-color:#e9f3ff;font-weight:bold;">'.dol_escape_htmltag((string) $row[0]).'</td>';
+			$html .= '<td width="68%" style="border:0.2px solid #dce7f1;">'.dol_htmlentitiesbr((string) $row[1]).'</td>';
 			$html .= '</tr>';
 		}
 		$html .= '</table>';
@@ -1406,7 +1405,17 @@ class pdf_powerplantpvreport extends ModelePDFFicheinter
 	protected function writeHtml(&$pdf, $html)
 	{
 		$this->ensureSpace($pdf, 12);
-		$pdf->writeHTMLCell(0, 0, '', '', $this->currentOutputLangs->convToOutputCharset($html), 0, 1, false, true, '', true);
+		$firstPage = (int) $pdf->getPage();
+		$pdf->writeHTMLCell(0, 0, null, null, $this->currentOutputLangs->convToOutputCharset($html), 0, 1, false, true, '', true);
+		$currentPage = (int) $pdf->getPage();
+		$y = $pdf->GetY();
+		for ($page = $firstPage; $page < $currentPage; $page++) {
+			$pdf->setPage($page);
+			$this->completePageFooter($pdf, 1);
+		}
+		$pdf->setPage($currentPage);
+		$this->reserveFooterSpace($pdf);
+		$pdf->SetY($y);
 	}
 
 	/**
@@ -1421,6 +1430,7 @@ class pdf_powerplantpvreport extends ModelePDFFicheinter
 		if ($pdf->GetY() + $needed <= $this->getContentBottomY()) {
 			return;
 		}
+		$this->completePageFooter($pdf, 1);
 		$pdf->AddPage();
 		$this->reserveFooterSpace($pdf);
 	}
@@ -1448,15 +1458,26 @@ class pdf_powerplantpvreport extends ModelePDFFicheinter
 	 */
 	protected function renderFooters(&$pdf, $object, $outputlangs)
 	{
-		$pageCount = method_exists($pdf, 'getNumPages') ? (int) $pdf->getNumPages() : (int) $pdf->getPage();
-		for ($page = 1; $page <= $pageCount; $page++) {
-			$pdf->setPage($page);
-			if (method_exists($pdf, 'setPageOrientation')) {
-				$pdf->setPageOrientation('', true, 0);
-			}
-			$this->_pagefoot($pdf, $object, $outputlangs, $page < $pageCount ? 1 : 0);
-		}
-		$pdf->setPage($pageCount);
+		$this->completePageFooter($pdf, 0);
+	}
+
+	/**
+	 * Protect native footer rendering from automatic page breaks and duplicate output.
+	 * @param TCPDF|TCPDI $pdf PDF handler
+	 * @param int<0,1> $hidefreetext Intermediate or last page
+	 * @return void
+	 */
+	protected function completePageFooter(&$pdf, $hidefreetext)
+	{
+		$page = (int) $pdf->getPage();
+		if (isset($this->completedPageFooters[$page])) { return; }
+		$font = array($pdf->getFontFamily(), $pdf->getFontStyle(), $pdf->getFontSizePt());
+		$pdf->SetAutoPageBreak(false, 0);
+		$this->_pagefoot($pdf, $this->currentObject, $this->currentOutputLangs, $hidefreetext);
+		$this->completedPageFooters[$page] = true;
+		$pdf->SetFont($font[0], $font[1], $font[2]);
+		$pdf->SetTextColor(0, 0, 0);
+		$this->reserveFooterSpace($pdf);
 	}
 
 	/**

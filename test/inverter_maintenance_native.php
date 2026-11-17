@@ -136,6 +136,10 @@ $languageProperty = new ReflectionProperty($pdfModel, 'currentOutputLangs'); $la
 $capture = new class {
  public $html = '';
  public function GetY() { return 20; }
+ public function SetY($y) {}
+ public function getPage() { return 1; }
+ public function setPage($page) {}
+ public function setPageOrientation(...$args) {}
  public function writeHTMLCell($w, $h, $x, $y, $html, ...$rest) { $this->html .= $html; }
  public function Ln($height) {}
 };
@@ -218,4 +222,36 @@ nativeMaintenanceCheck(strpos($readingDb->sql, 'COALESCE(fk_report_equipment, 0)
 $reading->fetchLatestValue(6, 'PRODUCTION_INDEX');
 nativeMaintenanceCheck(strpos($readingDb->sql, 'e.fk_powerplant_line') === false, 'Common plant meter history is not filtered by inverter');
 nativeMaintenanceCheck(method_exists('CommonObject', 'setValueFrom'), 'Native single-field update API exists on the tested core');
+
+require_once $module.'/core/modules/fichinter/doc/pdf_powerplantpvreport.modules.php';
+class NativeMaintenancePdfLifecycle extends pdf_powerplantpvreport
+{
+ public $footers = array();
+ public function __construct() { $this->heightforfooter = 30; $this->page_hauteur = 297; $this->currentOutputLangs = $GLOBALS['langs']; }
+ protected function _pagefoot(&$pdf, $object, $outputlangs, $hidefreetext = 0) { $this->footers[] = array($pdf->getPage(), $hidefreetext, $pdf->automatic); return 0; }
+ public function renderTest(&$pdf) { $this->writeHtml($pdf, '<p>Two-page simulated HTML</p>'); $this->renderFooters($pdf, null, $this->currentOutputLangs); }
+}
+$pdfCapture = new class {
+ public $page = 1; public $y = 20; public $automatic = true;
+ public function GetY() { return $this->y; }
+ public function SetY($y) { $this->y = $y; }
+ public function getPage() { return $this->page; }
+ public function setPage($page) { $this->page = $page; }
+ public function writeHTMLCell(...$args) { $this->page = 2; $this->y = 50; }
+ public function SetAutoPageBreak($auto, $margin = 0) { $this->automatic = $auto; }
+ public function setPageOrientation($orientation, $auto, $margin) { $this->automatic = $auto; }
+ public function getFontFamily() { return 'helvetica'; }
+ public function getFontStyle() { return ''; }
+ public function getFontSizePt() { return 9; }
+ public function SetFont(...$args) {}
+ public function SetTextColor(...$args) {}
+};
+$pdfLifecycle = new NativeMaintenancePdfLifecycle();
+$pdfLifecycle->renderTest($pdfCapture);
+nativeMaintenanceCheck($pdfLifecycle->footers === array(array(1, 1, false), array(2, 0, false)), 'HTML split completes the intermediate footer and prints the final footer once with automatic breaks disabled');
+nativeMaintenanceCheck($pdfCapture->page === 2 && $pdfCapture->y === 50 && $pdfCapture->automatic, 'HTML rendering restores its current page, cursor and reserved bottom margin');
+$field = (new ReflectionClass('PowerPlantPVReportField'))->newInstanceWithoutConstructor();
+$field->field_type = 'conformity_so_valid_obs'; $field->value_text = '-1';
+$langs->tab_translate['PowerPlantPVDataNotFilled'] = 'Donnée non renseignée';
+nativeMaintenanceCheck(PowerPlantPVReportPdfDataset::formatFieldValue($field, $langs) === 'Donnée non renseignée', 'Missing conformity selection never appears as raw -1 in the PDF');
 print 'OK: '.$checks.' native checks, PHP '.PHP_VERSION.', Dolibarr '.DOL_VERSION." (no live database).\n";
