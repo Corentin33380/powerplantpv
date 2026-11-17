@@ -146,6 +146,7 @@ class PowerPlant extends CommonObject
 		"ref" => array("type" => "varchar(128)", "label" => "Ref", "enabled" => "1", 'position' => 20, 'notnull' => 1, "visible" => "1", "index" => "1", "searchall" => "1", "showoncombobox" => "1", "validate" => "1", "default" => "(PROV)", "comment" => "Reference of object"),
 		"label" => array("type" => "varchar(255)", "label" => "Label", "enabled" => "1", 'position' => 30, 'notnull' => 0, "visible" => "1", "alwayseditable" => "1", "searchall" => "1", "css" => "minwidth300", "cssview" => "wordbreak", "help" => "Help text", "showoncombobox" => "2", "validate" => "1",),
 		"entity" => array("type" => "integer", "label" => "Entity", "enabled" => "1", 'position' => 900, 'notnull' => 1, "visible" => "-2", "default" => 1, "index" => "1"),
+		'fk_report_illustration' => array('type' => 'integer', 'label' => 'PowerPlantPVReportIllustration', 'enabled' => 1, 'position' => 899, 'notnull' => 0, 'visible' => 0),
 		"commissioning_date" => array("type" => "date", "label" => "PowerPlantCommissioningDate", "enabled" => "1", 'position' => 35, 'notnull' => 0, "visible" => "1", "validate" => "1",),
 		"prm_pdl_number" => array("type" => "varchar(128)", "label" => "PowerPlantPrmPdlNumber", "enabled" => "1", 'position' => 36, 'notnull' => 0, "visible" => "1", "searchall" => "1", "validate" => "1",),
 		"address" => array("type" => "varchar(255)", "label" => "Address", "enabled" => "1", 'position' => 37, 'notnull' => 0, "visible" => "3", "searchall" => "1", "css" => "minwidth300", "cssview" => "wordbreak", "validate" => "1",),
@@ -187,6 +188,8 @@ class PowerPlant extends CommonObject
 	public $fk_country;
 	public $access_instructions;
 	public $installed_power;
+	/** @var int|null ECM attachment selected for maintenance PDF illustration. */
+	public $fk_report_illustration;
 	public $connection_contract_power;
 	public $connection_type;
 	public $enedis_commissioning_date;

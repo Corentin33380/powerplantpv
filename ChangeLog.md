@@ -6,6 +6,9 @@
 - Configuration MPPT / chaînes : ajout et modification dans des modales natives, sélection des modules de la composition, puissance automatique de chaîne et suivi des modules raccordés / restants.
 - Rapports : matériels regroupés par référence, lien « Consulter la centrale » à la place des séries, mesures organisées par onduleur / MPPT / chaîne et séries des panneaux dans une annexe CSV séparée ; PDF lisibles par onduleur.
 - Rapports existants : regroupement des anciens instantanés sans recalcul de leurs données historiques ni répétition des modules dans la composition. L’absence de repère ou d’identification historique ne bloque plus la finalisation ; les réponses obligatoires du modèle restent contrôlées.
+- Relevés : production distincte par onduleur installé, historique N−1 fondé sur son identité source ; index des compteurs communs à la centrale. Les anciens relevés globaux renseignés restent conservés en lecture seule.
+- PDF : synthèse visuelle, indicateurs issus des réponses et profils DC par onduleur ; illustration JPEG/PNG choisie dans les pièces jointes de la centrale. Le nombre de centrales, onduleurs, chaînes et pages reste dynamique.
+- Saisie DC : retrait de l’ajout manuel et des lignes manuelles vides ; option de masquage des MPPT / entrées non exploités uniquement dans la saisie. Le PDF les conserve avec leur mention explicite ; les anciennes mesures manuelles renseignées sont préservées.
 - Mobile : enregistrement par pictogramme, réduction et passage à la section suivante, conservation des sections ouvertes et du défilement après rechargement.
 - Accès : filtrage des listes de centrales par affectation commerciale avant comptage et pagination. Actualiser le module par le parcours natif dans chaque entité pour appliquer les migrations conservatrices, sans perte des réglages ni des références existantes.
 

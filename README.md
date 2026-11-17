@@ -315,3 +315,21 @@ Le bilan indique les modules raccordés à l’onduleur et ceux restant à racco
 Une quantité dépassant le stock de la composition est refusée côté serveur.
 Après déploiement, recharger le module depuis la liste native pour ajouter la liaison nullable
 `fk_product` aux chaînes et son index, sans modifier les anciennes valeurs manuelles.
+
+### Rapports 1.8 : relevés et illustrations
+
+La production relevée sur les onduleurs est saisie séparément pour chaque équipement installé.
+Les index de production, d’injection et de consommation restent communs à la centrale.
+Les anciens relevés globaux renseignés restent visibles en lecture seule ; ils ne sont pas attribués arbitrairement à un onduleur.
+
+Dans **Fichiers joints** de la centrale, choisir l’**Illustration du rapport de maintenance**
+parmi les images JPEG/PNG déjà jointes. Le choix référence le fichier ECM natif, sans copie
+ni fusion des PDF des produits ; il est repris aux prochaines générations du rapport.
+Aucune image n’est choisie automatiquement. Un fichier manquant est signalé dans le PDF.
+Les répertoires de l’entité propriétaire et les accès à la centrale restent contrôlés.
+Après mise à jour, recharger le module par le parcours natif pour ajouter cette liaison.
+
+L’option **Masquer les MPPT et entrées PV non exploités dans la saisie** est enregistrée
+par entité dans les réglages. Elle ne modifie pas le PDF : les entrées non raccordées y
+restent identifiées comme « Non exploité par la centrale ». Aucun relevé stocké n’est supprimé.
+Les indicateurs PDF comptent les réponses explicites du modèle ; ils ne remplacent pas une conclusion technique.

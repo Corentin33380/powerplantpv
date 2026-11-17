@@ -1821,3 +1821,16 @@ PowerPlantPVModuleConnectionSummary=Modules raccordés sur cet onduleur : %s. Mo
 PowerPlantPVStringPower=Puissance de la chaîne
 PowerPlantPVInvalidModuleSelection=Sélectionnez une référence de module présente dans la composition de la centrale et un nombre de modules valide.
 PowerPlantPVModuleAllocationExceeded=Le nombre de modules raccordés dépasse la quantité disponible dans la composition.
+
+PowerPlantPVHideUnusedMppt=Masquer les MPPT et entrées PV non exploités dans la saisie
+PowerPlantPVHideUnusedMpptHelp=Le PDF les conserve avec la mention « Non exploité par la centrale ».
+
+PowerPlantPVReportIllustration=Illustration du rapport de maintenance
+PowerPlantPVReportIllustrationHelp=Sélectionnez une image JPEG ou PNG parmi les pièces jointes de cette centrale. Elle sera intégrée aux prochains PDF de maintenance ; les fichiers déjà générés restent inchangés.
+PowerPlantPVReportIllustrationInvalid=Illustration indisponible ou ne faisant pas partie des images de cette centrale.
+PowerPlantPVReportControlSummary=Contrôles renseignés
+PowerPlantPVReportDcSummary=Entrées PV raccordées
+PowerPlantPVReportInverterCount=Onduleurs installés
+PowerPlantPVReportObservationsCount=Points avec observation
+PowerPlantPVReportDcChart=Profil des mesures DC
+PowerPlantPVReportChartMissing=Les mesures absentes ne sont pas représentées ; zéro reste une mesure valide.

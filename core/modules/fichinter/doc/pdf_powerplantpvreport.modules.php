@@ -19,6 +19,8 @@ require_once DOL_DOCUMENT_ROOT.'/core/lib/files.lib.php';
 require_once DOL_DOCUMENT_ROOT.'/core/lib/pdf.lib.php';
 dol_include_once('/powerplantpv/class/powerplantpvreportpdfdataset.class.php');
 require_once __DIR__.'/../../../../class/powerplantpvreportpresentation.class.php';
+require_once __DIR__.'/../../../../class/powerplantpvreportillustration.class.php';
+require_once __DIR__.'/../../../../class/powerplant.class.php';
 dol_include_once('/powerplantpv/class/powerplantpvpowerplantsummary.class.php');
 
 /**
@@ -407,6 +409,7 @@ class pdf_powerplantpvreport extends ModelePDFFicheinter
 			}
 			$this->ensureSpace($pdf, 28);
 			$this->renderSectionTitle($pdf, $this->powerplantLabel($powerplant), 1);
+			$this->renderPlantOverview($pdf, $powerplant, $dataset, $outputlangs);
 			$this->renderPowerplantTechnicalSummary($pdf, $powerplant, $outputlangs);
 
 			$sourceServices = $this->filterSourceServicesByPowerplant($dataset['source_services'], (int) $powerplant->id);
@@ -431,6 +434,112 @@ class pdf_powerplantpvreport extends ModelePDFFicheinter
 		}
 		$this->renderTechnicianFallback($pdf, $dataset, $outputlangs);
 		$this->renderCustomerSignatureSections($pdf, $customerSignatureSections, $dataset, $outputlangs);
+	}
+
+	/**
+	 * Plant-specific overview; summary numbers come exclusively from the frozen report.
+	 * @param TCPDF|TCPDI $pdf PDF handler
+	 * @param PowerPlantPVReportPowerPlant $powerplant Snapshot
+	 * @param array<string,mixed> $dataset Report dataset
+	 * @param Translate $outputlangs Language
+	 * @return void
+	 */
+	protected function renderPlantOverview(&$pdf, $powerplant, $dataset, $outputlangs)
+	{
+		global $user;
+		$sections = $dataset['sections_by_powerplant'][(int) $powerplant->id] ?? array();
+		$stats = PowerPlantPVReportPresentation::indicators($sections);
+		$power = $outputlangs->transnoentities('PowerPlantPVReportNotProvided');
+		$snapshot = $this->resolvePowerplantTechnicalSummarySnapshot($powerplant, $outputlangs);
+		foreach (($snapshot['sections'] ?? array()) as $section) {
+			foreach (($section['rows'] ?? array()) as $row) {
+				if (($row['label_key'] ?? '') === 'PowerPlantPDFInstalledPower') { $power = (string) $row['value']; }
+			}
+		}
+		$cards = array(
+			array($power, $outputlangs->transnoentities('PowerPlantInstalledPower')),
+			array($stats['completed'].' / '.$stats['checks'], $outputlangs->transnoentities('PowerPlantPVReportControlSummary')),
+			array($stats['connected'].' / '.$stats['inputs'], $outputlangs->transnoentities('PowerPlantPVReportDcSummary')),
+			array((string) $stats['observations'], $outputlangs->transnoentities('PowerPlantPVReportObservationsCount')),
+		);
+		$this->ensureSpace($pdf, 24);
+		$html = '<table width="100%" cellpadding="5" cellspacing="3"><tr nobr="true">';
+		foreach ($cards as $card) {
+			$html .= '<td width="25%" style="background-color:#e9f3ff;color:#183252;"><b style="font-size:14pt;">'.dol_escape_htmltag($card[0]).'</b><br><span style="font-size:8pt;">'.dol_escape_htmltag($card[1]).'</span></td>';
+		}
+		$this->writeHtml($pdf, $html.'</tr></table>');
+		$pdf->Ln(2);
+		// Illustration is an optional enrichment: report access never grants access to a source plant.
+		if (!$user->hasRight('powerplantpv', 'powerplant', 'read')) { return; }
+		$plant = new PowerPlant($this->db);
+		if ($plant->fetch((int) $powerplant->fk_powerplant) <= 0 || (int) $plant->fk_report_illustration <= 0) { return; }
+		if (!restrictedArea($user, 'powerplantpv', $plant, $plant->table_element.'&'.$plant->element, $plant->element, 'fk_soc', 'rowid', (int) ((int) $plant->status === PowerPlant::STATUS_DRAFT), 1)) { return; }
+		$illustration = new PowerPlantPVReportIllustration($this->db);
+		$files = $illustration->files($plant);
+		if (!is_array($files) || !isset($files[(int) $plant->fk_report_illustration])) {
+			$this->renderEmptyBlock($pdf, $outputlangs->transnoentities('PowerPlantPVReportIllustrationInvalid')); return;
+		}
+		$this->renderImage($pdf, $files[(int) $plant->fk_report_illustration]['path'], $this->powerplantLabel($powerplant), $outputlangs, $this->page_largeur - $this->marge_gauche - $this->marge_droite);
+	}
+
+	/**
+	 * Draw dynamic DC profiles, separated by physical inverter and by unit.
+	 * @param TCPDF|TCPDI $pdf PDF handler
+	 * @param array<string,mixed> $group Inverter group
+	 * @param Translate $outputlangs Language
+	 * @return void
+	 */
+	protected function renderDcProfile(&$pdf, $group, $outputlangs)
+	{
+		$rows = array();
+		foreach ($group['mppts'] as $inputs) {
+			foreach ($inputs as $row) { if ((int) $row->is_connected === 1) { $rows[] = $row; } }
+		}
+		foreach (array_chunk($rows, 16) as $chunk) {
+			$numeric = false;
+			foreach ($chunk as $row) {
+				foreach (array('open_circuit_voltage', 'insulation_positive_to_ground', 'insulation_negative_to_ground') as $field) {
+					if ($row->{$field} !== null && $row->{$field} !== '' && is_numeric($row->{$field})) { $numeric = true; }
+				}
+			}
+			if (!$numeric) { continue; }
+			$this->ensureSpace($pdf, 105);
+			$this->renderSectionTitle($pdf, $outputlangs->transnoentities('PowerPlantPVReportDcChart').' - '.PowerPlantPVReportPresentation::identity($group['identity']), 3);
+			foreach (array(array('V', 'open_circuit_voltage'), array('MOhm', 'insulation_positive_to_ground', 'insulation_negative_to_ground')) as $series) {
+				$max = 0.0;
+				foreach ($chunk as $row) {
+					foreach (array_slice($series, 1) as $field) { if (is_numeric($row->{$field})) { $max = max($max, (float) $row->{$field}); } }
+				}
+				$scale = $max > 0 ? $max : 1;
+				$x = $this->marge_gauche + 14; $y = $pdf->GetY() + 4;
+				$width = $this->page_largeur - $this->marge_droite - $x; $height = 24;
+				$pdf->SetFont('', '', 7); $pdf->SetTextColor(70, 80, 95);
+				$pdf->SetXY($this->marge_gauche, $y); $pdf->Cell(14, 4, price($max, 0, $outputlangs, 1, -1, 2).' '.$series[0]);
+				$pdf->SetDrawColor(210, 220, 230); $pdf->Line($x, $y + $height, $x + $width, $y + $height);
+				$step = $width / count($chunk);
+				foreach (array_slice($series, 1) as $index => $field) {
+					$previous = null;
+					$pdf->SetDrawColor($index === 0 ? 0 : 230, $index === 0 ? 136 : 145, $index === 0 ? 210 : 30);
+					foreach ($chunk as $i => $row) {
+						$value = $row->{$field};
+						if ($value === null || $value === '' || !is_numeric($value) || (float) $value < 0) { $previous = null; continue; }
+						$px = $x + ($i + 0.5) * $step; $py = $y + $height - (float) $value / $scale * $height;
+						if (is_array($previous)) { $pdf->Line($previous[0], $previous[1], $px, $py); }
+						$pdf->Circle($px, $py, 0.7);
+						$previous = array($px, $py);
+					}
+				}
+				foreach ($chunk as $i => $row) {
+					$label = trim((string) $row->string_ref) !== '' ? (string) $row->string_ref : 'MPPT'.$row->mppt_number.'/'.$row->pv_input_number;
+					$pdf->SetXY($x + $i * $step, $y + $height + 1); $pdf->Cell($step, 4, $outputlangs->convToOutputCharset(dol_trunc($label, 8)), 0, 0, 'C');
+				}
+				$pdf->SetY($y + $height + 6);
+				$legend = count($series) === 2 ? $outputlangs->transnoentities('PowerPlantPVOpenCircuitVoltage') : $outputlangs->transnoentities('PowerPlantPVInsulationPositiveToGround').' / '.$outputlangs->transnoentities('PowerPlantPVInsulationNegativeToGround');
+				$pdf->MultiCell(0, 4, $outputlangs->convToOutputCharset($legend.' ('.$series[0].')'), 0, 'L');
+			}
+			$pdf->MultiCell(0, 4, $outputlangs->convToOutputCharset($outputlangs->transnoentities('PowerPlantPVReportChartMissing')), 0, 'L');
+			$pdf->SetFont('', '', $this->defaultFontSize); $pdf->SetTextColor(0, 0, 0); $pdf->Ln(3);
+		}
 	}
 
 	/**
@@ -606,8 +715,8 @@ class pdf_powerplantpvreport extends ModelePDFFicheinter
 		if (empty($columns) || empty($rows)) {
 			return;
 		}
-		$html = '<table border="1" cellpadding="3" cellspacing="0" width="100%">';
-		$html .= '<tr style="background-color:#f0f3f5;font-weight:bold;">';
+		$html = '<table border="1" cellpadding="4" cellspacing="0" width="100%" style="border-color:#dce7f1;">';
+		$html .= '<tr style="background-color:#e9f3ff;font-weight:bold;">';
 		foreach ($columns as $column) {
 			if (!is_array($column) || empty($column['key'])) {
 				continue;
@@ -766,17 +875,19 @@ class pdf_powerplantpvreport extends ModelePDFFicheinter
 	 */
 	protected function renderDcMeasures(&$pdf, $measures, $outputlangs)
 	{
+		$measures = PowerPlantPVReportPresentation::visibleMeasures($measures, false);
 		if (empty($measures)) {
 			$this->renderEmptyBlock($pdf, $outputlangs->transnoentities('NoRecordFound'));
 			return;
 		}
 
 		foreach (PowerPlantPVReportPresentation::groupMeasures($measures) as $group) {
+			$this->renderDcProfile($pdf, $group, $outputlangs);
 			$this->ensureSpace($pdf, 45);
 			$inverter = PowerPlantPVReportPresentation::identity($group['identity'], true, $outputlangs->transnoentities('PowerPlantPVManualDcLine'));
 			$html = '<table border="1" cellpadding="3" cellspacing="0" width="100%"><thead>';
-			$html .= '<tr style="background-color:#f0f3f5;font-weight:bold;"><td colspan="9">'.dol_escape_htmltag($inverter).'</td></tr>';
-			$html .= '<tr style="background-color:#f0f3f5;font-weight:bold;">';
+			$html .= '<tr style="background-color:#e9f3ff;font-weight:bold;"><td colspan="9">'.dol_escape_htmltag($inverter).'</td></tr>';
+			$html .= '<tr style="background-color:#e9f3ff;font-weight:bold;">';
 			foreach (array('PowerPlantPVMPPT', 'PowerPlantPVPVInput', 'PowerPlantPVStringRef', 'PowerPlantPVOpenCircuitVoltage', 'PowerPlantPVPolarityChecked', 'PowerPlantPVInsulationStatus', 'PowerPlantPVInsulationPositiveToGround', 'PowerPlantPVInsulationNegativeToGround', 'Observation') as $key) {
 				$html .= '<td>'.dol_escape_htmltag($outputlangs->transnoentities($key)).'</td>';
 			}
@@ -842,8 +953,8 @@ class pdf_powerplantpvreport extends ModelePDFFicheinter
 			return;
 		}
 
-		$html = '<table border="1" cellpadding="3" cellspacing="0" width="100%">';
-		$html .= '<tr style="background-color:#f0f3f5;font-weight:bold;">';
+		$html = '<table border="1" cellpadding="4" cellspacing="0" width="100%" style="border-color:#dce7f1;">';
+		$html .= '<tr style="background-color:#e9f3ff;font-weight:bold;">';
 		foreach (array('Type', 'Date', 'N-1', 'N', 'PowerPlantPVReadingDelta', 'Unit') as $key) {
 			$html .= '<td>'.dol_escape_htmltag($outputlangs->transnoentities($key)).'</td>';
 		}
@@ -1073,8 +1184,8 @@ class pdf_powerplantpvreport extends ModelePDFFicheinter
 			$groups[$key]->qty += (float) $row->qty;
 		}
 		$equipment = array_values($groups);
-		$html = '<table border="1" cellpadding="3" cellspacing="0" width="100%">';
-		$html .= '<tr style="background-color:#f0f3f5;font-weight:bold;">';
+		$html = '<table border="1" cellpadding="4" cellspacing="0" width="100%" style="border-color:#dce7f1;">';
+		$html .= '<tr style="background-color:#e9f3ff;font-weight:bold;">';
 		foreach (array('PowerPlantPVEquipmentType', 'PowerPlantPVBrand', 'PowerPlantPVModel', 'Ref', 'Qty', 'SerialNumber', 'PowerPlantPVEquipmentPosition') as $key) {
 			$html .= '<td>'.dol_escape_htmltag($outputlangs->transnoentities($key)).'</td>';
 		}
@@ -1200,6 +1311,9 @@ class pdf_powerplantpvreport extends ModelePDFFicheinter
 		$size = $level === 1 ? $this->defaultFontSize + 3 : ($level === 2 ? $this->defaultFontSize + 1 : $this->defaultFontSize);
 		$pdf->SetTextColor($level === 1 ? 0 : 45, $level === 1 ? 0 : 45, $level === 1 ? 80 : 45);
 		$pdf->SetFont('', 'B', $size);
+		$pdf->SetFillColor(0, 142, 220);
+		$pdf->Rect($this->marge_gauche, $pdf->GetY() + 1, 1.2, 4, 'F');
+		$pdf->SetX($this->marge_gauche + 3);
 		$pdf->MultiCell(0, 6, $this->currentOutputLangs->convToOutputCharset($title), 0, 'L');
 		$pdf->SetFont('', '', $this->defaultFontSize);
 		$pdf->SetTextColor(0, 0, 0);
@@ -1221,10 +1335,10 @@ class pdf_powerplantpvreport extends ModelePDFFicheinter
 		if ($title !== '') {
 			$this->renderSectionTitle($pdf, $title, 3);
 		}
-		$html = '<table border="1" cellpadding="3" cellspacing="0" width="100%">';
+		$html = '<table border="1" cellpadding="4" cellspacing="0" width="100%" style="border-color:#dce7f1;">';
 		foreach ($rows as $row) {
 			$html .= '<tr>';
-			$html .= '<td width="32%" style="background-color:#f0f3f5;font-weight:bold;">'.dol_escape_htmltag((string) $row[0]).'</td>';
+			$html .= '<td width="32%" style="background-color:#e9f3ff;font-weight:bold;">'.dol_escape_htmltag((string) $row[0]).'</td>';
 			$html .= '<td width="68%">'.dol_htmlentitiesbr((string) $row[1]).'</td>';
 			$html .= '</tr>';
 		}

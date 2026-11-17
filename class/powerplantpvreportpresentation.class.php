@@ -34,6 +34,48 @@ class PowerPlantPVReportPresentation
 	}
 
 	/**
+	 * Omit empty legacy manual placeholders; optionally hide disconnected installed inputs.
+	 * @param array<int,object> $measures Frozen DC rows
+	 * @param bool $hideUnused Screen preference; PDF always passes false
+	 * @return array<int,object> Visible rows, with stored data untouched
+	 */
+	public static function visibleMeasures($measures, $hideUnused = false)
+	{
+		return array_values(array_filter($measures, static function ($row) use ($hideUnused) {
+			if ($hideUnused && (int) ($row->is_connected ?? 1) === 0) { return false; }
+			if (strpos((string) ($row->stable_key ?? ''), ':dc:manual:') === false) { return true; }
+			foreach (array('inverter_ref', 'inverter_label', 'string_ref', 'open_circuit_voltage', 'polarity_checked', 'insulation_status', 'insulation_positive_to_ground', 'insulation_negative_to_ground', 'observation') as $field) {
+				$value = $row->{$field} ?? null;
+				if ($value !== null && trim((string) $value) !== '' && (string) $value !== '-1') { return true; }
+			}
+			return false;
+		}));
+	}
+
+	/**
+	 * Count only explicit conformity answers and installed DC inputs for a plant summary.
+	 * @param array<int,array<string,mixed>> $sections Frozen section rows
+	 * @return array{checks:int,completed:int,observations:int,connected:int,inputs:int}
+	 */
+	public static function indicators($sections)
+	{
+		$stats = array('checks' => 0, 'completed' => 0, 'observations' => 0, 'connected' => 0, 'inputs' => 0);
+		foreach ($sections as $row) {
+			foreach (($row['fields'] ?? array()) as $field) {
+				if (empty($field->visible_pdf) || (string) $field->field_type !== 'conformity_so_valid_obs') { continue; }
+				$stats['checks']++;
+				if (in_array((string) $field->value_text, array('valid', 'observation', 'not_applicable'), true)) { $stats['completed']++; }
+				if ((string) $field->value_text === 'observation') { $stats['observations']++; }
+			}
+			foreach (self::visibleMeasures($row['dc_measures'] ?? array(), false) as $measure) {
+				$stats['inputs']++;
+				if ((int) $measure->is_connected === 1) { $stats['connected']++; }
+			}
+		}
+		return $stats;
+	}
+
+	/**
 	 * Format an identity from frozen equipment or DC measure properties.
 	 * @param object $row Equipment or measure
 	 * @param bool $serial Include the serial number

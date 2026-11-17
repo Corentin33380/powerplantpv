@@ -228,9 +228,10 @@ class PowerPlantPVIndexReading extends CommonObject
 	 * @param	string	$readingTypeCode	Reading type code
 	 * @param	string	$meterRef			Optional meter/inverter reference
 	 * @param	int		$excludeReportId	Optional report id to exclude
+	 * @param int $inverterLineId Stable installed inverter line; zero selects legacy global readings
 	 * @return	array{rowid:int,value:float,reading_date:string}|null	Latest reading
 	 */
-	public function fetchLatestValue($fkPowerplant, $readingTypeCode, $meterRef = '', $excludeReportId = 0)
+	public function fetchLatestValue($fkPowerplant, $readingTypeCode, $meterRef = '', $excludeReportId = 0, $inverterLineId = 0)
 	{
 		$fkPowerplant = (int) $fkPowerplant;
 		$readingTypeCode = trim((string) $readingTypeCode);
@@ -248,6 +249,16 @@ class PowerPlantPVIndexReading extends CommonObject
 		if (trim((string) $meterRef) !== '') {
 			$sql .= " AND meter_ref = '".$this->db->escape(trim((string) $meterRef))."'";
 		}
+		if ($readingTypeCode === 'INVERTER_PRODUCTION') {
+			if ((int) $inverterLineId > 0) {
+				$sql .= " AND EXISTS (SELECT e.rowid FROM ".$this->db->prefix()."powerplantpv_report_equipment as e";
+				$sql .= " WHERE e.rowid = ".$this->db->prefix().$this->table_element.".fk_report_equipment AND e.entity = ".$this->db->prefix().$this->table_element.".entity";
+				$sql .= " AND COALESCE(NULLIF(e.fk_powerplant_line, 0), e.fk_source_equipment) = ".((int) $inverterLineId).")";
+			} else {
+				$sql .= " AND COALESCE(fk_report_equipment, 0) = 0";
+			}
+		}
+
 		if ($excludeReportId > 0) {
 			$sql .= " AND (fk_report IS NULL OR fk_report <> ".$excludeReportId.")";
 		}

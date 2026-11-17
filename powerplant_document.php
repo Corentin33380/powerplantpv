@@ -92,6 +92,7 @@ include_once DOL_DOCUMENT_ROOT.'/core/lib/files.lib.php';
 include_once DOL_DOCUMENT_ROOT.'/core/lib/images.lib.php';
 include_once DOL_DOCUMENT_ROOT.'/core/class/html.formfile.class.php';
 dol_include_once('/powerplantpv/class/powerplant.class.php');
+require_once __DIR__.'/class/powerplantpvreportillustration.class.php';
 dol_include_once('/powerplantpv/lib/powerplantpv_powerplant.lib.php');
 dol_include_once('/powerplantpv/lib/powerplantpv_attestation.lib.php');
 
@@ -140,8 +141,8 @@ if ($id > 0 || !empty($ref)) {
 	$upload_dir = powerplantGetDocumentUploadDir($object);
 }
 
-$permissiontoread = powerplantpvUserHasRightPath($user, array('powerplantpv', 'powerplant', 'read'));
-$permissiontoadd = powerplantpvUserHasRightPath($user, array('powerplantpv', 'powerplant', 'write'));
+$permissiontoread = $user->hasRight('powerplantpv', 'powerplant', 'read');
+$permissiontoadd = $user->hasRight('powerplantpv', 'powerplant', 'write');
 
 // Security check (enable the most restrictive one)
 if ($user->socid > 0) {
@@ -164,6 +165,23 @@ if (empty($object->id) || $upload_dir === null) {
 /*
  * Actions
  */
+
+$illustrations = new PowerPlantPVReportIllustration($db);
+$illustrationFiles = $illustrations->files($object);
+if ($action === 'setreportillustration') {
+	if (!$permissiontoadd || $_SERVER['REQUEST_METHOD'] !== 'POST') { accessforbidden(); }
+	$selectedIllustration = GETPOSTINT('fk_report_illustration');
+	if (!is_array($illustrationFiles) || ($selectedIllustration !== 0 && !isset($illustrationFiles[$selectedIllustration]))) {
+		setEventMessages($langs->trans('PowerPlantPVReportIllustrationInvalid'), null, 'errors');
+	} else {
+		$object->context['trigger_reason'] = 'report_illustration_change';
+		if ($object->setValueFrom('fk_report_illustration', $selectedIllustration, '', null, 'int', '', $user, 'POWERPLANTPV_POWERPLANT_UPDATE') > 0) {
+			setEventMessages($langs->trans('RecordSaved'), null, 'mesgs');
+			header('Location: '.dol_buildpath('/powerplantpv/powerplant_document.php', 1).'?id='.(int) $object->id); exit;
+		}
+		setEventMessages($object->error, $object->errors, 'errors');
+	}
+}
 
 powerplantHandleSetLabelAction($object, $action, $permissiontoadd, $user);
 powerplantHandleSetThirdpartyAction($object, $action, $permissiontoadd, $user);
@@ -227,6 +245,25 @@ $param = '&id='.$object->id;
 $relativepathwithnofile = powerplantGetDocumentRelativePath($object).'/';
 
 include DOL_DOCUMENT_ROOT.'/core/tpl/document_actions_post_headers.tpl.php';
+
+if (is_array($illustrationFiles)) {
+	$options = array(0 => $langs->trans('None'));
+	foreach ($illustrationFiles as $fileId => $file) { $options[$fileId] = $file['label']; }
+	print '<form method="POST" action="'.dol_buildpath('/powerplantpv/powerplant_document.php', 1).'">';
+	print '<input type="hidden" name="token" value="'.newToken().'"><input type="hidden" name="id" value="'.(int) $object->id.'"><input type="hidden" name="action" value="setreportillustration">';
+	print '<table class="noborder centpercent"><tr class="liste_titre"><td>'.$langs->trans('PowerPlantPVReportIllustration').'</td></tr><tr class="oddeven"><td>';
+	print '<span class="opacitymedium">'.$langs->trans('PowerPlantPVReportIllustrationHelp').'</span><br>';
+	if ($permissiontoadd) {
+		print $form->selectarray('fk_report_illustration', $options, (int) $object->fk_report_illustration, 0, 0, 0, '', 0, 0, 0, '', 'minwidth200');
+		print ajax_combobox('fk_report_illustration');
+		print ' <input type="submit" class="button" value="'.$langs->trans('Save').'">';
+	} else {
+		print dol_escape_htmltag($options[(int) $object->fk_report_illustration] ?? $langs->trans('None'));
+	}
+	print '</td></tr></table></form>';
+} else {
+	setEventMessages($langs->trans('PowerPlantPVReportIllustrationInvalid'), null, 'warnings');
+}
 
 print powerplantpvAttestationRenderPowerPlantDocumentTabTable($object, $user);
 

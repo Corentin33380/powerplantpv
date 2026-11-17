@@ -13,6 +13,7 @@
  * \brief		Generated intervention report builder.
  */
 
+require_once __DIR__.'/powerplantpvinverterproduction.class.php';
 dol_include_once('/powerplantpv/class/powerplantpvreport.class.php');
 dol_include_once('/powerplantpv/class/powerplantpvreportpowerplant.class.php');
 dol_include_once('/powerplantpv/class/powerplantpvreportsourceservice.class.php');
@@ -178,7 +179,7 @@ class PowerPlantPVReportBuilder
 		$logLevel = (!empty($diagnostics['non_dc_sections_loaded']) && empty($diagnostics['non_dc_fields_loaded'])) ? LOG_WARNING : LOG_DEBUG;
 		$this->logReportDiagnostics('load_report_tree', (int) $report->id, $diagnostics, $logLevel);
 
-		return array(
+		$tree = array(
 			'can_generate' => 1,
 			'messages' => array(),
 			'report' => $report,
@@ -187,6 +188,21 @@ class PowerPlantPVReportBuilder
 			'sections' => $sectionRows,
 			'load_diagnostics' => $diagnostics,
 		);
+		$tree = PowerPlantPVInverterProduction::expand($tree);
+		foreach ($tree['sections'] as $row) {
+			if ((string) $tree['report']->status !== PowerPlantPVReport::STATUS_DRAFT || (string) $row['section']->section_code !== 'PRODUCTION_READING' || empty($row['equipment'])) { continue; }
+			$equipment = $row['equipment'];
+			$sourceId = (int) $equipment->fk_powerplant_line;
+			if ($sourceId <= 0) { $sourceId = (int) $equipment->fk_source_equipment; }
+			foreach ($row['fields'] as $field) {
+				if ((string) $field->field_code !== 'INVERTER_PRODUCTION_N_MINUS_1') { continue; }
+				$archive = new PowerPlantPVIndexReading($this->db);
+				$latest = $archive->fetchLatestValue((int) $equipment->fk_powerplant, 'INVERTER_PRODUCTION', '', (int) $report->id, $sourceId);
+				if ($archive->error !== '') { $this->copyErrorsFrom($archive); return -1; }
+				$field->value_number = is_array($latest) ? $latest['value'] : null;
+			}
+		}
+		return $tree;
 	}
 
 	/**
@@ -318,6 +334,47 @@ class PowerPlantPVReportBuilder
 		return 1;
 	}
 
+	/** Persist virtual inverter reading sections on an authorized save, never on a GET.
+	 * @param int $reportId Report id
+	 * @param User $user Acting user
+	 * @param array<string,array<string,mixed>> $oldValues Values retained during recalculation
+	 * @return int Positive on success, negative on error
+	 */
+	private function persistInverterProductionSections($reportId, User $user, $oldValues = array())
+	{
+		if ($this->db->begin() <= 0) { $this->setError($this->db->lasterror()); return -1; }
+		$lock = $this->db->query("SELECT rowid FROM ".$this->db->prefix()."powerplantpv_report WHERE rowid = ".((int) $reportId)." AND entity IN (".$this->db->sanitize(getEntity('powerplant')).") FOR UPDATE");
+		if (!$lock) { $this->setError($this->db->lasterror()); $this->db->rollback(); return -1; }
+		$this->db->free($lock);
+		$tree = $this->loadReportTree($reportId);
+		if (!is_array($tree)) { $this->db->rollback(); return -1; }
+		if ((string) $tree['report']->status !== PowerPlantPVReport::STATUS_DRAFT) {
+			if ($this->db->commit() <= 0) { $this->setError($this->db->lasterror()); $this->db->rollback(); return -1; }
+			return 1;
+		}
+		foreach ($tree['sections'] as $row) {
+			$section = $row['section'];
+			if ((int) $section->id <= 0) {
+				if ($section->create($user, 0) <= 0) { $this->copyErrorsFrom($section); $this->db->rollback(); return -1; }
+				foreach ($row['fields'] as $field) {
+					$field->fk_report_section = (int) $section->id;
+					if (isset($oldValues[(string) $field->stable_key]) && empty($field->readonly)) { $this->copyStoredValueToField($field, $oldValues[(string) $field->stable_key]); }
+					if ($field->create($user, 0) <= 0) { $this->copyErrorsFrom($field); $this->db->rollback(); return -1; }
+				}
+			} elseif ((string) $section->section_code === 'PRODUCTION_READING' && (int) $section->fk_report_equipment > 0) {
+				foreach ($row['fields'] as $field) {
+					if ((string) $field->field_code === 'INVERTER_PRODUCTION_N_MINUS_1' && $field->update($user, 0) < 0) { $this->copyErrorsFrom($field); $this->db->rollback(); return -1; }
+				}
+			} elseif ((string) $section->section_code === 'PRODUCTION_READING' && (int) $section->fk_report_equipment === 0) {
+				foreach ($row['fields'] as $field) {
+					if (in_array((string) $field->field_code, array('INVERTER_PRODUCTION', 'INVERTER_PRODUCTION_N_MINUS_1'), true) && $field->update($user, 0) < 0) { $this->copyErrorsFrom($field); $this->db->rollback(); return -1; }
+				}
+			}
+		}
+		if ($this->db->commit() <= 0) { $this->setError($this->db->lasterror()); $this->db->rollback(); return -1; }
+		return 1;
+	}
+
 	/**
 	 * Save submitted values into existing report fields.
 	 *
@@ -337,14 +394,17 @@ class PowerPlantPVReportBuilder
 			return -1;
 		}
 
+		if ($this->db->begin() <= 0) { $this->setError($this->db->lasterror()); return -1; }
+		if ($this->persistInverterProductionSections((int) $report->id, $user) < 0) { $this->db->rollback(); return -1; }
+
 		$fieldObject = new PowerPlantPVReportField($this->db);
 		$fields = $fieldObject->fetchAllByReport((int) $report->id, 'position', 'ASC');
 		if (!is_array($fields)) {
 			$this->copyErrorsFrom($fieldObject);
+			$this->db->rollback();
 			return -1;
 		}
 
-		if ($this->db->begin() <= 0) { $this->setError($this->db->lasterror()); return -1; }
 		foreach ($fields as $field) {
 			if (!empty($field->readonly)) {
 				continue;
@@ -457,58 +517,8 @@ class PowerPlantPVReportBuilder
 	 */
 	public function addManualDcMeasureLine($reportId, $sectionId, User $user)
 	{
-		$report = new PowerPlantPVReport($this->db);
-		if ($report->fetch((int) $reportId) <= 0) {
-			$this->setError('ErrorRecordNotFound');
-			return -1;
-		}
-
-		$section = new PowerPlantPVReportSection($this->db);
-		if ($section->fetch((int) $sectionId) <= 0 || (int) $section->fk_report !== (int) $report->id || (string) $section->section_code !== 'DC_ELECTRICAL_MEASURE') {
-			$this->setError('ErrorRecordNotFound');
-			return -1;
-		}
-
-		$fkPowerplant = $this->fetchSourcePowerplantId((int) $section->fk_report_powerplant);
-		$position = $this->fetchNextDcMeasurePosition((int) $section->id);
-		$row = new PowerPlantPVReportDcMeasure($this->db);
-		$row->entity = (int) $report->entity;
-		$row->fk_report = (int) $report->id;
-		$row->fk_report_section = (int) $section->id;
-		$row->fk_report_powerplant = (int) $section->fk_report_powerplant;
-		$row->fk_report_equipment = 0;
-		$row->fk_powerplant = $fkPowerplant;
-		$row->fk_inverter = 0;
-		$row->inverter_ref = '';
-		$row->inverter_label = '';
-		$row->inverter_serial = '';
-		$row->mppt_number = null;
-		$row->pv_input_number = null;
-		$row->string_ref = '';
-		$row->is_connected = 1;
-		$row->polarity_checked = -1;
-		$row->insulation_status = '';
-		$row->stable_key = (string) $section->occurrence_key.':dc:manual:pending:'.dol_now().':'.random_int(1000, 999999);
-		$row->position = $position;
-
-		if ($this->db->begin() <= 0) { $this->setError($this->db->lasterror()); return -1; }
-		$rowId = $row->create($user, 0);
-		if ($rowId <= 0) {
-			$this->copyErrorsFrom($row);
-			$this->db->rollback();
-			return -1;
-		}
-		$row->id = $rowId;
-		$row->rowid = $rowId;
-		$row->stable_key = (string) $section->occurrence_key.':dc:manual:'.$rowId;
-		if ($row->update($user, 0) < 0) {
-			$this->copyErrorsFrom($row);
-			$this->db->rollback();
-			return -1;
-		}
-		if ($this->db->commit() <= 0) { $this->setError($this->db->lasterror()); $this->db->rollback(); return -1; }
-
-		return $rowId;
+		$this->setError('ErrorActionNotAllowed');
+		return -1;
 	}
 
 	/**
@@ -688,6 +698,11 @@ class PowerPlantPVReportBuilder
 			return -1;
 		}
 
+		if ($this->persistInverterProductionSections((int) $report->id, $user, $oldValues) < 0) { return -1; }
+		$fields = new PowerPlantPVReportField($this->db);
+		$rows = $fields->fetchAllByReport((int) $report->id);
+		if (!is_array($rows)) { $this->copyErrorsFrom($fields); return -1; }
+		foreach ($rows as $field) { $result[(string) $field->stable_key] = (int) $field->id; }
 		return $result;
 	}
 
@@ -3304,27 +3319,6 @@ class PowerPlantPVReportBuilder
 		return is_object($obj) ? (int) $obj->fk_powerplant : 0;
 	}
 
-	/**
-	 * Fetch next DC measure position for a section.
-	 *
-	 * @param	int	$sectionId	Section id
-	 * @return	int				Next position
-	 */
-	private function fetchNextDcMeasurePosition($sectionId)
-	{
-		$sql = "SELECT MAX(position) as max_position";
-		$sql .= " FROM ".$this->db->prefix()."powerplantpv_report_dc_measure";
-		$sql .= " WHERE fk_report_section = ".((int) $sectionId);
-		$resql = $this->db->query($sql);
-		if (!$resql) {
-			return 10;
-		}
-		$obj = $this->db->fetch_object($resql);
-		$this->db->free($resql);
-		$position = (is_object($obj) && $obj->max_position !== null) ? (int) $obj->max_position : 0;
-
-		return $position + 10;
-	}
 
 	/**
 	 * Return localized label from SQL object.

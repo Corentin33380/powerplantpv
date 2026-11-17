@@ -272,25 +272,7 @@ if ($action === 'generate_serial_annex' && $reportFetch > 0) {
 	}
 }
 
-if ($action === 'add_dc_measure_line' && $caneditreport && $reportFetch > 0) {
-	$values = powerplantpvReportGetSubmittedValues();
-	$dateValues = powerplantpvReportGetSubmittedDateValues();
-	$dcValues = powerplantpvReportGetSubmittedDcMeasures();
-	$result = $builder->saveValues((int) $report->id, $values, $dateValues, $user, PowerPlantPVReport::STATUS_DRAFT);
-	if ($result >= 0) {
-		$result = $builder->saveDcMeasureValues((int) $report->id, $dcValues, $user);
-	}
-	if ($result >= 0) {
-		$result = $builder->addManualDcMeasureLine((int) $report->id, $dcSectionId, $user);
-	}
-	if ($result < 0) {
-		setEventMessages($builder->error, $builder->errors, 'errors');
-	} else {
-		setEventMessages($langs->trans('PowerPlantPVDcMeasureLineAdded'), null, 'mesgs');
-		header('Location: '.$_SERVER['PHP_SELF'].'?id='.(int) $id);
-		exit;
-	}
-}
+if ($action === 'add_dc_measure_line') { accessforbidden(); }
 
 if ($action === 'recalculate' && $caneditreport && $reportFetch > 0) {
 	$result = $builder->recalculateSnapshot($report, $intervention, $user, $manualServiceIds, PowerPlantPVReport::STATUS_DRAFT);
@@ -1350,7 +1332,7 @@ function powerplantpvReportFilterRenderableFields($fields)
 {
 	$filtered = array();
 	foreach ($fields as $field) {
-		if (!is_object($field) || (string) $field->field_type === 'signature') {
+		if (!is_object($field) || (int) $field->visible_form <= 0 || (string) $field->field_type === 'signature') {
 			continue;
 		}
 		$filtered[] = $field;
@@ -1372,13 +1354,9 @@ function powerplantpvReportRenderDcMeasures($section, $measures, $editable, $for
 {
 	global $langs;
 
+	$measures = PowerPlantPVReportPresentation::visibleMeasures($measures, (bool) getDolGlobalInt('POWERPLANTPV_HIDE_UNUSED_MPPT'));
 	if (empty($measures)) {
-		print '<div class="opacitymedium powerplantpv-report-manual">'.$langs->trans('PowerPlantPVDcMeasureNoConfigurationManualMode').'</div>';
-		if ($editable && !empty($section->id)) {
-			print '<input type="submit" class="button" formaction="'.dol_escape_htmltag($_SERVER['PHP_SELF']).'?id='.GETPOSTINT('id').'&action=add_dc_measure_line&add_dc_section_id='.((int) $section->id).'" value="'.dol_escape_htmltag($langs->trans('PowerPlantPVAddDcMeasureLine')).'">';
-		} elseif ($editable) {
-			print '<div class="opacitymedium">'.$langs->trans('PowerPlantPVReportManualLineAfterFirstSave').'</div>';
-		}
+		print '<div class="opacitymedium">'.$langs->trans('NoRecordFound').'</div>';
 		return;
 	}
 
@@ -1397,11 +1375,6 @@ function powerplantpvReportRenderDcMeasures($section, $measures, $editable, $for
 			print '</div></details>';
 		}
 		print '</details>';
-	}
-	if ($editable && !empty($section->id)) {
-		print '<div class="powerplantpv-report-actions">';
-		print '<input type="submit" class="button" formaction="'.dol_escape_htmltag($_SERVER['PHP_SELF']).'?id='.GETPOSTINT('id').'&action=add_dc_measure_line&add_dc_section_id='.((int) $section->id).'" value="'.dol_escape_htmltag($langs->trans('PowerPlantPVAddDcMeasureLine')).'">';
-		print '</div>';
 	}
 	print '</div>';
 }

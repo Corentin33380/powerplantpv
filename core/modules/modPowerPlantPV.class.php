@@ -1896,6 +1896,9 @@ class modPowerPlantPV extends DolibarrModules
 		}
 
 		$tables = array(
+			$this->db->prefix().'powerplantpv_powerplant' => array(
+				'fk_report_illustration' => array('type' => 'integer', 'value' => '', 'null' => ''),
+			),
 			$this->db->prefix().'powerplantpv_powerplantcomp' => array(
 				'equipment_marker' => array('type' => 'varchar', 'value' => '32', 'null' => ''),
 				'equipment_identification' => array('type' => 'varchar', 'value' => '255', 'null' => ''),
@@ -1989,6 +1992,7 @@ class modPowerPlantPV extends DolibarrModules
 		}
 
 		$indexes = array(
+			$this->db->prefix().'powerplantpv_powerplant' => array('idx_ppv_plant_illustration' => 'fk_report_illustration'),
 			$this->db->prefix().'powerplantpv_equipment_mppt' => array(
 				'idx_powerplantpv_equipment_mppt_entity' => 'entity',
 				'idx_powerplantpv_equipment_mppt_powerplant' => 'fk_powerplant',

@@ -107,7 +107,7 @@ class NativeMaintenanceSchemaDb
  public function idate($value) { return '2000-01-01 00:00:00'; }
  public function query($sql) {
   if (strpos($sql, 'CREATE TABLE') === 0) { return true; }
-  if (preg_match("/SHOW COLUMNS FROM ([a-z_]+) LIKE '((?:equipment|inverter)_(?:marker|identification)|fk_product)'/", $sql, $m)) {
+  if (preg_match("/SHOW COLUMNS FROM ([a-z_]+) LIKE '((?:equipment|inverter)_(?:marker|identification)|fk_product|fk_report_illustration)'/", $sql, $m)) {
    return (object) array('count' => isset($this->columns[$m[1].'.'.$m[2]]) ? 1 : 0);
   }
   if (strpos($sql, 'SHOW INDEX') === 0 && strpos($sql, 'uk_ppv_comp_marker') !== false) { return (object) array('count' => $this->index ? 1 : 0); }
@@ -123,7 +123,7 @@ class NativeMaintenanceSchemaDb
 $schema = new NativeMaintenanceSchemaDb();
 $dbProperty = new ReflectionProperty($descriptor, 'db'); $dbProperty->setAccessible(true); $dbProperty->setValue($descriptor, $schema);
 $migration = new ReflectionMethod($descriptor, 'ensureGeneratedReportSchema'); $migration->setAccessible(true);
-nativeMaintenanceCheck($migration->invoke($descriptor) === 1 && count($schema->columns) === 7 && $schema->index, 'Existing schema receives six nullable identity columns and the module product relationship and a unique marker index');
+nativeMaintenanceCheck($migration->invoke($descriptor) === 1 && count($schema->columns) === 8 && $schema->index, 'Existing schema receives six nullable identity columns and the module product relationship and a unique marker index');
 $count = count($schema->ddl);
 nativeMaintenanceCheck($migration->invoke($descriptor) === 1 && count($schema->ddl) === $count, 'Repeated activation does not recreate columns or indexes');
 
@@ -197,4 +197,25 @@ nativeMaintenanceCheck($stringModel->getNextValue($scope, 'PV{00}') === 'PV00', 
 nativeMaintenanceCheck($stringModel->getNextValue($scope, 'PV00') === '' && $stringModel->error === 'ErrorBadMask', 'Invalid mask rejected before allocation');
 $counterDb->last = '99'; $counterDb->nb = 1;
 nativeMaintenanceCheck($inverterModel->getNextValue($scope, 'OND{00}') === '', 'Exhausted native counter fails instead of truncating or duplicating');
+
+require_once $module.'/class/powerplantpvindexreading.class.php';
+$reading = (new ReflectionClass('PowerPlantPVIndexReading'))->newInstanceWithoutConstructor();
+$readingDb = new class {
+ public $sql = '';
+ public function prefix() { return MAIN_DB_PREFIX; }
+ public function sanitize($value) { return $value; }
+ public function escape($value) { return str_replace("'", "''", $value); }
+ public function query($sql) { $this->sql = $sql; return (object) array(); }
+ public function fetch_object($result) { return null; }
+ public function free($result) {}
+};
+$reading->db = $readingDb;
+$reading->fetchLatestValue(6, 'INVERTER_PRODUCTION', '', 14, 114);
+nativeMaintenanceCheck(strpos($readingDb->sql, 'e.fk_powerplant_line') !== false && strpos($readingDb->sql, '= 114)') !== false, 'Inverter previous reading uses the installed source identity across report snapshots');
+nativeMaintenanceCheck(strpos($readingDb->sql, 'e.entity = '.MAIN_DB_PREFIX.'powerplantpv_index_reading.entity') !== false && strpos($readingDb->sql, 'fk_report <> 14') !== false, 'Reading history keeps owner entity and excludes the current report');
+$reading->fetchLatestValue(6, 'INVERTER_PRODUCTION');
+nativeMaintenanceCheck(strpos($readingDb->sql, 'COALESCE(fk_report_equipment, 0) = 0') !== false, 'Legacy global history excludes readings attributed to an inverter');
+$reading->fetchLatestValue(6, 'PRODUCTION_INDEX');
+nativeMaintenanceCheck(strpos($readingDb->sql, 'e.fk_powerplant_line') === false, 'Common plant meter history is not filtered by inverter');
+nativeMaintenanceCheck(method_exists('CommonObject', 'setValueFrom'), 'Native single-field update API exists on the tested core');
 print 'OK: '.$checks.' native checks, PHP '.PHP_VERSION.', Dolibarr '.DOL_VERSION." (no live database).\n";

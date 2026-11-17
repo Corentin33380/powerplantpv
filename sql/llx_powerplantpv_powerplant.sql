@@ -21,6 +21,7 @@ CREATE TABLE IF NOT EXISTS llx_powerplantpv_powerplant(
 	ref varchar(128) NOT NULL, 
 	label varchar(255), 
 	entity integer NOT NULL DEFAULT 1, 
+	fk_report_illustration integer,
 	commissioning_date date, 
 	prm_pdl_number varchar(128), 
 	address varchar(255), 

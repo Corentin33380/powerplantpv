@@ -171,6 +171,13 @@ try {
 	rmdir($temporary.'/entity2'); unlink($temporary.'/ecm/class/ecmfiles.class.php');
 	rmdir($temporary.'/ecm/class'); rmdir($temporary.'/ecm'); rmdir($temporary);
 }
+$emptyManual = (object) array('stable_key' => 'section:dc:manual:1', 'is_connected' => 1);
+$unusedInput = (object) array('stable_key' => 'installed:1', 'is_connected' => 0);
+$usedInput = (object) array('stable_key' => 'installed:2', 'is_connected' => 1);
+checkMaintenance(count(PowerPlantPVReportPresentation::visibleMeasures(array($emptyManual, $unusedInput, $usedInput), true)) === 1, 'Screen option hides unused inputs and the empty manual placeholder');
+checkMaintenance(count(PowerPlantPVReportPresentation::visibleMeasures(array($emptyManual, $unusedInput, $usedInput), false)) === 2, 'PDF retains unused installed inputs independently of the screen option');
+$emptyManual->open_circuit_voltage = 0;
+checkMaintenance(count(PowerPlantPVReportPresentation::visibleMeasures(array($emptyManual), false)) === 1, 'Legacy manual measurement zero is retained');
 // Execute the real page validators without bootstrapping a web session.
 $reportPage = file_get_contents(dirname(__DIR__).'/maintenance_intervention_report.php');
 foreach (array('powerplantpvReportFindMissingRequiredFields', 'powerplantpvReportRequiredFieldIsEmpty', 'powerplantpvReportIsHtmlTextEmpty', 'powerplantpvReportLocalizedObjectLabel', 'powerplantpvReportFieldIsPreviousReading', 'powerplantpvReportIsNumericFieldType') as $functionName) {
@@ -199,4 +206,33 @@ $requiredField->value_number = null;
 checkMaintenance(powerplantpvReportFindMissingRequiredFields(1) === array('Mesure requise'), 'Missing required measurement still blocks finalization');
 $requiredField->field_type = 'yesno'; $requiredField->value_text = '0';
 checkMaintenance(powerplantpvReportFindMissingRequiredFields(1) === array(), 'Explicit No remains a completed required answer');
+
+require_once dirname(__DIR__).'/class/powerplantpvinverterproduction.class.php';
+require_once dirname(__DIR__).'/class/powerplantpvreportillustration.class.php';
+$globalSection = (object) array('id' => 10, 'rowid' => 10, 'section_code' => 'PRODUCTION_READING', 'fk_report_equipment' => 0, 'fk_report_powerplant' => 6, 'occurrence_key' => 'section:PRODUCTION_READING:powerplant:6');
+$production = (object) array('id' => 20, 'field_code' => 'INVERTER_PRODUCTION', 'value_number' => 123, 'value_text' => null, 'value_date' => null, 'field_label' => 'Production N', 'field_label_en' => 'Production N', 'is_required' => 1, 'visible_form' => 1, 'visible_pdf' => 1, 'readonly' => 0);
+$previous = clone $production; $previous->field_code = 'INVERTER_PRODUCTION_N_MINUS_1';
+$meter = clone $production; $meter->field_code = 'PRODUCTION_INDEX';
+$tree = array('report' => (object) array('status' => 'draft'), 'sections' => array(array('section' => $globalSection, 'fields' => array($production, $previous, $meter), 'powerplant' => (object) array('id' => 6))), 'equipment' => array());
+checkMaintenance(count(PowerPlantPVInverterProduction::expand($tree)['sections']) === 1, 'Plant without installed inverter retains its global readings');
+foreach (array(114, 115, 116) as $i => $source) { $tree['equipment'][] = (object) array('id' => $i + 1, 'equipment_type' => 'INVERTER', 'fk_report_powerplant' => 6, 'fk_powerplant_line' => $source, 'fk_source_equipment' => 0); }
+$expanded = PowerPlantPVInverterProduction::expand($tree);
+checkMaintenance(count($expanded['sections']) === 4, 'Three installed inverters receive three distinct production sections');
+checkMaintenance(count($expanded['sections'][0]['fields']) === 3 && $expanded['sections'][0]['fields'][2] === $meter, 'Plant production meter stays common and unchanged');
+checkMaintenance($expanded['sections'][0]['fields'][0]->readonly === 1 && $expanded['sections'][0]['fields'][0]->value_number === 123, 'Legacy global value retained read-only without arbitrary attribution');
+checkMaintenance($expanded['sections'][1]['fields'][0]->value_number === null && $production->value_number === 123, 'New inverter values start empty and source is not mutated');
+checkMaintenance($expanded['sections'][1]['fields'][0]->stable_key !== $expanded['sections'][2]['fields'][0]->stable_key, 'Identical inverter models have distinct stable reading keys');
+checkMaintenance($expanded['sections'][1]['fields'][1]->readonly === 1, 'Per-inverter previous reading is read-only');
+checkMaintenance(count(PowerPlantPVInverterProduction::expand($expanded)['sections']) === 4, 'Repeated draft loading never duplicates inverter sections');
+$tree['report']->status = 'saved';
+checkMaintenance(count(PowerPlantPVInverterProduction::expand($tree)['sections']) === 1, 'Finalized historic reports are not expanded or rewritten');
+$stats = PowerPlantPVReportPresentation::indicators(array(array('fields' => array((object) array('visible_pdf' => 1, 'field_type' => 'conformity_so_valid_obs', 'value_text' => 'observation'), (object) array('visible_pdf' => 1, 'field_type' => 'conformity_so_valid_obs', 'value_text' => ''), (object) array('visible_pdf' => 1, 'field_type' => 'yesno', 'value_text' => '0')), 'dc_measures' => array($unusedInput, $usedInput))));
+checkMaintenance($stats === array('checks' => 2, 'completed' => 1, 'observations' => 1, 'connected' => 1, 'inputs' => 2), 'PDF indicators distinguish unanswered checks, explicit observations, No answers and unused inputs');
+$testDirectory = sys_get_temp_dir().'/ppv-image-'.bin2hex(random_bytes(6)); mkdir($testDirectory);
+file_put_contents($testDirectory.'/photo.png', base64_decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII='));
+file_put_contents($testDirectory.'/false.png', '<?php echo 1;');
+checkMaintenance(PowerPlantPVReportIllustration::imagePath($testDirectory, 'photo.png') !== '', 'Actual attached PNG is accepted');
+checkMaintenance(PowerPlantPVReportIllustration::imagePath($testDirectory, '../photo.png') === '', 'Parent traversal cannot select another plant image');
+checkMaintenance(PowerPlantPVReportIllustration::imagePath($testDirectory, 'false.png') === '', 'Filename extension cannot disguise non-image content');
+unlink($testDirectory.'/photo.png'); unlink($testDirectory.'/false.png'); rmdir($testDirectory);
 print 'OK: '.$checks." behavioral checks (ERP/database collaborators simulated).\n";

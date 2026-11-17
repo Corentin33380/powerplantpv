@@ -1821,3 +1821,16 @@ PowerPlantPVModuleConnectionSummary=Modules connected to this inverter: %s. Modu
 PowerPlantPVStringPower=String power
 PowerPlantPVInvalidModuleSelection=Select a module reference from the plant composition and a valid module count.
 PowerPlantPVModuleAllocationExceeded=Connected modules exceed the available quantity in the composition.
+
+PowerPlantPVHideUnusedMppt=Hide unused MPPTs and PV inputs in the form
+PowerPlantPVHideUnusedMpptHelp=The PDF retains them with the label “Not used by the power plant”.
+
+PowerPlantPVReportIllustration=Maintenance report illustration
+PowerPlantPVReportIllustrationHelp=Select a JPEG or PNG image attached to this power plant. It will appear in future maintenance PDFs; existing generated files remain unchanged.
+PowerPlantPVReportIllustrationInvalid=Illustration unavailable or not among this power plant’s attached images.
+PowerPlantPVReportControlSummary=Completed checks
+PowerPlantPVReportDcSummary=Connected PV inputs
+PowerPlantPVReportInverterCount=Installed inverters
+PowerPlantPVReportObservationsCount=Checks with observations
+PowerPlantPVReportDcChart=DC measurement profile
+PowerPlantPVReportChartMissing=Missing measurements are not plotted; zero is a valid measurement.
