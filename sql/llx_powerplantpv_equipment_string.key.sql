@@ -20,3 +20,5 @@ ALTER TABLE llx_powerplantpv_equipment_string ADD INDEX idx_powerplantpv_equipme
 ALTER TABLE llx_powerplantpv_equipment_string ADD INDEX idx_powerplantpv_equipment_string_inverter (fk_inverter);
 ALTER TABLE llx_powerplantpv_equipment_string ADD INDEX idx_powerplantpv_equipment_string_mppt (mppt_number);
 ALTER TABLE llx_powerplantpv_equipment_string ADD INDEX idx_powerplantpv_equipment_string_position (position);
+
+ALTER TABLE llx_powerplantpv_equipment_string ADD INDEX idx_ppv_string_product (fk_product);

@@ -25,6 +25,16 @@
 
 Other external modules are available on [Dolistore.com](https://www.dolistore.com).
 
+## Maintenance reports — 1.8.0
+
+The development branch adds installed inverter markers and identification, frozen report identities,
+DC groups by physical inverter, and material summaries consolidated by product reference.
+Desktop section titles include marker, identification and serial; mobile titles omit the serial.
+Panel serials are available in a separate CSV attachment generated from the report snapshot.
+See [the implementation and validation notes](docs/release/v1.8-maintenance-development.md)
+for activation, historic reports, naming existing equipment and validation limits.
+The descriptor identifies version 1.8.0, currently under acceptance testing. No stable 1.8.0 release has been published.
+
 ## Translations
 
 Translations can be completed manually by editing files in the module directories under `langs`.
@@ -292,3 +302,34 @@ The plant tile groups in-service and out-of-service states on one line with
 separate links and green/red native badges. Validated and total maintenance
 counts use gray badges; to-schedule counts use orange and overdue counts red,
 including zero values. Without JavaScript, native separate rows remain usable.
+
+### Préparation 1.8 : raccordement des chaînes
+
+Les réglages proposent deux masques libres : `OND{00}` pour les onduleurs (premier numéro 1,
+compteur par centrale) et `PV{00}` pour les chaînes (premier numéro 0, compteur par onduleur,
+commun à tous ses MPPT). Un changement de masque ne renomme pas les éléments existants.
+Les crayons des tableaux MPPT et chaînes reprennent les valeurs de la ligne dans leur formulaire.
+Le sélecteur de modules utilise les références actives de la composition ; la puissance unitaire
+provient des caractéristiques détaillées du produit et la puissance de chaîne est calculée.
+Le bilan indique les modules raccordés à l’onduleur et ceux restant à raccorder sur la centrale.
+Une quantité dépassant le stock de la composition est refusée côté serveur.
+Après déploiement, recharger le module depuis la liste native pour ajouter la liaison nullable
+`fk_product` aux chaînes et son index, sans modifier les anciennes valeurs manuelles.
+
+### Rapports 1.8 : relevés et illustrations
+
+La production relevée sur les onduleurs est saisie séparément pour chaque équipement installé.
+Les index de production, d’injection et de consommation restent communs à la centrale.
+Les anciens relevés globaux renseignés restent visibles en lecture seule ; ils ne sont pas attribués arbitrairement à un onduleur.
+
+Dans **Fichiers joints** de la centrale, choisir l’**Illustration du rapport de maintenance**
+parmi les images JPEG/PNG déjà jointes. Le choix référence le fichier ECM natif, sans copie
+ni fusion des PDF des produits ; il est repris aux prochaines générations du rapport.
+Aucune image n’est choisie automatiquement. Un fichier manquant est signalé dans le PDF.
+Les répertoires de l’entité propriétaire et les accès à la centrale restent contrôlés.
+Après mise à jour, recharger le module par le parcours natif pour ajouter cette liaison.
+
+L’option **Masquer les MPPT et entrées PV non exploités dans la saisie** est enregistrée
+par entité dans les réglages. Elle ne modifie pas le PDF : les entrées non raccordées y
+restent identifiées comme « Non exploité par la centrale ». Aucun relevé stocké n’est supprimé.
+Les indicateurs PDF comptent les réponses explicites du modèle ; ils ne remplacent pas une conclusion technique.

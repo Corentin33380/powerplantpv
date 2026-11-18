@@ -77,7 +77,7 @@ class modPowerPlantPV extends DolibarrModules
 		$this->editor_squarred_logo = '';					// Must be image filename into the module/img directory followed with @modulename. Example: 'myimage.png@powerplantpv'
 
 		// Possible values for version are: 'development', 'experimental', 'dolibarr', 'dolibarr_deprecated', 'experimental_deprecated' or a version string like 'x.y.z'
-		$this->version = '1.7.0';
+		$this->version = '1.8.0';
 		// Url to the file with your last numberversion of this module
 		//$this->url_last_version = 'http://www.example.com/versionmodule.txt';
 
@@ -1844,6 +1844,7 @@ class modPowerPlantPV extends DolibarrModules
 				mppt_number integer NOT NULL,
 				pv_input_number integer NOT NULL,
 				string_ref varchar(128),
+				fk_product integer,
 				module_count integer,
 				module_power double(24,8),
 				orientation varchar(64),
@@ -1895,6 +1896,13 @@ class modPowerPlantPV extends DolibarrModules
 		}
 
 		$tables = array(
+			$this->db->prefix().'powerplantpv_powerplant' => array(
+				'fk_report_illustration' => array('type' => 'integer', 'value' => '', 'null' => ''),
+			),
+			$this->db->prefix().'powerplantpv_powerplantcomp' => array(
+				'equipment_marker' => array('type' => 'varchar', 'value' => '32', 'null' => ''),
+				'equipment_identification' => array('type' => 'varchar', 'value' => '255', 'null' => ''),
+			),
 			$this->db->prefix().'powerplantpv_equipment_mppt' => array(
 				'fk_powerplant' => array('type' => 'integer', 'value' => '', 'null' => 'NOT NULL'),
 				'fk_inverter' => array('type' => 'integer', 'value' => '', 'null' => 'NOT NULL'),
@@ -1902,6 +1910,7 @@ class modPowerPlantPV extends DolibarrModules
 				'pv_input_count' => array('type' => 'integer', 'value' => '', 'null' => 'DEFAULT 0 NOT NULL'),
 			),
 			$this->db->prefix().'powerplantpv_equipment_string' => array(
+				'fk_product' => array('type' => 'integer', 'value' => '', 'null' => ''),
 				'fk_powerplant' => array('type' => 'integer', 'value' => '', 'null' => 'NOT NULL'),
 				'fk_inverter' => array('type' => 'integer', 'value' => '', 'null' => 'NOT NULL'),
 				'mppt_number' => array('type' => 'integer', 'value' => '', 'null' => 'NOT NULL'),
@@ -1925,6 +1934,8 @@ class modPowerPlantPV extends DolibarrModules
 				'source_mode' => array('type' => 'varchar', 'value' => '16', 'null' => "DEFAULT 'contract' NOT NULL"),
 			),
 			$this->db->prefix().'powerplantpv_report_equipment' => array(
+				'equipment_marker' => array('type' => 'varchar', 'value' => '32', 'null' => ''),
+				'equipment_identification' => array('type' => 'varchar', 'value' => '255', 'null' => ''),
 				'fk_report' => array('type' => 'integer', 'value' => '', 'null' => 'NOT NULL'),
 				'fk_source_equipment' => array('type' => 'integer', 'value' => '', 'null' => ''),
 				'equipment_brand' => array('type' => 'varchar', 'value' => '128', 'null' => ''),
@@ -1954,6 +1965,8 @@ class modPowerPlantPV extends DolibarrModules
 				'filepath' => array('type' => 'varchar', 'value' => '255', 'null' => 'NOT NULL'),
 			),
 			$this->db->prefix().'powerplantpv_report_dc_measure' => array(
+				'inverter_marker' => array('type' => 'varchar', 'value' => '32', 'null' => ''),
+				'inverter_identification' => array('type' => 'varchar', 'value' => '255', 'null' => ''),
 				'fk_report' => array('type' => 'integer', 'value' => '', 'null' => 'NOT NULL'),
 				'fk_report_section' => array('type' => 'integer', 'value' => '', 'null' => 'NOT NULL'),
 				'stable_key' => array('type' => 'varchar', 'value' => '255', 'null' => 'NOT NULL'),
@@ -1979,6 +1992,7 @@ class modPowerPlantPV extends DolibarrModules
 		}
 
 		$indexes = array(
+			$this->db->prefix().'powerplantpv_powerplant' => array('idx_ppv_plant_illustration' => 'fk_report_illustration'),
 			$this->db->prefix().'powerplantpv_equipment_mppt' => array(
 				'idx_powerplantpv_equipment_mppt_entity' => 'entity',
 				'idx_powerplantpv_equipment_mppt_powerplant' => 'fk_powerplant',
@@ -1986,6 +2000,7 @@ class modPowerPlantPV extends DolibarrModules
 				'idx_powerplantpv_equipment_mppt_position' => 'position',
 			),
 			$this->db->prefix().'powerplantpv_equipment_string' => array(
+				'idx_ppv_string_product' => 'fk_product',
 				'idx_powerplantpv_equipment_string_entity' => 'entity',
 				'idx_powerplantpv_equipment_string_powerplant' => 'fk_powerplant',
 				'idx_powerplantpv_equipment_string_inverter' => 'fk_inverter',
@@ -2051,6 +2066,9 @@ class modPowerPlantPV extends DolibarrModules
 		}
 
 		$customIndexes = array(
+			$this->db->prefix().'powerplantpv_powerplantcomp' => array(
+				'uk_ppv_comp_marker' => 'UNIQUE INDEX uk_ppv_comp_marker (entity, fk_powerplant, equipment_marker)',
+			),
 			$this->db->prefix().'powerplantpv_equipment_mppt' => array(
 				'uk_powerplantpv_equipment_mppt' => 'UNIQUE INDEX uk_powerplantpv_equipment_mppt (entity, fk_powerplant, fk_inverter, mppt_number)',
 			),

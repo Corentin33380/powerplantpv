@@ -312,6 +312,7 @@ class PowerPlantPVReportPdfDataset
 		if (in_array($type, array('select', 'conformity_so_valid_obs'), true)) {
 			$options = self::fieldOptions($field, $outputlangs);
 			$code = (string) $field->value_text;
+			if ($type === 'conformity_so_valid_obs' && !isset($options[$code])) { return $outputlangs->transnoentities('PowerPlantPVDataNotFilled'); }
 			return isset($options[$code]) ? $options[$code] : $code;
 		}
 

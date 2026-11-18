@@ -83,10 +83,10 @@ $extrafields->fetch_name_optionals_label($object->table_element);
 
 include DOL_DOCUMENT_ROOT.'/core/actions_fetchobject.inc.php';
 
-$permissiontoread = powerplantpvUserHasRightPath($user, array('powerplantpv', 'powerplant', 'read'))
-	|| powerplantpvUserHasMaintenanceRight($user, 'read');
-$permissiontoadd = powerplantpvUserHasRightPath($user, array('powerplantpv', 'powerplant', 'write'))
-	|| powerplantpvUserHasMaintenanceRight($user, 'write');
+$permissiontoread = $user->hasRight('powerplantpv', 'powerplant', 'read')
+	|| $user->hasRight('powerplantpv', 'maintenance', 'read');
+$permissiontoadd = $user->hasRight('powerplantpv', 'powerplant', 'write')
+	|| $user->hasRight('powerplantpv', 'maintenance', 'write');
 
 if ($user->socid > 0) {
 	$socid = $user->socid;
@@ -139,12 +139,13 @@ if (empty($reshook)) {
 		$typeRow = powerplantpvIndexReadingFetchTypeById($typeId);
 		$readingDate = powerplantpvIndexReadingGetSubmittedDate('reading_date');
 		$valueRaw = trim((string) GETPOST('reading_value', 'restricthtml'));
+		$normalizedValue = price2num($valueRaw);
 		$unit = trim((string) GETPOST('unit', 'alphanohtml'));
 		$meterRef = trim((string) GETPOST('meter_ref', 'alphanohtml'));
 		$comment = trim((string) GETPOST('comment', 'restricthtml'));
 
 		$error = 0;
-		if (empty($typeRow)) {
+		if (empty($typeRow) || !PowerPlantPVIndexReading::isCumulativeIndexType($typeRow['code'])) {
 			setEventMessages($langs->trans('PowerPlantPVIndexReadingTypeRequired'), null, 'errors');
 			$error++;
 		}
@@ -152,7 +153,8 @@ if (empty($reshook)) {
 			setEventMessages($langs->trans('PowerPlantPVIndexReadingDateRequired'), null, 'errors');
 			$error++;
 		}
-		if ($valueRaw === '') {
+		if (!preg_match('/^[0-9.,\p{Zs}]+$/u', $valueRaw)
+			|| !is_numeric($normalizedValue) || !is_finite((float) $normalizedValue) || (float) $normalizedValue < 0) {
 			setEventMessages($langs->trans('PowerPlantPVIndexReadingValueRequired'), null, 'errors');
 			$error++;
 		}
@@ -168,7 +170,7 @@ if (empty($reshook)) {
 			$reading->fk_index_type = (int) $typeRow['rowid'];
 			$reading->reading_type_code = (string) $typeRow['code'];
 			$reading->reading_date = $db->idate($readingDate);
-			$reading->value = (float) price2num($valueRaw);
+			$reading->value = (float) $normalizedValue;
 			$reading->unit = $unit !== '' ? $unit : (!empty($typeRow['default_unit']) ? (string) $typeRow['default_unit'] : 'kWh');
 			$reading->meter_ref = $meterRef;
 			$reading->source_type = PowerPlantPVIndexReading::SOURCE_MANUAL;
@@ -243,6 +245,7 @@ $num = $resql ? $db->num_rows($resql) : 0;
 
 $form = new Form($db);
 $readingHelper = new PowerPlantPVIndexReading($db);
+$selfConsumption = $readingHelper->fetchLatestSelfConsumption((int) $object->id, (int) $object->entity);
 $typeOptions = powerplantpvIndexReadingFetchTypeOptions();
 $defaultTypeId = powerplantpvIndexReadingDefaultTypeId($typeOptions);
 $title = $langs->trans('PowerPlant').' - '.$langs->trans('PowerPlantPVProductionConsumption');
@@ -263,6 +266,19 @@ print '<tr>';
 print '<td class="titlefield">'.$langs->trans('PowerPlantPVIndexReadings').'</td>';
 print '<td>'.((int) $nbtotalofrecords).'</td>';
 print '</tr>';
+print '<tr><td class="titlefield">'.$langs->trans('PowerPlantPVPlantSelfConsumption').'</td><td>';
+if ($selfConsumption !== null) {
+	print price($selfConsumption['energy']).' kWh';
+	if ($selfConsumption['rate'] !== null) {
+		print ' ('.price(round($selfConsumption['rate'], 1)).' %)';
+	}
+	$startDate = dol_print_date($db->jdate($selfConsumption['start']), 'day');
+	$endDate = dol_print_date($db->jdate($selfConsumption['end']), 'day');
+	print ' <span class="opacitymedium">'.dol_escape_htmltag($startDate.' – '.$endDate).'</span>';
+} else {
+	print '<span class="opacitymedium">'.$langs->trans('PowerPlantPVPlantSelfConsumptionUnavailable').'</span>';
+}
+print '</td></tr>';
 print '</table>';
 print '</div>';
 
@@ -401,6 +417,12 @@ function powerplantpvIndexReadingFetchTypeOptions()
 	}
 	while (is_object($obj = $db->fetch_object($resql))) {
 		$label = ($langs->defaultlang === 'en_US' && !empty($obj->label_en)) ? (string) $obj->label_en : (string) $obj->label;
+		if (!PowerPlantPVIndexReading::isCumulativeIndexType((string) $obj->code)) {
+			continue;
+		}
+		if ($obj->code === 'INVERTER_PRODUCTION') {
+			$label = $langs->transnoentities('PowerPlantPVInverterProductionIndex');
+		}
 		$options[(int) $obj->rowid] = trim((string) $obj->code.' - '.$label, " -\t\n\r\0\x0B");
 	}
 	$db->free($resql);
@@ -497,6 +519,9 @@ function powerplantpvIndexReadingLocalizedTypeLabel($obj)
 {
 	global $langs;
 
+	if ($obj->reading_type_code === 'INVERTER_PRODUCTION') {
+		return $langs->transnoentities('PowerPlantPVInverterProductionIndex');
+	}
 	$label = !empty($obj->type_label) ? (string) $obj->type_label : (string) $obj->reading_type_code;
 	if ($langs->defaultlang === 'en_US' && !empty($obj->type_label_en)) {
 		$label = (string) $obj->type_label_en;

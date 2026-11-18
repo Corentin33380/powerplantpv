@@ -14,6 +14,7 @@
  */
 
 dol_include_once('/powerplantpv/class/powerplant.class.php');
+require_once __DIR__.'/powerplantpvreportpresentation.class.php';
 dol_include_once('/powerplantpv/lib/powerplantpv_serialnumber.lib.php');
 require_once DOL_DOCUMENT_ROOT.'/contact/class/contact.class.php';
 require_once DOL_DOCUMENT_ROOT.'/societe/class/societe.class.php';
@@ -118,6 +119,7 @@ class PowerPlantPVPowerPlantSummary
 		}
 		$connectionType = class_exists('PowerPlant') ? PowerPlant::getConnectionTypeLabel($powerplant->connection_type, $translator) : (string) $powerplant->connection_type;
 
+		$powerplantId = (int) $powerplant->id;
 		$sections = array(
 			array(
 				'code' => 'site',
@@ -171,12 +173,12 @@ class PowerPlantPVPowerPlantSummary
 					array(
 						'title_key' => 'PowerPlantPDFModules',
 						'columns' => $this->columns(array('product', 'qty', 'power', 'serial', 'status'), array('PowerPlantPDFProduct', 'PowerPlantPDFQuantity', 'PowerPlantPDFPower', 'PowerPlantPDFSerialNumber', 'PowerPlantPDFStatus')),
-						'rows' => $this->buildMaterialRows($components, array('MODULE'), $translator, 'module'),
+						'rows' => $this->buildMaterialRows($components, array('MODULE'), $translator, 'module', $powerplantId),
 					),
 					array(
 						'title_key' => 'PowerPlantPDFInverters',
 						'columns' => $this->columns(array('product', 'qty', 'power', 'serial', 'status'), array('PowerPlantPDFProduct', 'PowerPlantPDFQuantity', 'PowerPlantPDFPower', 'PowerPlantPDFSerialNumber', 'PowerPlantPDFStatus')),
-						'rows' => $this->buildMaterialRows($components, array('ONDULE'), $translator, 'inverter'),
+						'rows' => $this->buildMaterialRows($components, array('ONDULE'), $translator, 'inverter', $powerplantId),
 					),
 				),
 			),
@@ -192,9 +194,10 @@ class PowerPlantPVPowerPlantSummary
 		$sections = array_values(array_filter($sections, array($this, 'snapshotSectionHasContent')));
 
 		return array(
-			'version' => 1,
+			'version' => 2,
 			'source_powerplant_id' => !empty($powerplant->id) ? (int) $powerplant->id : 0,
 			'source_powerplant_ref' => (string) $powerplant->ref,
+			'serial_inventory' => $this->fetchPanelSerialInventory($powerplant, $components),
 			'sections' => $sections,
 		);
 	}
@@ -203,9 +206,10 @@ class PowerPlantPVPowerPlantSummary
 	 * Decode a stored JSON snapshot.
 	 *
 	 * @param	mixed	$json	Stored JSON
+	 * @param Translate|null $outputlangs Display language, defaults to the current language
 	 * @return	array<string,mixed>	Snapshot
 	 */
-	public function decodeSnapshot($json)
+	public function decodeSnapshot($json, $outputlangs = null)
 	{
 		$json = trim((string) $json);
 		if ($json === '') {
@@ -215,6 +219,65 @@ class PowerPlantPVPowerPlantSummary
 		$data = json_decode($json, true);
 		if (!is_array($data)) {
 			return array();
+		}
+
+		// Version 1 stored already formatted rows, including individual serials and a
+		// duplicate full composition. Adapt only the display; never refresh frozen data.
+		if ((int) ($data['version'] ?? 1) < 2 && isset($data['sections']) && is_array($data['sections'])) {
+			global $langs;
+			$translator = is_object($outputlangs) ? $outputlangs : $langs;
+			if (!is_object($translator)) { return $data; }
+			$materialProducts = array();
+			foreach ($data['sections'] as &$section) {
+				if (!is_array($section) || ($section['code'] ?? '') !== 'material' || !is_array($section['tables'] ?? null)) { continue; }
+				foreach ($section['tables'] as &$table) {
+					if (!is_array($table) || !in_array($table['title_key'] ?? '', array('PowerPlantPDFModules', 'PowerPlantPDFInverters'), true) || !is_array($table['rows'] ?? null)) { continue; }
+					$groups = array();
+					foreach ($table['rows'] as $index => $row) {
+						if (!is_array($row)) { continue; }
+						$product = (string) ($row['product'] ?? '');
+						if ($product !== '') { $materialProducts[$product] = true; }
+						// The old formatter always wrote two decimal places. Decode that
+						// persisted format independently of the current reader's language.
+						$quantity = preg_replace('/[\s\x{00A0}\x{202F}]/u', '', (string) ($row['qty'] ?? ''));
+						$numericQuantity = null;
+						if (preg_match('/^(-?[0-9.,]+)[.,]([0-9]{2})$/', (string) $quantity, $parts)) {
+							$integer = str_replace(array('.', ','), '', $parts[1]);
+							if (preg_match('/^-?[0-9]+$/', $integer)) {
+								$numericQuantity = (float) price2num($integer.'.'.$parts[2], '', 1);
+							}
+						} elseif (preg_match('/^-?[0-9]+$/', (string) $quantity)) {
+							$numericQuantity = (float) price2num($quantity, '', 1);
+						}
+						$key = $product !== '' && $numericQuantity !== null ? $product : ':row:'.$index;
+						$row['serial'] = $translator->transnoentities('PowerPlantPVConsultPowerplant');
+						$row['serial_powerplant_id'] = (int) ($data['source_powerplant_id'] ?? 0);
+						if (!isset($groups[$key])) {
+							$groups[$key] = array('row' => $row, 'quantity' => $numericQuantity);
+						} else {
+							$groups[$key]['quantity'] += $numericQuantity;
+							if (($groups[$key]['row']['status'] ?? '') !== ($row['status'] ?? '')) {
+								$groups[$key]['row']['status'] = $translator->transnoentities('PowerPlantPVMultipleStatuses');
+							}
+						}
+					}
+					$table['rows'] = array();
+					foreach ($groups as $group) {
+						if ($group['quantity'] !== null) { $group['row']['qty'] = $this->formatNumber($group['quantity'], 2, $translator); }
+						$table['rows'][] = $group['row'];
+					}
+				}
+				unset($table);
+			}
+			unset($section);
+			foreach ($data['sections'] as &$section) {
+				if (is_array($section) && ($section['code'] ?? '') === 'composition' && is_array($section['rows'] ?? null)) {
+					$section['rows'] = array_values(array_filter($section['rows'], static function ($row) use ($materialProducts) {
+						return !is_array($row) || !isset($materialProducts[(string) ($row['product'] ?? '')]);
+					}));
+				}
+			}
+			unset($section);
 		}
 
 		return $data;
@@ -403,12 +466,13 @@ class PowerPlantPVPowerPlantSummary
 	 * @param	array<int,string>				$codes			Category codes
 	 * @param	Translate						$outputlangs	Output language
 	 * @param	string							$type			Material type
-	 * @return	array<int,array<string,string>>					Rows
+	 * @param int $powerplantId Owner plant id
+	 * @return	array<int,array<string,mixed>>					Rows
 	 */
-	private function buildMaterialRows($components, $codes, $outputlangs, $type)
+	private function buildMaterialRows($components, $codes, $outputlangs, $type, $powerplantId)
 	{
 		$rows = array();
-		foreach ($components as $component) {
+		foreach (PowerPlantPVReportPresentation::consolidate($components) as $component) {
 			if (!in_array((string) $component['category_code'], $codes, true)) {
 				continue;
 			}
@@ -424,14 +488,15 @@ class PowerPlantPVPowerPlantSummary
 				if ($this->isFilled($component['ac_max_power'])) {
 					$values[] = $outputlangs->transnoentities('PowerPlantPDFACMaxPowerShort').' '.$this->formatNumber($component['ac_max_power'], 2, $outputlangs);
 				}
-				$power = implode(' / ', $values);
+				$power = !empty($values) ? implode(' / ', $values).' W' : '';
 			}
 			$rows[] = array(
 				'product' => $this->productLabel($component),
 				'qty' => $this->formatNumber($component['qty'], 2, $outputlangs),
 				'power' => $power,
-				'serial' => $this->serialNumberDisplayValue($component, $outputlangs),
-				'status' => (string) $component['status'],
+				'serial' => $outputlangs->transnoentities('PowerPlantPVConsultPowerplant'),
+				'serial_powerplant_id' => (int) $powerplantId,
+				'status' => !empty($component['multiple_statuses']) ? $outputlangs->transnoentities('PowerPlantPVMultipleStatuses') : (string) $component['status'],
 			);
 		}
 
@@ -449,6 +514,9 @@ class PowerPlantPVPowerPlantSummary
 	{
 		$rows = array();
 		foreach ($components as $component) {
+			if (in_array((string) $component['category_code'], array('MODULE', 'ONDULE'), true)) {
+				continue;
+			}
 			$rows[] = array(
 				'category' => $this->firstNonEmpty(array($component['category_label'], $component['category_code'])),
 				'product' => $this->productLabel($component),
@@ -460,6 +528,40 @@ class PowerPlantPVPowerPlantSummary
 		}
 
 		return array_values(array_filter($rows, array($this, 'tableRowHasContent')));
+	}
+
+	/**
+	 * Freeze PV module serials without adding them to display sections.
+	 * @param PowerPlant $plant Owner plant
+	 * @param array<int,array<string,mixed>> $components Installed composition
+	 * @return array<int,array<string,string>> Historical inventory
+	 */
+	private function fetchPanelSerialInventory($plant, $components)
+	{
+		$rows = array();
+		$panels = array();
+		foreach ($components as $component) {
+			if ((string) $component['category_code'] !== 'MODULE') { continue; }
+			$panels[(int) $component['id']] = $component;
+			if (trim((string) $component['serial_number']) !== '') {
+				$rows[(int) $component['id'].':'.(string) $component['serial_number']] = array('product_ref' => (string) $component['product_ref'], 'product_label' => (string) $component['product_label'], 'serial' => (string) $component['serial_number']);
+			}
+		}
+		$sql = 'SELECT fk_powerplant_line, serial_number FROM '.$this->db->prefix().'powerplantpv_serialnumber';
+		$sql .= ' WHERE fk_powerplant = '.(int) $plant->id.' AND entity = '.(int) $plant->entity;
+		$sql .= " AND import_status = 'validated' ORDER BY rowid";
+		$result = $this->db->query($sql);
+		if (!$result) {
+			$this->error = $this->db->lasterror();
+			$this->errors[] = $this->error;
+			return array();
+		}
+		while ($row = $this->db->fetch_object($result)) {
+			$id = (int) $row->fk_powerplant_line;
+			if (!isset($panels[$id])) { continue; }
+			$rows[$id.':'.(string) $row->serial_number] = array('product_ref' => (string) $panels[$id]['product_ref'], 'product_label' => (string) $panels[$id]['product_label'], 'serial' => (string) $row->serial_number);
+		}
+		return array_values($rows);
 	}
 
 	/**

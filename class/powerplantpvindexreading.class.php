@@ -14,6 +14,7 @@
  */
 
 require_once DOL_DOCUMENT_ROOT.'/core/class/commonobject.class.php';
+require_once __DIR__.'/powerplantpvreportpresentation.class.php';
 
 /**
  * Archived production and consumption index reading.
@@ -22,6 +23,71 @@ class PowerPlantPVIndexReading extends CommonObject
 {
 	public const SOURCE_MANUAL = 'manual';
 	public const SOURCE_REPORT = 'report';
+
+	/**
+	 * @return bool Whether a dictionary type is a cumulative energy index.
+	 */
+	public static function isCumulativeIndexType(string $code): bool
+	{
+		return in_array($code, array('INVERTER_PRODUCTION', 'PRODUCTION_INDEX', 'INJECTION_INDEX', 'CONSUMPTION_INDEX'), true);
+	}
+
+	/**
+	 * Calculate the latest period from the plant's archived or manual meter indices.
+	 * A third row detects ambiguous readings at the start of the period.
+	 *
+	 * @return array{energy:float,rate:float|null,start:string,end:string}|null
+	 */
+	public function fetchLatestSelfConsumption(int $plantId, int $entity): ?array
+	{
+		$queries = array();
+		foreach (array('PRODUCTION_INDEX', 'INJECTION_INDEX') as $code) {
+			$sql = "SELECT reading_type_code, reading_date, value, unit, meter_ref";
+			$sql .= " FROM ".MAIN_DB_PREFIX.$this->table_element;
+			$sql .= " WHERE fk_powerplant = ".$plantId." AND entity = ".$entity;
+			$sql .= " AND entity IN (".$this->db->sanitize(getEntity('powerplant')).")";
+			$sql .= " AND active = 1 AND fk_report_equipment = 0";
+			$sql .= " AND reading_type_code = '".$this->db->escape($code)."'";
+			$sql .= " ORDER BY reading_date DESC, rowid DESC".$this->db->plimit(3);
+			$queries[] = "SELECT reading_type_code, reading_date, value, unit, meter_ref FROM (".$sql.") AS meter_readings";
+		}
+		$resql = $this->db->query(implode(" UNION ALL ", $queries)." ORDER BY reading_date DESC");
+		if (!$resql) {
+			$this->setError($this->db->lasterror());
+			return null;
+		}
+		$readings = array('PRODUCTION_INDEX' => array(), 'INJECTION_INDEX' => array());
+		while (is_object($row = $this->db->fetch_object($resql))) {
+			$readings[$row->reading_type_code][] = $row;
+		}
+		$this->db->free($resql);
+
+		foreach ($readings as $meter) {
+			if (count($meter) < 2 || $meter[0]->reading_date <= $meter[1]->reading_date
+				|| (isset($meter[2]) && $meter[1]->reading_date === $meter[2]->reading_date)
+				|| $meter[0]->meter_ref !== $meter[1]->meter_ref
+				|| $meter[0]->unit !== 'kWh' || $meter[1]->unit !== 'kWh'
+				|| !is_numeric($meter[0]->value) || !is_numeric($meter[1]->value)) {
+				return null;
+			}
+		}
+		[$productionEnd, $productionStart] = $readings['PRODUCTION_INDEX'];
+		[$injectionEnd, $injectionStart] = $readings['INJECTION_INDEX'];
+		if ($productionEnd->reading_date !== $injectionEnd->reading_date
+			|| $productionStart->reading_date !== $injectionStart->reading_date) {
+			return null;
+		}
+		$result = PowerPlantPVReportPresentation::calculateSelfConsumption(
+			(float) $productionStart->value,
+			(float) $productionEnd->value,
+			(float) $injectionStart->value,
+			(float) $injectionEnd->value
+		);
+		return $result === null ? null : $result + array(
+			'start' => (string) $productionStart->reading_date,
+			'end' => (string) $productionEnd->reading_date,
+		);
+	}
 
 	/**
 	 * @var string Module key
@@ -136,6 +202,10 @@ class PowerPlantPVIndexReading extends CommonObject
 			$this->fk_user_creat = (int) $user->id;
 		}
 		$this->normalizeDefaults();
+		if ($this->source_type === self::SOURCE_MANUAL && !self::isCumulativeIndexType((string) $this->reading_type_code)) {
+			$this->setError('PowerPlantPVIndexReadingTypeRequired');
+			return -1;
+		}
 		if ($this->validateForSave() < 0) {
 			return -1;
 		}
@@ -228,9 +298,10 @@ class PowerPlantPVIndexReading extends CommonObject
 	 * @param	string	$readingTypeCode	Reading type code
 	 * @param	string	$meterRef			Optional meter/inverter reference
 	 * @param	int		$excludeReportId	Optional report id to exclude
+	 * @param int $inverterLineId Stable installed inverter line; zero selects legacy global readings
 	 * @return	array{rowid:int,value:float,reading_date:string}|null	Latest reading
 	 */
-	public function fetchLatestValue($fkPowerplant, $readingTypeCode, $meterRef = '', $excludeReportId = 0)
+	public function fetchLatestValue($fkPowerplant, $readingTypeCode, $meterRef = '', $excludeReportId = 0, $inverterLineId = 0)
 	{
 		$fkPowerplant = (int) $fkPowerplant;
 		$readingTypeCode = trim((string) $readingTypeCode);
@@ -248,6 +319,16 @@ class PowerPlantPVIndexReading extends CommonObject
 		if (trim((string) $meterRef) !== '') {
 			$sql .= " AND meter_ref = '".$this->db->escape(trim((string) $meterRef))."'";
 		}
+		if ($readingTypeCode === 'INVERTER_PRODUCTION') {
+			if ((int) $inverterLineId > 0) {
+				$sql .= " AND EXISTS (SELECT e.rowid FROM ".$this->db->prefix()."powerplantpv_report_equipment as e";
+				$sql .= " WHERE e.rowid = ".$this->db->prefix().$this->table_element.".fk_report_equipment AND e.entity = ".$this->db->prefix().$this->table_element.".entity";
+				$sql .= " AND COALESCE(NULLIF(e.fk_powerplant_line, 0), e.fk_source_equipment) = ".((int) $inverterLineId).")";
+			} else {
+				$sql .= " AND COALESCE(fk_report_equipment, 0) = 0";
+			}
+		}
+
 		if ($excludeReportId > 0) {
 			$sql .= " AND (fk_report IS NULL OR fk_report <> ".$excludeReportId.")";
 		}

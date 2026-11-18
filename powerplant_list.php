@@ -209,9 +209,9 @@ include DOL_DOCUMENT_ROOT.'/core/tpl/extrafields_list_array_fields.tpl.php';
 $object->fields = dol_sort_array($object->fields, 'position');
 $arrayfields = dol_sort_array($arrayfields, 'position');
 
-$permissiontoread = powerplantpvUserHasRightPath($user, array('powerplantpv', 'powerplant', 'read'));
-$permissiontoadd = powerplantpvUserHasRightPath($user, array('powerplantpv', 'powerplant', 'write'));
-$permissiontodelete = powerplantpvUserHasRightPath($user, array('powerplantpv', 'powerplant', 'delete'));
+$permissiontoread = $user->hasRight('powerplantpv', 'powerplant', 'read');
+$permissiontoadd = $user->hasRight('powerplantpv', 'powerplant', 'write');
+$permissiontodelete = $user->hasRight('powerplantpv', 'powerplant', 'delete');
 
 // Security check (enable the most restrictive one)
 if ($user->socid > 0) {
@@ -398,21 +398,16 @@ foreach ($search as $key => $val) {
 if ($search_all) {
 	$sql .= natural_search(array_keys($fieldstosearchall), $search_all);
 }
-/*
-// If the internal user must only see his customers, force searching by him
-$search_sale = 0;
-if (!$user->hasRight('societe', 'client', 'voir')) {
-	$search_sale = $user->id;
-}
-// Search on sale representative
-if ($search_sale && $search_sale != '-1') {
-	if ($search_sale == -2) {
-		$sql .= " AND NOT EXISTS (SELECT sc.fk_soc FROM ".$db->prefix()."societe_commerciaux as sc WHERE sc.fk_soc = t.fk_soc)";
-	} elseif ($search_sale > 0) {
-		$sql .= " AND EXISTS (SELECT sc.fk_soc FROM ".$db->prefix()."societe_commerciaux as sc WHERE sc.fk_soc = t.fk_soc AND sc.fk_user = ".((int) $search_sale).")";
+// Match restrictedArea() on the card before counting or paginating results.
+if ($user->socid <= 0 && isModEnabled('societe') && !$user->hasRight('societe', 'client', 'voir')) {
+	$commercialuserids = array((int) $user->id);
+	if (getDolGlobalInt('MAIN_SEE_SUBORDINATES')) {
+		$commercialuserids = array_merge($commercialuserids, $user->getAllChildIds());
 	}
+	$commercialuserids = array_unique(array_map('intval', $commercialuserids));
+	$sql .= " AND EXISTS (SELECT sc.fk_soc FROM ".$db->prefix()."societe_commerciaux as sc";
+	$sql .= " WHERE sc.fk_soc = t.fk_soc AND sc.fk_user IN (".$db->sanitize(implode(',', $commercialuserids))."))";
 }
-*/
 if ($socid) {
 	$sql .= " AND t.fk_soc = ".((int) $socid);
 }

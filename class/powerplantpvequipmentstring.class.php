@@ -35,6 +35,7 @@ class PowerPlantPVEquipmentString extends PowerPlantPVReportGeneratedBase
 		'mppt_number' => array('type' => 'integer', 'label' => 'PowerPlantPVMPPT', 'enabled' => 1, 'position' => 30, 'notnull' => 1, 'visible' => 1),
 		'pv_input_number' => array('type' => 'integer', 'label' => 'PowerPlantPVPVInput', 'enabled' => 1, 'position' => 40, 'notnull' => 1, 'visible' => 1),
 		'string_ref' => array('type' => 'varchar(128)', 'label' => 'PowerPlantPVStringRef', 'enabled' => 1, 'position' => 50, 'notnull' => 0, 'visible' => 1),
+		'fk_product' => array('type' => 'integer', 'label' => 'Product', 'enabled' => 1, 'position' => 55, 'notnull' => 0, 'visible' => 1),
 		'module_count' => array('type' => 'integer', 'label' => 'PowerPlantPVModuleCount', 'enabled' => 1, 'position' => 60, 'notnull' => 0, 'visible' => 1),
 		'module_power' => array('type' => 'double(24,8)', 'label' => 'PowerPlantPVModulePower', 'enabled' => 1, 'position' => 70, 'notnull' => 0, 'visible' => 1),
 		'orientation' => array('type' => 'varchar(64)', 'label' => 'PowerPlantPVOrientation', 'enabled' => 1, 'position' => 80, 'notnull' => 0, 'visible' => 1),
@@ -53,6 +54,7 @@ class PowerPlantPVEquipmentString extends PowerPlantPVReportGeneratedBase
 	public $mppt_number;
 	public $pv_input_number;
 	public $string_ref;
+	public $fk_product;
 	public $module_count;
 	public $module_power;
 	public $orientation;
@@ -74,7 +76,7 @@ class PowerPlantPVEquipmentString extends PowerPlantPVReportGeneratedBase
 		$sql .= " WHERE t.fk_powerplant = ".((int) $fk_powerplant);
 		$sql .= " AND t.fk_inverter = ".((int) $fk_inverter);
 		$sql .= " AND t.entity IN (".$this->db->sanitize(getEntity('powerplant')).")";
-		$sql .= " ORDER BY t.position ASC, t.mppt_number ASC, t.pv_input_number ASC, t.rowid ASC";
+		$sql .= " ORDER BY t.mppt_number ASC, t.pv_input_number ASC, t.position ASC, t.rowid ASC";
 
 		return $this->fetchRowsFromSql($sql);
 	}

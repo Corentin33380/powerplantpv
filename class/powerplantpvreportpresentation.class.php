@@ -1,0 +1,210 @@
+<?php
+/* Copyright (C) 2026 Pierre Ardoin <developpeur@lesmetiersdubatiment.fr>
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
+
+/** Shared presentation of installed equipment and frozen report data. */
+class PowerPlantPVReportPresentation
+{
+	/** @param string $code @return bool */
+	public static function isRetiredProductionField($code)
+	{
+		return in_array($code, array('ANNUAL_PRODUCTION', 'ANNUAL_PRODUCTION_N_MINUS_1', 'SELF_CONSUMPTION', 'SELF_CONSUMPTION_N_MINUS_1'), true);
+	}
+
+	/** @param object $field @param Translate $langs @return string|null */
+	public static function inverterIndexLabel($field, $langs)
+	{
+		$code = (string) ($field->field_code ?? '');
+		if ($code === 'INVERTER_PRODUCTION') { return $langs->transnoentities('PowerPlantPVInverterProductionIndexCurrent'); }
+		if ($code === 'INVERTER_PRODUCTION_N_MINUS_1') { return $langs->transnoentities('PowerPlantPVInverterProductionIndexPrevious'); }
+		return null;
+	}
+
+	/**
+	 * Energy used on site between comparable production and injection meter readings.
+	 * Previous index dates are frozen with their numeric values. No estimate if an
+	 * index or date is absent, the start dates differ, or a counter has decreased.
+	 * @param array<int,object> $fields Visible fields of the common meters section
+	 * @param int $endDate Timestamp of the current intervention reading
+	 * @return float|null Energy in kWh (zero is a valid result)
+	 */
+	public static function selfConsumptionBetweenReadings($fields, $endDate)
+	{
+		$required = array('PRODUCTION_INDEX', 'PRODUCTION_INDEX_N_MINUS_1', 'INJECTION_INDEX', 'INJECTION_INDEX_N_MINUS_1');
+		$values = array();
+		$previousDates = array();
+		foreach ($fields as $field) {
+			$code = (string) ($field->field_code ?? '');
+			if (!in_array($code, $required, true)) { continue; }
+			if (($field->unit ?? '') !== 'kWh' || !is_numeric($field->value_number ?? null) || isset($values[$code])) { return null; }
+			$value = (float) $field->value_number;
+			if (!is_finite($value) || $value < 0) { return null; }
+			$values[$code] = $value;
+			if (substr($code, -10) === '_N_MINUS_1') {
+				$rawDate = $field->value_date ?? null;
+				$previousDates[] = is_numeric($rawDate) ? (int) $rawDate : (is_string($rawDate) ? (int) strtotime($rawDate) : 0);
+			}
+		}
+		if (count($values) !== 4 || count($previousDates) !== 2 || $previousDates[0] <= 0
+			|| $previousDates[0] !== $previousDates[1] || $previousDates[0] >= $endDate) {
+			return null;
+		}
+		$result = self::calculateSelfConsumption($values['PRODUCTION_INDEX_N_MINUS_1'], $values['PRODUCTION_INDEX'], $values['INJECTION_INDEX_N_MINUS_1'], $values['INJECTION_INDEX']);
+		return $result['energy'] ?? null;
+	}
+
+	/**
+	 * Calculate self-consumption from cumulative kWh readings covering the same period.
+	 * @return array{energy:float,rate:float|null}|null Rate is undefined when production is zero.
+	 */
+	public static function calculateSelfConsumption(float $previousProduction, float $currentProduction, float $previousInjection, float $currentInjection): ?array
+	{
+		foreach (array($previousProduction, $currentProduction, $previousInjection, $currentInjection) as $index) {
+			if (!is_finite($index) || $index < 0) {
+				return null;
+			}
+		}
+		$production = $currentProduction - $previousProduction;
+		$injection = $currentInjection - $previousInjection;
+		if ($injection < 0 || $production < $injection) {
+			return null;
+		}
+		$energy = $production - $injection;
+		return array('energy' => $energy, 'rate' => $production > 0 ? ($energy / $production) * 100 : null);
+	}
+
+	/**
+	 * Consolidate raw composition rows before locale-dependent formatting.
+	 * @param array<int,array<string,mixed>> $components Raw rows from one plant
+	 * @return array<int,array<string,mixed>> Consolidated rows
+	 */
+	public static function consolidate($components)
+	{
+		$groups = array();
+		foreach ($components as $row) {
+			$key = (int) ($row['fk_powerplant'] ?? 0).':'.(int) ($row['fk_product'] ?? 0);
+			if ((int) ($row['fk_product'] ?? 0) <= 0) {
+				$key .= ':line:'.(int) ($row['id'] ?? count($groups));
+			}
+			if (!isset($groups[$key])) {
+				$groups[$key] = $row;
+				$groups[$key]['qty'] = 0;
+				$groups[$key]['serial_number'] = '';
+				$groups[$key]['multiple_statuses'] = false;
+			}
+			$groups[$key]['qty'] += (float) ($row['qty'] ?? 0);
+			if ((string) ($groups[$key]['status'] ?? '') !== (string) ($row['status'] ?? '')) {
+				$groups[$key]['multiple_statuses'] = true;
+			}
+		}
+		return array_values($groups);
+	}
+
+	/**
+	 * Omit empty legacy manual placeholders; optionally hide disconnected installed inputs.
+	 * @param array<int,object> $measures Frozen DC rows
+	 * @param bool $hideUnused Screen preference; PDF always passes false
+	 * @return array<int,object> Visible rows, with stored data untouched
+	 */
+	public static function visibleMeasures($measures, $hideUnused = false)
+	{
+		return array_values(array_filter($measures, static function ($row) use ($hideUnused) {
+			if ($hideUnused && (int) ($row->is_connected ?? 1) === 0) { return false; }
+			if (strpos((string) ($row->stable_key ?? ''), ':dc:manual:') === false) { return true; }
+			foreach (array('inverter_ref', 'inverter_label', 'string_ref', 'open_circuit_voltage', 'polarity_checked', 'insulation_status', 'insulation_positive_to_ground', 'insulation_negative_to_ground', 'observation') as $field) {
+				$value = $row->{$field} ?? null;
+				if ($value !== null && trim((string) $value) !== '' && (string) $value !== '-1') { return true; }
+			}
+			return false;
+		}));
+	}
+
+	/**
+	 * Count only explicit conformity answers and installed DC inputs for a plant summary.
+	 * @param array<int,array<string,mixed>> $sections Frozen section rows
+	 * @return array{checks:int,completed:int,observations:int,connected:int,inputs:int}
+	 */
+	public static function indicators($sections)
+	{
+		$stats = array('checks' => 0, 'completed' => 0, 'observations' => 0, 'connected' => 0, 'inputs' => 0);
+		foreach ($sections as $row) {
+			foreach (($row['fields'] ?? array()) as $field) {
+				if (empty($field->visible_pdf) || (string) $field->field_type !== 'conformity_so_valid_obs') { continue; }
+				$stats['checks']++;
+				if (in_array((string) $field->value_text, array('valid', 'observation', 'not_applicable'), true)) { $stats['completed']++; }
+				if ((string) $field->value_text === 'observation') { $stats['observations']++; }
+			}
+			foreach (self::visibleMeasures($row['dc_measures'] ?? array(), false) as $measure) {
+				$stats['inputs']++;
+				if ((int) $measure->is_connected === 1) { $stats['connected']++; }
+			}
+		}
+		return $stats;
+	}
+
+	/**
+	 * Format an identity from frozen equipment or DC measure properties.
+	 * @param object $row Equipment or measure
+	 * @param bool $serial Include the serial number
+	 * @param string $emptyLabel Localized fallback for an unattached manual line
+	 * @return string Plain text, to escape at the destination
+	 */
+	public static function identity($row, $serial = true, $emptyLabel = '')
+	{
+		$marker = trim((string) ($row->equipment_marker ?? $row->inverter_marker ?? ''));
+		$name = trim((string) ($row->equipment_identification ?? $row->inverter_identification ?? ''));
+		if ($marker === '' && $name === '') {
+			$name = trim((string) ($row->equipment_ref ?? $row->inverter_ref ?? '').' '.(string) ($row->equipment_label ?? $row->inverter_label ?? ''));
+			// The source line distinguishes identical legacy equipment without inventing a physical marker.
+			$id = (int) ($row->fk_powerplant_line ?? $row->fk_inverter ?? 0);
+			if ($id > 0) {
+				$name .= ' #'.$id;
+			}
+		}
+		$parts = array_filter(array($marker, $name), static function ($part) { return $part !== ''; });
+		$number = trim((string) ($row->serial_number ?? $row->inverter_serial ?? ''));
+		if ($serial && $number !== '') {
+			$parts[] = $number;
+		}
+		return $parts ? implode(' | ', $parts) : $emptyLabel;
+	}
+
+	/**
+	 * Group by stable installed identity, never by a human-readable label.
+	 * @param array<int,object> $measures Frozen DC measures
+	 * @return array<string,array{identity:object,mppts:array<string,array<int,object>>}>
+	 */
+	public static function groupMeasures($measures)
+	{
+		usort($measures, static function ($a, $b) {
+			$plant = (int) $a->fk_powerplant <=> (int) $b->fk_powerplant;
+			$marker = strnatcasecmp((string) ($a->inverter_marker ?? ''), (string) ($b->inverter_marker ?? ''));
+			return $plant ?: $marker ?: ((int) $a->fk_inverter <=> (int) $b->fk_inverter)
+				?: ((int) $a->mppt_number <=> (int) $b->mppt_number)
+				?: ((int) $a->pv_input_number <=> (int) $b->pv_input_number)
+				?: ((int) $a->position <=> (int) $b->position);
+		});
+		$groups = array();
+		foreach ($measures as $row) {
+			$source = (int) $row->fk_inverter;
+			$key = (int) $row->fk_powerplant.':'.($source > 0 ? 'line:'.$source : 'manual:'.(string) $row->stable_key);
+			$mppt = $row->mppt_number === null ? '' : (string) $row->mppt_number;
+			if (!isset($groups[$key])) {
+				$groups[$key] = array('identity' => $row, 'mppts' => array());
+			}
+			$groups[$key]['mppts'][$mppt][] = $row;
+		}
+		return $groups;
+	}
+
+	/**
+	 * Prevent spreadsheet formula interpretation without losing serial leading zeroes.
+	 * @param string $value Original cell
+	 * @return string CSV text cell
+	 */
+	public static function csvText($value)
+	{
+		return preg_match('/^[\s\x00-\x20]*[=+@-]/u', $value) || preg_match('/^\d/', $value) ? "'".$value : $value;
+	}
+}

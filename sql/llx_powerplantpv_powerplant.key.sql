@@ -28,3 +28,5 @@ ALTER TABLE llx_powerplantpv_powerplant ADD INDEX idx_powerplantpv_powerplant_st
 --ALTER TABLE llx_powerplantpv_powerplant ADD UNIQUE INDEX uk_powerplantpv_powerplant_fieldxy(fieldx, fieldy);
 
 --ALTER TABLE llx_powerplantpv_powerplant ADD CONSTRAINT llx_powerplantpv_powerplant_fk_field FOREIGN KEY (fk_field) REFERENCES llx_powerplantpv_myotherobject(rowid);
+
+ALTER TABLE llx_powerplantpv_powerplant ADD INDEX idx_ppv_plant_illustration (fk_report_illustration);

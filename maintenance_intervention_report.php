@@ -60,6 +60,7 @@ dol_include_once('/powerplantpv/class/powerplantpvreportfield.class.php');
 dol_include_once('/powerplantpv/class/powerplantpvreportfile.class.php');
 dol_include_once('/powerplantpv/class/powerplantpvreportdcmeasure.class.php');
 dol_include_once('/powerplantpv/class/powerplantpvpowerplantsummary.class.php');
+require_once __DIR__.'/class/powerplantpvreportpresentation.class.php';
 dol_include_once('/fichinter/class/fichinter.class.php');
 require_once DOL_DOCUMENT_ROOT.'/core/lib/fichinter.lib.php';
 if (isModEnabled('project')) {
@@ -106,15 +107,18 @@ if (method_exists($intervention, 'fetch_thirdparty')) {
 	$intervention->fetch_thirdparty();
 }
 
-$permissiontoread = powerplantpvUserHasRightPath($user, array('ficheinter', 'lire')) && powerplantpvUserHasMaintenanceRight($user, 'read');
-$permissiontowrite = powerplantpvUserHasMaintenanceRight($user, 'report') || powerplantpvUserHasMaintenanceRight($user, 'write');
+$permissiontoread = $user->hasRight('ficheinter', 'lire') && $user->hasRight('powerplantpv', 'maintenance', 'read');
+$permissiontowrite = $user->hasRight('powerplantpv', 'maintenance', 'report') || $user->hasRight('powerplantpv', 'maintenance', 'write');
 $usercancreateintervention = $user->hasRight('ficheinter', 'creer');
 if (!$permissiontoread) {
 	accessforbidden();
 }
 
+restrictedArea($user, 'ficheinter', $id, 'fichinter');
+
 $locked = powerplantpvReportIsInterventionLocked($intervention);
 $caneditreport = $permissiontowrite && !$locked;
+$cangenerateserialannex = $permissiontowrite && $user->hasRight('ficheinter', 'creer');
 
 $builder = new PowerPlantPVReportBuilder($db);
 $report = new PowerPlantPVReport($db);
@@ -124,6 +128,7 @@ if ($reportFetch < 0) {
 }
 
 $sensitiveActions = array('save_draft', 'save', 'recalculate', 'upload_file', 'delete_file', 'add_dc_measure_line');
+if ($action === 'generate_serial_annex' && (!$cangenerateserialannex || !powerplantpvReportSubmittedTokenValid($token))) { accessforbidden(); }
 if (in_array($action, $sensitiveActions, true)) {
 	if (!$caneditreport) {
 		accessforbidden();
@@ -239,8 +244,12 @@ if (($action === 'save_draft' || $action === 'save') && $caneditreport) {
 			}
 			$redirectUrl = $_SERVER['PHP_SELF'].'?id='.(int) $id;
 			if ($action === 'save_draft') {
+				$savedCard = GETPOST('save_draft_submit', 'alphanohtml');
+				if (preg_match('/^[a-f0-9]{32}$/D', $savedCard) && isset($dcValues[$savedCard])) {
+					$redirectUrl .= '&report_saved_card='.urlencode($savedCard);
+				}
 				$scrollY = GETPOSTINT('powerplantpv_scroll_y');
-				if ($scrollY > 0) {
+				if ($scrollY > 0 && strpos($redirectUrl, 'report_saved_card=') === false) {
 					$redirectUrl .= '&report_scroll_y='.(int) $scrollY;
 				}
 			}
@@ -250,25 +259,20 @@ if (($action === 'save_draft' || $action === 'save') && $caneditreport) {
 	}
 }
 
-if ($action === 'add_dc_measure_line' && $caneditreport && $reportFetch > 0) {
-	$values = powerplantpvReportGetSubmittedValues();
-	$dateValues = powerplantpvReportGetSubmittedDateValues();
-	$dcValues = powerplantpvReportGetSubmittedDcMeasures();
-	$result = $builder->saveValues((int) $report->id, $values, $dateValues, $user, PowerPlantPVReport::STATUS_DRAFT);
-	if ($result >= 0) {
-		$result = $builder->saveDcMeasureValues((int) $report->id, $dcValues, $user);
-	}
-	if ($result >= 0) {
-		$result = $builder->addManualDcMeasureLine((int) $report->id, $dcSectionId, $user);
-	}
-	if ($result < 0) {
-		setEventMessages($builder->error, $builder->errors, 'errors');
+if ($action === 'generate_serial_annex' && $reportFetch > 0) {
+	require_once __DIR__.'/class/powerplantpvreportserialannex.class.php';
+	$annex = new PowerPlantPVReportSerialAnnex();
+	$annexTree = $builder->loadReportTree((int) $report->id);
+	if (!is_array($annexTree) || $annex->generate($intervention, $annexTree) < 0) {
+		setEventMessages($langs->trans($annex->error !== '' ? $annex->error : 'ErrorRecordNotFound'), null, 'errors');
 	} else {
-		setEventMessages($langs->trans('PowerPlantPVDcMeasureLineAdded'), null, 'mesgs');
-		header('Location: '.$_SERVER['PHP_SELF'].'?id='.(int) $id);
+		setEventMessages($langs->trans('PowerPlantPVSerialAnnexGenerated'), null, 'mesgs');
+		header('Location: '.DOL_URL_ROOT.'/fichinter/document.php?id='.(int) $id);
 		exit;
 	}
 }
+
+if ($action === 'add_dc_measure_line') { accessforbidden(); }
 
 if ($action === 'recalculate' && $caneditreport && $reportFetch > 0) {
 	$result = $builder->recalculateSnapshot($report, $intervention, $user, $manualServiceIds, PowerPlantPVReport::STATUS_DRAFT);
@@ -306,8 +310,8 @@ if ($action === 'delete_file' && $caneditreport && $reportFetch > 0) {
 $form = new Form($db);
 $title = $langs->trans('PowerPlantPVReportTab');
 
-$morejs = array('/powerplantpv/js/powerplantpv_report.js');
-$morecss = array('/powerplantpv/css/powerplantpv_report.css');
+$morejs = array('/powerplantpv/js/powerplantpv_report.js?v='.(int) filemtime(__DIR__.'/js/powerplantpv_report.js'));
+$morecss = array('/powerplantpv/css/powerplantpv_report.css?v='.(int) filemtime(__DIR__.'/css/powerplantpv_report.css'));
 llxHeader('', $title, '', '', 0, 0, $morejs, $morecss, '', 'mod-powerplantpv page-maintenance-intervention-report');
 
 $head = array();
@@ -446,9 +450,10 @@ if (is_array($tree) && empty($tree['can_generate'])) {
 		&& $noContractPrestations
 		&& !empty($manualOptions));
 	$formClass = 'powerplantpv-report-form'.($caneditreport ? ' powerplantpv-report-form-editable' : '');
-	print '<form id="powerplantpvreportform" class="'.dol_escape_htmltag($formClass).'" method="POST" enctype="multipart/form-data" action="'.dol_escape_htmltag($_SERVER['PHP_SELF']).'">';
+	print '<form id="powerplantpvreportform" class="'.dol_escape_htmltag($formClass).'" data-unsaved="'.dol_escape_htmltag($langs->transnoentities('PowerPlantPVUnsavedChanges')).'" data-saving="'.dol_escape_htmltag($langs->transnoentities('PowerPlantPVSavingReport')).'" data-leave="'.dol_escape_htmltag($langs->transnoentities('PowerPlantPVLeaveUnsaved')).'" method="POST" enctype="multipart/form-data" action="'.dol_escape_htmltag($_SERVER['PHP_SELF']).'">';
 	print '<input type="hidden" name="token" value="'.newToken().'">';
 	print '<input type="hidden" name="id" value="'.((int) $id).'">';
+	print '<div class="powerplantpv-report-save-state opacitymedium" role="status" aria-live="polite"></div>';
 	print '<input type="hidden" id="powerplantpv-scroll-y" name="powerplantpv_scroll_y" value="">';
 	print '<input type="hidden" id="powerplantpv-restore-scroll-y" value="'.((int) $reportRestoreScrollY).'">';
 
@@ -492,6 +497,15 @@ if (is_array($tree) && empty($tree['can_generate'])) {
 		print '<input type="submit" class="button button-save powerplantpv-floating-save" name="save_draft_submit" value="'.dol_escape_htmltag($langs->trans('Save')).'">';
 	}
 	print '</form>';
+
+	if ($cangenerateserialannex && $reportFetch > 0) {
+		print '<form method="POST" action="'.dol_escape_htmltag($_SERVER['PHP_SELF']).'" class="powerplantpv-inline-form">';
+		print '<input type="hidden" name="token" value="'.newToken().'">';
+		print '<input type="hidden" name="id" value="'.(int) $id.'">';
+		print '<input type="hidden" name="action" value="generate_serial_annex">';
+		print '<input type="submit" class="button" value="'.dol_escape_htmltag($langs->trans('PowerPlantPVSerialAnnex')).'">';
+		print '</form>';
+	}
 
 	if ($caneditreport && $reportFetch > 0 && !$snapshotNeedsRebuild) {
 		print '<div class="tabsAction">';
@@ -821,7 +835,7 @@ function powerplantpvReportFindMissingRequiredFields($reportId)
 		if (!is_object($field) || empty($field->is_required)) {
 			continue;
 		}
-		if (!empty($field->readonly) || (int) $field->visible_form <= 0) {
+		if (!empty($field->readonly) || (int) $field->visible_form <= 0 || PowerPlantPVReportPresentation::isRetiredProductionField((string) $field->field_code)) {
 			continue;
 		}
 		if (in_array((string) $field->field_type, array('computed', 'signature'), true)) {
@@ -835,6 +849,8 @@ function powerplantpvReportFindMissingRequiredFields($reportId)
 			$missing[] = $label !== '' ? $label : (string) $field->field_code;
 		}
 	}
+
+	// Optional installed identities must not become required report answers.
 
 	return $missing;
 }
@@ -955,7 +971,7 @@ function powerplantpvReportTreeHasNonDcSectionWithoutFields($tree)
  */
 function powerplantpvReportRenderSections($sections, $editable, $form, $powerplants = array())
 {
-	global $langs;
+	global $intervention, $langs;
 
 	if (empty($sections) && empty($powerplants)) {
 		print '<table class="noborder centpercent">';
@@ -1008,13 +1024,19 @@ function powerplantpvReportRenderSections($sections, $editable, $form, $powerpla
 				continue;
 			}
 			$label = powerplantpvReportLocalizedObjectLabel($section, 'section_label');
-			print '<details class="powerplantpv-report-section" open>';
-			print '<summary class="liste_titre"><span>'.dol_escape_htmltag($label).'</span>';
+			$identity = !empty($row['equipment']) ? (object) $row['equipment'] : null;
+			$identity = $identity && (string) $identity->equipment_type === 'INVERTER' ? $identity : null;
+			print '<details class="powerplantpv-report-section" data-state-key="section:'.hash('sha256', (string) ($section->fk_powerplant ?? '').':'.(string) $section->section_code.':'.(string) ($section->occurrence_key ?? '')).'" open>';
+			print '<summary class="liste_titre"><span>'.dol_escape_htmltag($label).'</span><span class="powerplantpv-report-progress opacitymedium" data-progress-label="'.dol_escape_htmltag($langs->transnoentities('PowerPlantPVReportProgress')).'"></span>';
+			if ($identity) {
+				print ' <span class="powerplantpv-identity-mobile">'.dol_escape_htmltag(PowerPlantPVReportPresentation::identity($identity, false)).'</span>';
+				print ' <span class="powerplantpv-identity-desktop">'.dol_escape_htmltag(PowerPlantPVReportPresentation::identity($identity)).'</span>';
+			}
 			if (!empty($section->is_required)) {
 				print '<span class="badge marginleftonlyshort">'.$langs->trans('Required').'</span>';
 			}
 			print '</summary>';
-			if (!empty($row['equipment'])) {
+			if (!empty($row['equipment']) && !$identity) {
 				print '<div class="refidno">'.dol_escape_htmltag(powerplantpvReportEquipmentLabel($row['equipment'])).'</div>';
 			}
 			if ((string) $section->section_code === 'DC_ELECTRICAL_MEASURE') {
@@ -1026,6 +1048,14 @@ function powerplantpvReportRenderSections($sections, $editable, $form, $powerpla
 			print '<div class="powerplantpv-report-fields">';
 			foreach ($fields as $field) {
 				powerplantpvReportRenderField($field, $editable, $form);
+			}
+			if ($section->section_code === 'PRODUCTION_READING' && empty($row['equipment'])) {
+				$endDate = (int) ($intervention->datei ?? 0);
+				$calculated = PowerPlantPVReportPresentation::selfConsumptionBetweenReadings($fields, $endDate);
+				if ($calculated !== null) {
+					print '<div class="powerplantpv-report-field"><strong>'.$langs->trans('PowerPlantPVSelfConsumptionBetweenReadings').'</strong> ';
+					print dol_escape_htmltag(price($calculated, 0, $langs, 0, 0).' kWh').'</div>';
+				}
 			}
 			print '</div>';
 			print '</details>';
@@ -1234,7 +1264,12 @@ function powerplantpvReportRenderSummaryTable($columns, $rows)
 			}
 			$key = (string) $column['key'];
 			$value = isset($row[$key]) ? (string) $row[$key] : '';
-			print '<td>'.dol_htmlentitiesbr($value).'</td>';
+			if ($key === 'serial' && !empty($row['serial_powerplant_id'])) {
+				$url = dol_buildpath('/powerplantpv/powerplant_composition.php', 1).'?id='.(int) $row['serial_powerplant_id'];
+				print '<td><a href="'.dol_escape_htmltag($url).'">'.dol_escape_htmltag($langs->trans('PowerPlantPVConsultPowerplant')).'</a></td>';
+			} else {
+				print '<td>'.dol_htmlentitiesbr($value).'</td>';
+			}
 		}
 		print '</tr>';
 	}
@@ -1305,7 +1340,8 @@ function powerplantpvReportFilterRenderableFields($fields)
 {
 	$filtered = array();
 	foreach ($fields as $field) {
-		if (!is_object($field) || (string) $field->field_type === 'signature') {
+		if (!is_object($field) || (int) $field->visible_form <= 0 || (string) $field->field_type === 'signature'
+			|| PowerPlantPVReportPresentation::isRetiredProductionField((string) $field->field_code)) {
 			continue;
 		}
 		$filtered[] = $field;
@@ -1327,52 +1363,27 @@ function powerplantpvReportRenderDcMeasures($section, $measures, $editable, $for
 {
 	global $langs;
 
+	$measures = PowerPlantPVReportPresentation::visibleMeasures($measures, (bool) getDolGlobalInt('POWERPLANTPV_HIDE_UNUSED_MPPT'));
 	if (empty($measures)) {
-		print '<div class="opacitymedium powerplantpv-report-manual">'.$langs->trans('PowerPlantPVDcMeasureNoConfigurationManualMode').'</div>';
-		if ($editable && !empty($section->id)) {
-			print '<input type="submit" class="button" formaction="'.dol_escape_htmltag($_SERVER['PHP_SELF']).'?id='.GETPOSTINT('id').'&action=add_dc_measure_line&add_dc_section_id='.((int) $section->id).'" value="'.dol_escape_htmltag($langs->trans('PowerPlantPVAddDcMeasureLine')).'">';
-		} elseif ($editable) {
-			print '<div class="opacitymedium">'.$langs->trans('PowerPlantPVReportManualLineAfterFirstSave').'</div>';
-		}
+		print '<div class="opacitymedium">'.$langs->trans('NoRecordFound').'</div>';
 		return;
 	}
 
-	$grouped = array();
-	foreach ($measures as $measure) {
-		$inverterKey = trim((string) $measure->inverter_label) !== '' ? (string) $measure->inverter_label : (string) $measure->inverter_ref;
-		if ($inverterKey === '') {
-			$inverterKey = $langs->trans('PowerPlantPVManualDcLine');
-		}
-		$mpptKey = $measure->mppt_number !== null && (string) $measure->mppt_number !== '' ? powerplantpvReportDcDisplayIndex($measure->mppt_number) : $langs->trans('PowerPlantPVManual');
-		if (!isset($grouped[$inverterKey])) {
-			$grouped[$inverterKey] = array();
-		}
-		if (!isset($grouped[$inverterKey][$mpptKey])) {
-			$grouped[$inverterKey][$mpptKey] = array();
-		}
-		$grouped[$inverterKey][$mpptKey][] = $measure;
-	}
-
+	$grouped = PowerPlantPVReportPresentation::groupMeasures($measures);
 	print '<div class="powerplantpv-dc-measures">';
-	foreach ($grouped as $inverterLabel => $mppts) {
-		print '<div class="powerplantpv-dc-inverter">';
-		print '<div class="liste_titre">'.dol_escape_htmltag($langs->trans('PowerPlantPVInverter')).' : '.dol_escape_htmltag((string) $inverterLabel).'</div>';
-		foreach ($mppts as $mpptLabel => $rows) {
-			print '<div class="powerplantpv-dc-mppt">';
-			print '<div class="opacitymedium">'.dol_escape_htmltag($langs->trans('PowerPlantPVMPPT')).' '.dol_escape_htmltag((string) $mpptLabel).'</div>';
+	foreach ($grouped as $groupKey => $group) {
+		print '<details class="powerplantpv-dc-inverter" data-state-key="inverter:'.dol_escape_htmltag($groupKey).'" open><summary class="liste_titre">';
+		print '<span class="powerplantpv-identity-mobile">'.dol_escape_htmltag(PowerPlantPVReportPresentation::identity($group['identity'], false, $langs->trans('PowerPlantPVManualDcLine'))).'</span>';
+		print '<span class="powerplantpv-identity-desktop">'.dol_escape_htmltag(PowerPlantPVReportPresentation::identity($group['identity'], true, $langs->trans('PowerPlantPVManualDcLine'))).'</span></summary>';
+		foreach ($group['mppts'] as $mpptLabel => $rows) {
+			print '<details class="powerplantpv-dc-mppt" data-state-key="mppt:'.dol_escape_htmltag($groupKey.':'.$mpptLabel).'" open><summary>'.dol_escape_htmltag($langs->trans('PowerPlantPVMPPT').' '.($mpptLabel !== '' ? powerplantpvReportDcDisplayIndex($mpptLabel) : $langs->trans('PowerPlantPVManual'))).'</summary>';
 			print '<div class="powerplantpv-dc-measure-grid">';
 			foreach ($rows as $measure) {
 				powerplantpvReportRenderDcMeasureCard($measure, $editable, $form);
 			}
-			print '</div>';
-			print '</div>';
+			print '</div></details>';
 		}
-		print '</div>';
-	}
-	if ($editable && !empty($section->id)) {
-		print '<div class="powerplantpv-report-actions">';
-		print '<input type="submit" class="button" formaction="'.dol_escape_htmltag($_SERVER['PHP_SELF']).'?id='.GETPOSTINT('id').'&action=add_dc_measure_line&add_dc_section_id='.((int) $section->id).'" value="'.dol_escape_htmltag($langs->trans('PowerPlantPVAddDcMeasureLine')).'">';
-		print '</div>';
+		print '</details>';
 	}
 	print '</div>';
 }
@@ -1554,17 +1565,22 @@ function powerplantpvReportRenderDcMeasureCard($measure, $editable, $form)
 		'not_applicable' => $langs->trans('PowerPlantPVNotApplicableShort'),
 	);
 
-	print '<div class="powerplantpv-dc-card">';
-	print '<div class="powerplantpv-dc-card-title">';
+	print '<details class="powerplantpv-dc-card" data-card-key="'.$key.'" open>';
+	print '<summary class="powerplantpv-dc-card-title"><span>';
 	print dol_escape_htmltag($langs->trans('PowerPlantPVPVInput')).' '.dol_escape_htmltag(powerplantpvReportDcDisplayIndex($measure->pv_input_number));
 	if ((string) $measure->string_ref !== '') {
 		print ' - '.dol_escape_htmltag((string) $measure->string_ref);
 	}
-	print '</div>';
+	print '</span>';
+	if ($editable && ($isManual || $isUsed)) {
+		$saveLabel = dol_escape_htmltag($langs->trans('PowerPlantPVSaveCollapse'));
+		print '<button type="submit" class="button powerplantpv-save-collapse" name="save_draft_submit" value="'.$key.'" title="'.$saveLabel.'" aria-label="'.$saveLabel.'">'.img_picto('', 'fa-save').'</button>';
+	}
+	print '</summary><div class="powerplantpv-dc-card-body">';
 
 	if (!$isManual && !$isUsed) {
 		print '<div class="opacitymedium powerplantpv-dc-not-used">'.dol_escape_htmltag($langs->trans('PowerPlantPVNotUsedByPowerPlant')).'</div>';
-		print '</div>';
+		print '</div></details>';
 		return;
 	}
 
@@ -1578,7 +1594,7 @@ function powerplantpvReportRenderDcMeasureCard($measure, $editable, $form)
 		print '<span>'.dol_escape_htmltag($langs->trans('PowerPlantPVInsulationPositiveToGround')).' : '.dol_escape_htmltag(powerplantpvReportDcDisplayNumber($measure, $measure->insulation_positive_to_ground, 'MOhm')).'</span>';
 		print '<span>'.dol_escape_htmltag($langs->trans('PowerPlantPVInsulationNegativeToGround')).' : '.dol_escape_htmltag(powerplantpvReportDcDisplayNumber($measure, $measure->insulation_negative_to_ground, 'MOhm')).'</span>';
 		print '<span>'.dol_htmlentitiesbr(powerplantpvReportDcDisplayText($measure, $measure->observation, false)).'</span>';
-		print '</div></div>';
+		print '</div></div></details>';
 		return;
 	}
 
@@ -1602,7 +1618,7 @@ function powerplantpvReportRenderDcMeasureCard($measure, $editable, $form)
 	print '<label>'.$langs->trans('PowerPlantPVInsulationPositiveToGround').'<span class="powerplantpv-control-with-unit"><input type="text" class="flat powerplantpv-report-control right" name="'.$name.'[insulation_positive_to_ground]" value="'.dol_escape_htmltag(powerplantpvReportDcInputNumberValue($measure->insulation_positive_to_ground)).'"><span class="opacitymedium">MOhm</span></span></label>';
 	print '<label>'.$langs->trans('PowerPlantPVInsulationNegativeToGround').'<span class="powerplantpv-control-with-unit"><input type="text" class="flat powerplantpv-report-control right" name="'.$name.'[insulation_negative_to_ground]" value="'.dol_escape_htmltag(powerplantpvReportDcInputNumberValue($measure->insulation_negative_to_ground)).'"><span class="opacitymedium">MOhm</span></span></label>';
 	print '<label class="powerplantpv-dc-observation">'.$langs->trans('Observation').'<textarea class="flat powerplantpv-report-control" rows="2" name="'.$name.'[observation]">'.dol_escape_htmltag((string) $measure->observation).'</textarea></label>';
-	print '</div>';
+	print '</div></details>';
 }
 
 /**
@@ -1626,7 +1642,9 @@ function powerplantpvReportRenderField($field, $editable, $form)
 	$fieldClass .= powerplantpvReportFieldCanInline($field) ? ' powerplantpv-report-field-inline' : ' powerplantpv-report-field-block';
 	$inputClass = 'powerplantpv-report-input'.(powerplantpvReportFieldHasInlineUnit($field) ? ' powerplantpv-report-input-with-unit' : '');
 
-	print '<div class="'.$fieldClass.'">';
+	$progressRequired = $fieldEditable && !empty($field->is_required) && !in_array($type, array('computed', 'signature'), true) && !powerplantpvReportFieldIsPreviousReading($field);
+	$progressFilled = !$progressRequired || !powerplantpvReportRequiredFieldIsEmpty($field);
+	print '<div class="'.$fieldClass.'" data-progress-type="'.dol_escape_htmltag($type).'" data-progress-required="'.($progressRequired ? '1' : '0').'" data-progress-filled="'.($progressFilled ? '1' : '0').'">';
 	print '<label>'.dol_escape_htmltag($label);
 	if (!empty($field->is_required)) {
 		print ' <span class="required">*</span>';
@@ -1760,6 +1778,10 @@ function powerplantpvReportLocalizedObjectLabel($object, $baseProperty)
 {
 	global $langs;
 
+	if ($baseProperty === 'field_label' && is_object($langs)) {
+		$indexLabel = PowerPlantPVReportPresentation::inverterIndexLabel($object, $langs);
+		if ($indexLabel !== null) { return $indexLabel; }
+	}
 	$label = isset($object->{$baseProperty}) ? (string) $object->{$baseProperty} : '';
 	$englishProperty = $baseProperty.'_en';
 	if (is_object($langs) && $langs->defaultlang == 'en_US' && !empty($object->{$englishProperty})) {
@@ -1835,7 +1857,7 @@ function powerplantpvReportEquipmentLabel($equipment)
 	}
 
 	$output = trim($ref.($label !== '' ? ' - '.$label : ''));
-	if ($serial !== '') {
+	if ($serial !== '' && (is_array($equipment) ? ($equipment['equipment_type'] ?? '') : ($equipment->equipment_type ?? '')) !== 'PANEL') {
 		$output .= ($output !== '' ? ' / ' : '').$serial;
 	}
 
