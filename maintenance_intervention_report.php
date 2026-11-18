@@ -930,6 +930,9 @@ function powerplantpvReportRequiredFieldIsEmpty($field)
 	if ($type === 'date' || $type === 'datetime') {
 		return empty($field->value_date);
 	}
+	if (PowerPlantPVReportPresentation::allowsNotApplicable((string) $field->field_code, $type)) {
+		return !in_array((string) $field->value_text, array('0', '1', 'not_applicable'), true);
+	}
 	if ($type === 'checkbox' || $type === 'yesno') {
 		return !in_array((string) $field->value_text, array('0', '1'), true);
 	}
@@ -1698,6 +1701,7 @@ function powerplantpvReportRenderField($field, $editable, $form)
 	$name = 'report_values['.dol_escape_htmltag((string) $field->stable_key).']';
 	$type = (string) $field->field_type;
 	$value = powerplantpvReportFieldDisplayValue($field);
+	$allowsNotApplicable = PowerPlantPVReportPresentation::allowsNotApplicable((string) $field->field_code, $type);
 	$fieldClass = 'powerplantpv-report-field';
 	$fieldClass .= powerplantpvReportFieldCanInline($field) ? ' powerplantpv-report-field-inline' : ' powerplantpv-report-field-block';
 	$inputClass = 'powerplantpv-report-input'.(powerplantpvReportFieldHasInlineUnit($field) ? ' powerplantpv-report-input-with-unit' : '');
@@ -1721,6 +1725,9 @@ function powerplantpvReportRenderField($field, $editable, $form)
 			print '<div class="powerplantpv-report-readonly">';
 			powerplantpvReportPrintHtmlValue((string) $value);
 			print '</div>';
+		} elseif ($allowsNotApplicable) {
+			$options = powerplantpvReportFieldOptions($field);
+			print '<div class="powerplantpv-report-readonly">'.dol_escape_htmltag($options[$value] ?? '').'</div>';
 		} elseif ($value === '' && powerplantpvReportFieldIsPreviousReading($field)) {
 			print '<div class="powerplantpv-report-readonly opacitymedium">'.$langs->trans('PowerPlantPVReportNoPreviousReading').'</div>';
 		} else {
@@ -1745,6 +1752,8 @@ function powerplantpvReportRenderField($field, $editable, $form)
 		print '<div class="powerplantpv-report-date">';
 		print $form->selectDate($timestamp, 'report_date_'.$hash, ($type === 'datetime' ? 1 : 0), ($type === 'datetime' ? 1 : 0), 1, 'powerplantpvreportform', 1, 1);
 		print '</div>';
+	} elseif ($allowsNotApplicable) {
+		print $form->selectarray($name, powerplantpvReportFieldOptions($field), (string) $value, 0, 0, 0, '', 0, 0, 0, '', 'powerplantpv-report-control');
 	} elseif ($type === 'checkbox' || $type === 'yesno') {
 		print $form->selectarray($name, array(0 => $langs->trans('No'), 1 => $langs->trans('Yes')), (int) $value, 0, 0, 0, '', 0, 0, 0, '', 'powerplantpv-report-control');
 	} elseif ($type === 'select' || $type === 'conformity_so_valid_obs') {
@@ -1996,6 +2005,9 @@ function powerplantpvReportFieldDisplayValue($field)
 	if ((string) $field->field_type === 'date' || (string) $field->field_type === 'datetime') {
 		return !empty($field->value_date) ? dol_print_date(strtotime((string) $field->value_date), ((string) $field->field_type === 'datetime' ? 'dayhour' : 'day')) : '';
 	}
+	if (PowerPlantPVReportPresentation::allowsNotApplicable((string) $field->field_code, (string) $field->field_type)) {
+		return (string) $field->value_text;
+	}
 	if ((string) $field->field_type === 'checkbox' || (string) $field->field_type === 'yesno') {
 		return !empty($field->value_text) ? '1' : '0';
 	}
@@ -2046,6 +2058,14 @@ function powerplantpvReportFieldOptions($field)
 {
 	global $langs;
 
+	if (PowerPlantPVReportPresentation::allowsNotApplicable((string) $field->field_code, (string) $field->field_type)) {
+		return array(
+			'' => $langs->trans('PowerPlantPVDataNotFilled'),
+			'1' => $langs->trans('Yes'),
+			'0' => $langs->trans('No'),
+			'not_applicable' => $langs->trans('PowerPlantPVReportConformityNotApplicable'),
+		);
+	}
 	if ((string) $field->field_type === 'conformity_so_valid_obs') {
 		return array(
 			'valid' => $langs->trans('PowerPlantPVReportConformityValid'),

@@ -1380,9 +1380,9 @@ class pdf_powerplantpvreport extends ModelePDFFicheinter
 	 */
 	protected function _pagefoot(&$pdf, $object, $outputlangs, $hidefreetext = 0)
 	{
-		$showdetails = !getDolGlobalInt('MAIN_GENERATE_DOCUMENTS_SHOW_FOOT_DETAILS') ? 0 : getDolGlobalInt('MAIN_GENERATE_DOCUMENTS_SHOW_FOOT_DETAILS');
+		$showdetails = getDolGlobalInt('MAIN_GENERATE_DOCUMENTS_SHOW_FOOT_DETAILS', 0);
 
-		return pdf_pagefoot($pdf, $outputlangs, 'POWERPLANTPV_REPORT_PDF_LEGAL_NOTICE', $this->emetteur, $this->marge_basse, $this->marge_gauche, $this->page_hauteur, $object, $showdetails, $hidefreetext, $this->page_largeur, $this->watermark);
+		return pdf_pagefoot($pdf, $outputlangs, 'FICHINTER_FREE_TEXT', $this->emetteur, $this->marge_basse, $this->marge_gauche, $this->page_hauteur, $object, $showdetails, $hidefreetext, $this->page_largeur, $this->watermark);
 	}
 
 	/**
@@ -1392,7 +1392,7 @@ class pdf_powerplantpvreport extends ModelePDFFicheinter
 	 */
 	protected function computeFooterHeight()
 	{
-		$legalNotice = dol_string_nohtmltag(getDolGlobalString('POWERPLANTPV_REPORT_PDF_LEGAL_NOTICE'));
+		$legalNotice = dol_string_nohtmltag(getDolGlobalString('FICHINTER_FREE_TEXT'));
 		$legalHeight = $legalNotice === '' ? 0 : min(26, max(6, (int) ceil(dol_strlen($legalNotice) / 95) * 4));
 		$detailsHeight = getDolGlobalInt('MAIN_GENERATE_DOCUMENTS_SHOW_FOOT_DETAILS') ? 22 : 12;
 

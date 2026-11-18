@@ -303,6 +303,10 @@ class PowerPlantPVReportPdfDataset
 		}
 
 		if (in_array($type, array('checkbox', 'yesno', 'boolean'), true)) {
+			if ((string) $field->value_text === 'not_applicable'
+				&& PowerPlantPVReportPresentation::allowsNotApplicable((string) $field->field_code, $type)) {
+				return $outputlangs->transnoentities('PowerPlantPVReportConformityNotApplicable');
+			}
 			if ((string) $field->value_text === '') {
 				return '';
 			}

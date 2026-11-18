@@ -118,6 +118,7 @@ $plant = (object) array('id' => 7, 'fk_powerplant' => 18, 'powerplant_ref' => 'P
 $sections = array();
 $sections[] = visualSection('ELECTRICAL_BOX', 'Vérifications coffrets', array(
 	visualField('BOX_VISUAL_ENVELOPE', 'Contrôle visuel enveloppe : casse, étanchéité, corrosion', 'conformity_so_valid_obs', 'valid'),
+	visualField('BOX_JOINTS_HINGES_CLEANING', 'Nettoyage / lubrification des joints', 'yesno', 'not_applicable'),
 	visualField('BOX_EARTHING_SIGNAGE', 'Contrôle présence mise à la terre et signalétique réglementaire', 'conformity_so_valid_obs', 'observation'),
 	visualField('BOX_SECTION_SWITCH', 'Manipulation de l’interrupteur sectionneur', 'boolean', '0'),
 	visualField('BOX_EMERGENCY_STOP_CHECK', 'Vérification fonctionnement arrêt d’urgence', 'conformity_so_valid_obs', 'valid'),
@@ -235,7 +236,9 @@ visualPdfCheck(strpos($default, $langs->transnoentities('PowerPlantPVVisualInsul
 // Card titles may wrap: compare the flattened text.
 $flat = static function ($text) { return preg_replace('/\s+/u', ' ', $text); };
 $mixed = $flat($contents['mixed']);
-visualPdfCheck(strpos($flat($default), $langs->transnoentities('PowerPlantPVVisualAnswerSummary', 19, 20)) !== false, 'Explicit No, not applicable and unanswered states use the same coverage count');
+visualPdfCheck(strpos($flat($default), $langs->transnoentities('PowerPlantPVVisualAnswerSummary', 20, 21)) !== false, 'The additional not-applicable answer counts as completed');
+visualPdfCheck(strpos($flat($default), 'Nettoyage / lubrification des joints Sans objet') !== false, 'The cabinet cleaning row shows Sans objet in the PDF');
+visualPdfCheck(strpos($default, 'Bleu : tension') === false && strpos($default, 'Pointillés :') === false, 'The chart legend uses graphic markers instead of color names');
 visualPdfCheck(strpos($mixed, $langs->transnoentities('PowerPlantPVReportChartMissing')) !== false && strpos($mixed, $langs->transnoentities('PowerPlantPVVisualToCheck')) !== false, 'Incomplete insulation and an unconfirmed zero retain distinct messages');
 visualPdfCheck(strpos($mixed, $langs->transnoentities('PowerPlantPVPositiveToGroundVoltage')) !== false
 	&& strpos($mixed, $langs->transnoentities('PowerPlantPVInsulationNegativeToGround')) !== false

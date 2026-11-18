@@ -227,6 +227,11 @@ $requiredField->value_number = null;
 checkMaintenance(powerplantpvReportFindMissingRequiredFields(1) === array('Mesure requise'), 'Missing required measurement still blocks finalization');
 $requiredField->field_type = 'yesno'; $requiredField->value_text = '0';
 checkMaintenance(powerplantpvReportFindMissingRequiredFields(1) === array(), 'Explicit No remains a completed required answer');
+$requiredField->field_code = 'BOX_JOINTS_HINGES_CLEANING';
+$requiredField->value_text = 'not_applicable';
+checkMaintenance(powerplantpvReportFindMissingRequiredFields(1) === array(), 'Cabinet cleaning can be marked not applicable');
+$requiredField->field_code = 'BOX_SECTION_SWITCH';
+checkMaintenance(powerplantpvReportFindMissingRequiredFields(1) === array('Mesure requise'), 'Other yes/no checks still require an explicit yes or no');
 
 require_once dirname(__DIR__).'/class/powerplantpvinverterproduction.class.php';
 require_once dirname(__DIR__).'/class/powerplantpvreportillustration.class.php';

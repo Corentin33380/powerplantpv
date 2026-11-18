@@ -84,6 +84,13 @@ nativeMaintenanceCheck(method_exists($descriptor, 'init'), 'Descriptor loads bef
 
 require_once $module.'/class/powerplantpvreportbuilder.class.php';
 $builder = (new ReflectionClass('PowerPlantPVReportBuilder'))->newInstanceWithoutConstructor();
+$cleaning = (new ReflectionClass('PowerPlantPVReportField'))->newInstanceWithoutConstructor();
+$cleaning->field_type = 'yesno';
+$cleaning->field_code = 'BOX_JOINTS_HINGES_CLEANING';
+$assignField = new ReflectionMethod($builder, 'assignSubmittedValueToField');
+nativeMaintenanceCheck($assignField->invoke($builder, $cleaning, 'not_applicable') && $cleaning->value_text === 'not_applicable', 'Save retains the third cabinet cleaning answer');
+nativeMaintenanceCheck(!$assignField->invoke($builder, $cleaning, null) && !$assignField->invoke($builder, $cleaning, array('0')) && $cleaning->value_text === 'not_applicable', 'Missing or invalid input preserves the existing third answer');
+nativeMaintenanceCheck($assignField->invoke($builder, $cleaning, '0') && $cleaning->value_text === '0', 'Explicit No remains distinct from not applicable');
 $guess = new ReflectionMethod($builder, 'guessEquipmentType'); $guess->setAccessible(true);
 nativeMaintenanceCheck($guess->invoke($builder, (object) array('category_code'=>'ONDACC','inverter_id'=>20,'product_ref'=>'INV-CABLE','product_label'=>'Accessoire onduleur')) === 'OTHER', 'Native accessory category is not an installed inverter');
 nativeMaintenanceCheck($guess->invoke($builder, (object) array('category_code'=>'MODULE','product_ref'=>'PV','product_label'=>'Panel')) === 'PANEL', 'Native PV category identifies panel serial policy');

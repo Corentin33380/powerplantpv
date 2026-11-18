@@ -6,6 +6,12 @@
 /** Shared presentation of installed equipment and frozen report data. */
 class PowerPlantPVReportPresentation
 {
+	/** Allow a third answer on the standard cabinet cleaning check, including legacy snapshots. */
+	public static function allowsNotApplicable(string $code, string $type): bool
+	{
+		return $code === 'BOX_JOINTS_HINGES_CLEANING' && in_array($type, array('yesno', 'boolean'), true);
+	}
+
 	/** @param string $code @return bool */
 	public static function isRetiredProductionField($code)
 	{

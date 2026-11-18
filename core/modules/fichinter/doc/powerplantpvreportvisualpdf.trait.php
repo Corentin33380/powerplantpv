@@ -158,6 +158,9 @@ trait PowerPlantPVReportVisualPdf
 					$state = array_key_exists($value, $counts) ? $value : 'missing';
 				} elseif ((string) $row['section']->section_code !== 'DC_ELECTRICAL_MEASURE' && in_array($type, array('yesno', 'boolean', 'checkbox'), true)) {
 					$state = $value === '1' ? 'valid' : ($value === '0' ? 'observation' : 'missing');
+					if ($value === 'not_applicable' && PowerPlantPVReportPresentation::allowsNotApplicable((string) $field->field_code, $type)) {
+						$state = 'not_applicable';
+					}
 				}
 				if ($state !== null) {
 					$counts[$state]++;
@@ -214,16 +217,25 @@ trait PowerPlantPVReportVisualPdf
 		$this->renderSourceServices($pdf, $this->filterSourceServicesByPowerplant($dataset['source_services'], (int) $plant->id), $langs);
 	}
 
-	/** @param TCPDF|TCPDI $pdf @param array<int,array{0:string,1:string}> $cards @param int $columns @param float $height @return void */
+	/** @param TCPDF|TCPDI $pdf @param array<int,array{0:string,1:string,photo?:array{path:string,width:float,height:float,caption:string}}> $cards @param int $columns @param float $height @return void */
 	protected function visualKpis(&$pdf, $cards, $columns = 3, $height = 20)
 	{
 		$width = ($this->page_largeur - $this->marge_gauche - $this->marge_droite - ($columns - 1) * 3) / $columns;
 		foreach (array_chunk($cards, $columns) as $line) {
-			$this->ensureSpace($pdf, $height + 3); $y = $pdf->GetY();
+			$rowHeight = $height;
+			foreach ($line as $card) {
+				if (isset($card['photo'])) {
+					$rowHeight = max($rowHeight, $height + $card['photo']['height'] + 12);
+				}
+			}
+			$this->ensureSpace($pdf, $rowHeight + 3);
+			$y = $pdf->GetY();
 			foreach ($line as $i => $card) {
 				$x = $this->marge_gauche + $i * ($width + 3);
 				$pdf->SetFillColor(232, 243, 253);
-				$pdf->RoundedRect($x, $y, $width, $height, 2.65, '1111', 'F');
+				$photo = $card['photo'] ?? null;
+				$cardHeight = $photo === null ? $height : $height + $photo['height'] + 12;
+				$pdf->RoundedRect($x, $y, $width, $cardHeight, 2.65, '1111', 'F');
 				$value = $this->currentOutputLangs->convToOutputCharset($card[0]);
 				$pdf->SetTextColor(23, 40, 74);
 				$pdf->SetFont('', 'B', 17);
@@ -234,8 +246,14 @@ trait PowerPlantPVReportVisualPdf
 				$pdf->SetTextColor(102, 112, 133);
 				$label = $this->currentOutputLangs->convToOutputCharset($columns === 4 ? dol_strtoupper($card[1]) : $card[1]);
 				$pdf->MultiCell($width - 6, 0, $label, 0, 'L', false, 1, $x + 3, max($labelY, $y + ($columns === 4 ? 11 : 14)));
+				if ($photo !== null) {
+					$photoY = $y + $height;
+					$pdf->Image($photo['path'], $x + ($width - $photo['width']) / 2, $photoY, $photo['width'], $photo['height']);
+					$pdf->SetFont('', '', 7);
+					$pdf->MultiCell($width - 6, 0, $photo['caption'], 0, 'C', false, 1, $x + 3, $photoY + $photo['height'] + 2);
+				}
 			}
-			$pdf->SetY($y + $height + 3);
+			$pdf->SetY($y + $rowHeight + 3);
 		}
 		$pdf->SetFont('', '', $this->defaultFontSize); $pdf->SetTextColor(23, 40, 74);
 	}
@@ -429,6 +447,9 @@ trait PowerPlantPVReportVisualPdf
 			if ((string) $field->field_code === 'INVERTER_START_POWER') { $power = $value; continue; }
 			$code = (string) $field->value_text;
 			$status = (string) $field->field_type === 'conformity_so_valid_obs' ? ($code === 'valid' ? 'good' : ($code === 'observation' ? 'warning' : 'neutral')) : (in_array((string) $field->field_type, array('yesno','boolean','checkbox'), true) ? ($code === '' ? 'neutral' : ($code === '1' ? 'good' : 'warning')) : 'text');
+			if ($code === 'not_applicable' && PowerPlantPVReportPresentation::allowsNotApplicable((string) $field->field_code, (string) $field->field_type)) {
+				$status = 'neutral';
+			}
 			$rows[] = array('label'=>PowerPlantPVReportPdfDataset::localizedProperty($field,'field_label',$langs), 'value'=>$value !== '' ? $value : $langs->transnoentities('PowerPlantPVDataNotFilled'), 'status'=>$status);
 		}
 		$metadata = is_object($equipment) && !getDolGlobalInt('POWERPLANTPV_REPORT_PDF_HIDE_EQUIPMENT') ? trim($this->formatEquipmentProductRef($equipment).' | '.(string) $equipment->serial_number) : '';
@@ -610,8 +631,13 @@ trait PowerPlantPVReportVisualPdf
 	/** @param TCPDF|TCPDI $pdf @param array<string,mixed> $row @param array<string,mixed> $dataset @param Translate $langs @return void */
 	protected function visualReadings(&$pdf, $row, $dataset, $langs, &$productionTitle)
 	{
+		require_once __DIR__.'/../../../../lib/powerplantpv_indexphoto.lib.php';
+
 		$fields=PowerPlantPVReportPdfDataset::fieldsByCode($this->filterVisibleFields($row['fields'])); $cards=array();
 		$title=!empty($row['equipment'])?$this->visualIdentity($row['equipment'],true):$langs->transnoentities('PowerPlantPVVisualCommonMeters');
+		$cardHeight = 28;
+		$firstRowHeight = $cardHeight;
+		$photoMaxWidth = ($this->page_largeur - $this->marge_gauche - $this->marge_droite - 6) / 3 - 6;
 		foreach ($fields as $code=>$field) {
 			if (substr($code,-10)==='_N_MINUS_1' || !PowerPlantPVReportPdfDataset::isNumericFieldType($field->field_type)) { continue; }
 			$value=$field->value_number; $label=PowerPlantPVReportPresentation::inverterIndexLabel($field, $langs) ?? PowerPlantPVReportPdfDataset::localizedProperty($field,'field_label',$langs); $previous=$fields[$code.'_N_MINUS_1'] ?? null;
@@ -619,7 +645,22 @@ trait PowerPlantPVReportVisualPdf
 			if (!$hasValue) { continue; }
 			$history=$hasPrevious ? 'N-1 : '.price($previous->value_number).' '.(string)$field->unit : $langs->transnoentities('PowerPlantPVReportNoPreviousReading');
 			if ($hasPrevious) { $delta=(float)$value-(float)$previous->value_number; $history.="\n".$langs->transnoentities('PowerPlantPVVisualDelta').' : '.($delta>=0?'+':'-').price(abs($delta)).' '.(string)$field->unit; }
-			$cards[]=array(price($value).' '.(string)$field->unit, $label."\n".$history);
+			$card = array(price($value).' '.(string) $field->unit, $label."\n".$history);
+			$path = $field instanceof PowerPlantPVReportField ? powerplantpvReportIndexPhotoPath($field) : '';
+			$size = $path !== '' && is_file($path) && is_readable($path) ? @getimagesize($path) : false;
+			if ($size && $size[0] > 0 && $size[1] > 0) {
+				$scale = min($photoMaxWidth / $size[0], 74 / $size[1]);
+				$card['photo'] = array(
+					'path' => $path,
+					'width' => $scale * $size[0],
+					'height' => $scale * $size[1],
+					'caption' => $langs->convToOutputCharset(powerplantpvIndexPhotoCaption($path, $langs)),
+				);
+				if (count($cards) < 3) {
+					$firstRowHeight = max($firstRowHeight, $cardHeight + $card['photo']['height'] + 12);
+				}
+			}
+			$cards[] = $card;
 		}
 		if (empty($row['equipment'])) {
 			$calculated = PowerPlantPVReportPresentation::selfConsumptionBetweenReadings(array_values($fields), (int) PowerPlantPVReportPdfDataset::normalizeDateValue($this->currentObject->datei ?? null));
@@ -637,14 +678,13 @@ trait PowerPlantPVReportVisualPdf
 		if (!$cards && !$extras) {
 			return;
 		}
-		if ($cards) { $this->ensureSpace($pdf, $productionTitle !== '' ? 58 : 49); }
+		if ($cards) { $this->ensureSpace($pdf, $firstRowHeight + ($productionTitle !== '' ? 24 : 15)); }
 		if ($productionTitle !== '') {
 			$this->renderSectionTitle($pdf, $productionTitle, 2);
 			$productionTitle = '';
 		}
 		$this->renderSectionTitle($pdf, $title, 3);
-		if ($cards) { $this->visualKpis($pdf,$cards,3,34); }
-		$this->renderReadingPhotos($pdf, $fields, $langs);
+		if ($cards) { $this->visualKpis($pdf, $cards, 3, $cardHeight); }
 		$row['fields'] = array_values($extras);
 		$this->visualSectionExtras($pdf,$row,$dataset,$langs,true);
 	}
@@ -670,16 +710,32 @@ trait PowerPlantPVReportVisualPdf
 			$incomplete = count($volts) < count($chunk) || count($insulation) < 2 * count($chunk);
 			$zeroIso = !$groundVoltage && count($insulation) === 2 * count($chunk) && min($insulation) === 0.0 && max($insulation) === 0.0;
 			$allIsoValid = count(array_filter($chunk, static function ($row) { return (string) $row->insulation_status === 'valid'; })) === count($chunk);
-			$numeric=(bool)($volts || $insulation); $height=$numeric?($incomplete?80:74):42; $this->ensureSpace($pdf, $height + ($heading !== '' ? 18 : 5));
+			$numeric = (bool) ($volts || $insulation);
+			$plotHeight = 34;
+			$height = $numeric ? 89 : 42;
+			$this->ensureSpace($pdf, $height + ($heading !== '' ? 18 : 5));
 			if ($heading !== '') { $this->renderSectionTitle($pdf, $heading, 2); $heading = ''; }
 			$y=$pdf->GetY(); $x=$this->marge_gauche; $w=$this->page_largeur-$x-$this->marge_droite;
 			$pdf->SetDrawColor(218,228,240); $pdf->RoundedRect($x,$y,$w,$height,2.65,'1111','D'); $pdf->SetFont('', 'B',9); $pdf->SetTextColor(24,47,79); $pdf->SetXY($x+4,$y+3); $pdf->MultiCell($w-48,4,$langs->convToOutputCharset($this->visualIdentity($group['identity'], false).' - '.count($chunk).' '.$langs->transnoentities('PowerPlantPVVisualStrings')),0,'L');
-			$pdf->SetFont('', '',7.5); $pdf->SetXY($x+$w-40,$y+3); $pdf->Cell(36,4,$valid.' / '.count($chunk).' '.$langs->convToOutputCharset($langs->transnoentities('PowerPlantPVVisualConform')),0,0,'R');
+			$pdf->SetFont('', 'B', 7.5);
+			$badge = $valid.' / '.count($chunk).' '.$langs->convToOutputCharset($langs->transnoentities('PowerPlantPVVisualConform'));
+			$badgeWidth = max(31, $pdf->GetStringWidth($badge) + 6);
+			$badgeX = $x + $w - $badgeWidth - 4;
+			if ($valid === count($chunk)) {
+				$pdf->SetFillColor(220, 242, 235);
+				$pdf->SetTextColor(11, 112, 84);
+			} else {
+				$pdf->SetFillColor(251, 241, 215);
+				$pdf->SetTextColor(133, 84, 12);
+			}
+			$pdf->RoundedRect($badgeX, $y + 3, $badgeWidth, 5, 2.5, '1111', 'F');
+			$pdf->SetXY($badgeX, $y + 3);
+			$pdf->Cell($badgeWidth, 5, $badge, 0, 0, 'C');
 			$missing=$langs->transnoentities('PowerPlantPVDataNotFilled'); $stats=array(array($volts?price(min($volts),0,$langs,1,-1,0).' - '.price(max($volts),0,$langs,1,-1,0).' V':$missing,$langs->transnoentities('PowerPlantPVOpenCircuitVoltage')),array($insulation?price(min($insulation),0,$langs,1,-1,1).$poleUnit:$missing,$langs->transnoentities($groundVoltage ? 'PowerPlantPVVisualGroundVoltageMin' : 'PowerPlantPVVisualInsulationMin')),array($insulation?price(max($insulation),0,$langs,1,-1,1).$poleUnit:$missing,$langs->transnoentities($groundVoltage ? 'PowerPlantPVVisualGroundVoltageMax' : 'PowerPlantPVVisualInsulationMax')));
 			if ($zeroIso) { $stats[1]=array($langs->transnoentities('PowerPlantPVVisualZeroInsulation'),$langs->transnoentities('PowerPlantPVVisualInsulationReadings')); $stats[2]=array($allIsoValid?$langs->transnoentities('PowerPlantPVVisualConformSingular'):$langs->transnoentities('PowerPlantPVVisualToCheck'),$langs->transnoentities('PowerPlantPVInsulationStatus')); }
 			$tile=($w-12)/3; foreach($stats as $i=>$stat){$tx=$x+4+$i*($tile+2);$pdf->SetFillColor(245,247,250);$pdf->RoundedRect($tx,$y+11,$tile-2,14,1,'1111','F');$pdf->SetFont('', '',7);$pdf->SetTextColor(100,116,139);$pdf->SetXY($tx+2,$y+12);$pdf->Cell($tile-6,4,$langs->convToOutputCharset($stat[1]));$pdf->SetFont('', 'B',9);$pdf->SetTextColor(24,47,79);$pdf->SetXY($tx+2,$y+17);$pdf->Cell($tile-6,5,$langs->convToOutputCharset($stat[0]));}
 			if(!$numeric){$pdf->SetXY($x+4,$y+31);$pdf->SetFont('', '',8);$pdf->MultiCell($w-8,4,$langs->convToOutputCharset($langs->transnoentities('PowerPlantPVReportChartMissing')),0,'L');$pdf->SetY($y+$height+5);continue;}
-			$gx=$x+12;$gy=$y+32;$gw=$w-25;$gh=25;$vmin=$volts?max(0,floor((min($volts)-10)/10)*10):0;$vmax=$volts?max($vmin+10,ceil((max($volts)+10)/10)*10):1;$imin=$groundVoltage && $insulation?min(0,floor(min($insulation)/5)*5):0;$imax=$insulation?max($imin+1,ceil(max($insulation)/5)*5):1;
+			$gx=$x+12;$gy=$y+32;$gw=$w-25;$gh=$plotHeight;$vmin=$volts?max(0,floor((min($volts)-10)/10)*10):0;$vmax=$volts?max($vmin+10,ceil((max($volts)+10)/10)*10):1;$imin=$groundVoltage && $insulation?min(0,floor(min($insulation)/5)*5):0;$imax=$insulation?max($imin+1,ceil(max($insulation)/5)*5):1;
 			$pdf->SetFont('', '',6.5);foreach(array(0,0.5,1) as $fraction){$py=$gy+$gh-$fraction*$gh;$pdf->SetDrawColor(233,238,245);$pdf->Line($gx,$py,$gx+$gw,$py);$pdf->SetTextColor(100,116,139);$pdf->SetXY($x+1,$py-2);$pdf->Cell(10,4,price($vmin+($vmax-$vmin)*$fraction,0,$langs,1,-1,0),0,0,'R');if (!$zeroIso && $insulation) {$pdf->SetTextColor(218,128,22);$pdf->SetXY($gx+$gw+1,$py-2);$pdf->Cell(11,4,price($imin+($imax-$imin)*$fraction,0,$langs,1,-1,0));}}
 			$step=$gw/count($chunk);foreach($chunk as $i=>$row){if($row->open_circuit_voltage===null || $row->open_circuit_voltage==='' || !is_numeric($row->open_circuit_voltage)){continue;}$bar=max(0.2,min($gh,((float)$row->open_circuit_voltage-$vmin)/($vmax-$vmin)*$gh));$pdf->SetFillColor(184,217,244);$pdf->Rect($gx+$i*$step+$step*0.14,$gy+$gh-$bar,$step*0.72,$bar,'F');
 				if (count($chunk) <= 12) {
@@ -689,8 +745,51 @@ trait PowerPlantPVReportVisualPdf
 			}
 			foreach($zeroIso ? array() : $poleSeries as $series=>$key){$previous=null;$color=$series===0?array(242,146,34):array(31,52,85);$pdf->SetDrawColor($color[0],$color[1],$color[2]);$pdf->SetLineStyle(array('width'=>0.3,'dash'=>$series===0?0:'1,1'));foreach($chunk as $i=>$row){$value=$row->{$key} ?? null;if($value===null || $value==='' || !is_numeric($value)){$previous=null;continue;}$px=$gx+($i+0.5)*$step;$py=$gy+$gh-((float)$value-$imin)/($imax-$imin)*$gh;if(is_array($previous)){$pdf->Line($previous[0],$previous[1],$px,$py);}$pdf->SetFillColor($color[0],$color[1],$color[2]);$pdf->Circle($px,$py,0.65,0,360,'F');$previous=array($px,$py);}}
 			$pdf->SetLineStyle(array('width'=>0.2,'dash'=>0));$pdf->SetFont('', '',6);$pdf->SetTextColor(100,116,139);foreach($chunk as $i=>$row){$label=trim((string)$row->string_ref);if(dol_strlen($label)>7 || $label===''){$label=(string)($chunkIndex*24+$i+1);}$pdf->SetXY($gx+$i*$step,$gy+$gh+1);$pdf->Cell($step,3,$langs->convToOutputCharset($label),0,0,'C');$pdf->SetXY($gx+$i*$step,$gy+$gh+4);$pdf->Cell($step,3,'M'.$row->mppt_number,0,0,'C');}
-			$pdf->SetXY($x+4,$y+67);$pdf->SetFont('', '',7);$pdf->SetTextColor(88,122,157);$pdf->Cell($w-8,4,$langs->convToOutputCharset($langs->transnoentities($zeroIso || !$insulation ? 'PowerPlantPVVisualChartLegendVoltage' : ($groundVoltage ? 'PowerPlantPVVisualChartLegendGroundVoltage' : 'PowerPlantPVVisualChartLegend'))),0,0,'C');if ($incomplete) {$pdf->SetXY($x+4,$y+73);$pdf->SetFont('', '',6.5);$pdf->SetTextColor(100,116,139);$pdf->Cell($w-8,3,$langs->convToOutputCharset($langs->transnoentities('PowerPlantPVReportChartMissing')),0,0,'C');}$pdf->SetY($y+$height+5);
+			$this->visualDcLegend($pdf, $x, $gy + $gh + 10, $w, $langs, (bool) $volts, $zeroIso || !$insulation ? '' : ($groundVoltage ? 'V' : 'MOhm'));
+			if ($incomplete) {
+				$pdf->SetXY($x + 4, $gy + $gh + 16);
+				$pdf->SetFont('', '', 6.5);
+				$pdf->SetTextColor(100, 116, 139);
+				$pdf->Cell($w - 8, 3, $langs->convToOutputCharset($langs->transnoentities('PowerPlantPVReportChartMissing')), 0, 0, 'C');
+			}
+			$pdf->SetY($y + $height + 5);
 		}
+	}
+
+	/** Draw the same markers and line styles used by the DC series. */
+	protected function visualDcLegend(&$pdf, float $x, float $y, float $width, Translate $langs, bool $voltage, string $poleUnit): void
+	{
+		$entries = array();
+		if ($voltage) {
+			$entries[] = array($langs->transnoentities('PowerPlantPVOpenCircuitVoltage').' (V)', array(184, 217, 244), 'bar');
+		}
+		if ($poleUnit !== '') {
+			$entries[] = array($langs->transnoentities($poleUnit === 'V' ? 'PowerPlantPVPositiveToGroundVoltage' : 'PowerPlantPVInsulationPositiveToGround').' ('.$poleUnit.')', array(242, 146, 34), 'solid');
+			$entries[] = array($langs->transnoentities($poleUnit === 'V' ? 'PowerPlantPVNegativeToGroundVoltage' : 'PowerPlantPVInsulationNegativeToGround').' ('.$poleUnit.')', array(31, 52, 85), 'dashed');
+		}
+		$pdf->SetFont('', '', 7);
+		$pdf->SetTextColor(88, 122, 157);
+		$items = array();
+		foreach ($entries as [$label, $color, $style]) {
+			$text = $langs->convToOutputCharset($label);
+			$items[] = array($text, $pdf->GetStringWidth($text) + 12, $color, $style);
+		}
+		$x += max(3, ($width - array_sum(array_column($items, 1))) / 2);
+		foreach ($items as [$text, $itemWidth, $color, $style]) {
+			$pdf->SetFillColor(...$color);
+			if ($style === 'bar') {
+				$pdf->Rect($x + 1, $y + 1, 5, 2, 'F');
+			} else {
+				$pdf->SetDrawColor(...$color);
+				$pdf->SetLineStyle(array('width' => 0.3, 'dash' => $style === 'dashed' ? '1,1' : 0));
+				$pdf->Line($x, $y + 2, $x + 7, $y + 2);
+				$pdf->Circle($x + 3.5, $y + 2, 0.65, 0, 360, 'F');
+			}
+			$pdf->SetXY($x + 8, $y);
+			$pdf->Cell($itemWidth - 8, 4, $text);
+			$x += $itemWidth;
+		}
+		$pdf->SetLineStyle(array('width' => 0.2, 'dash' => 0));
 	}
 
 	/** @param TCPDF|TCPDI $pdf @param array<string,mixed> $group @param Translate $langs @return void */
@@ -809,18 +908,21 @@ trait PowerPlantPVReportVisualPdf
 		}
 		$cards[] = array($langs->transnoentities('PowerPlantPVVisualCustomerSignature'), $customerName, $customerImage !== '' ? $date : '', $customerImage);
 
-		// The block sits at the bottom of the last page and the customer card covers the right half:
-		// Dolibarr native online signature stamps the image at x = 53 % of the width and y = height - 60 mm.
-		$height = 58; $y = $this->getContentBottomY() - $height - 2;
-		$this->ensureSpace($pdf, $height + 16);
-		$pdf->SetY(max($pdf->GetY(), $y - 11));
+		// Native online signing stamps the last page at 53% of its width and 60 mm from the bottom.
+		// Keep the client in the lower-right half even when a technical signature adds a third card.
+		$gap = 4;
+		$height = 58;
+		$twoRows = count($cards) === 3;
+		$blockHeight = $twoRows ? 2 * $height + $gap : $height;
+		$top = $this->getContentBottomY() - $blockHeight - 2;
+		$this->ensureSpace($pdf, $blockHeight + 16);
+		$pdf->SetY(max($pdf->GetY(), $top - 11));
 		$this->renderSectionTitle($pdf, $langs->transnoentities('PowerPlantPVReportSignatures'), 2);
-		$y = max($pdf->GetY(), $y);
-		$customerX = round($this->page_largeur * 0.53) - 6; $leftCount = count($cards) - 1; $leftWidth = ($customerX - 4 - $this->marge_gauche - ($leftCount - 1) * 4) / $leftCount;
+		$top = max($pdf->GetY(), $top);
+		$width = ($this->page_largeur - $this->marge_droite - $this->marge_gauche - $gap) / 2;
 		foreach ($cards as $i => $card) {
-			$isLast = $i === count($cards) - 1;
-			$x = $isLast ? $customerX : $this->marge_gauche + $i * ($leftWidth + 4);
-			$width = $isLast ? $this->page_largeur - $this->marge_droite - $customerX : $leftWidth;
+			$x = $this->marge_gauche + ($i === 0 ? 0 : $width + $gap);
+			$y = $top + ($i === 2 ? $height + $gap : 0);
 			$pdf->SetDrawColor(218, 228, 240); $pdf->SetFillColor(255, 255, 255); $pdf->RoundedRect($x, $y, $width, $height, 2.65, '1111', 'DF');
 			$pdf->SetTextColor(24, 47, 79); $pdf->SetFont('', 'B', 9); $pdf->SetXY($x + 4, $y + 3); $pdf->MultiCell($width - 8, 4, $langs->convToOutputCharset($card[0]), 0, 'L');
 			foreach (array(array('Name', $card[1], 12), array('Date', $card[2], 17)) as $line) {
@@ -828,7 +930,8 @@ trait PowerPlantPVReportVisualPdf
 				if ($line[1] !== '') { $pdf->SetTextColor(25, 39, 60); $pdf->SetFont('', 'B', 8); $pdf->SetXY($x + 16, $y + $line[2]); $pdf->Cell($width - 20, 4, $langs->convToOutputCharset(dol_trunc($line[1], 40)), 0, 0, 'L'); }
 				else { $pdf->SetDrawColor(184, 192, 204); $pdf->SetLineStyle(array('width' => 0.2, 'dash' => '0.6,0.8')); $pdf->Line($x + 16, $y + $line[2] + 3.5, $x + $width - 4, $y + $line[2] + 3.5); $pdf->SetLineStyle(array('width' => 0.2, 'dash' => 0)); }
 			}
-			$bx = $x + 4; $by = $y + 24; $bw = $width - 8; $bh = $height - 28;
+			$bx = $x + 4; $by = $y + 24; $bw = $width - 8;
+			$bh = $height - ($i === count($cards) - 1 ? 25 : 28);
 			$pdf->SetDrawColor(207, 213, 223); $pdf->SetLineStyle(array('width' => 0.2, 'dash' => '1,1')); $pdf->RoundedRect($bx, $by, $bw, $bh, 1.5, '1111', 'D'); $pdf->SetLineStyle(array('width' => 0.2, 'dash' => 0));
 			$size = $card[3] !== '' ? @getimagesize($card[3]) : false;
 			if (!empty($size[0]) && !empty($size[1])) { $ratio = min(($bw - 6) / $size[0], ($bh - 4) / $size[1]); $pdf->Image($card[3], $bx + ($bw - $size[0] * $ratio) / 2, $by + ($bh - $size[1] * $ratio) / 2, $size[0] * $ratio, $size[1] * $ratio); }

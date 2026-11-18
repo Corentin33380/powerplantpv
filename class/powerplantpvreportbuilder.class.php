@@ -2673,6 +2673,13 @@ class PowerPlantPVReportBuilder
 	 */
 	private function assignSubmittedValueToField(PowerPlantPVReportField $field, $value)
 	{
+		if (PowerPlantPVReportPresentation::allowsNotApplicable((string) $field->field_code, (string) $field->field_type)) {
+			if (!in_array($value, array('', '0', '1', 'not_applicable'), true)) {
+				return false;
+			}
+			$field->value_text = $value;
+			return true;
+		}
 		if ($value === null && in_array((string) $field->field_type, array('checkbox', 'yesno'), true)) {
 			$value = 0;
 		}
