@@ -94,6 +94,7 @@ trait PowerPlantPVReportVisualPdf
 			}
 			foreach ($dc as $row) {
 				foreach (PowerPlantPVReportPresentation::groupMeasures(PowerPlantPVReportPresentation::visibleMeasures($row['dc_measures'], false)) as $group) {
+					$this->ensureSpace($pdf, 42);
 					$this->renderSectionTitle($pdf, $outputlangs->transnoentities('PowerPlantPVVisualDcAnnex'), 2);
 					$this->visualDcAnnex($pdf, $group, $outputlangs);
 				}
@@ -805,61 +806,84 @@ trait PowerPlantPVReportVisualPdf
 		foreach ($electricalColumns as $column) {
 			$columns[] = array($column[0], 32 / count($electricalColumns), $column[1]);
 		}
-		$header = '<table width="100%" cellpadding="3" cellspacing="0" style="font-size:8pt;"><tbody><tr style="color:#64748b;">';
+		$left = $this->marge_gauche;
+		$width = $this->page_largeur - $left - $this->marge_droite;
+		$pdf->SetFont('', '', 8);
+		$headers = array();
+		$headerHeight = 7;
 		foreach ($columns as $column) {
-			$label = $langs->transnoentities($column[0]).(isset($column[2]) ? ' ('.$column[2].')' : '');
-			$header .= '<td width="'.$column[1].'%">'.dol_escape_htmltag($label).'</td>';
+			$cellWidth = $width * $column[1] / 100;
+			$label = $langs->convToOutputCharset($langs->transnoentities($column[0]).(isset($column[2]) ? ' ('.$column[2].')' : ''));
+			$headers[] = array($cellWidth, $label);
+			$headerHeight = max($headerHeight, $pdf->getStringHeight($cellWidth - 4, $label) + 2);
 		}
-		$header .= '</tr>';
 		$rows = array();
 		$notes = array();
-		$n = 0;
 		foreach ($group['mppts'] as $inputs) {
 			foreach ($inputs as $row) {
-				$html = '<tr nobr="true" style="background-color:'.($n++ % 2 ? '#f6f8fc' : '#ffffff').';">';
-				$height = 5.75 + 4 * intdiv(dol_strlen((string) $row->string_ref), 13);
 				$values = array($row->mppt_number, $row->pv_input_number, $row->string_ref);
+				$height = max(5.75, $pdf->getStringHeight($headers[2][0] - 4, $langs->convToOutputCharset((string) $row->string_ref)) + 1);
 				if (!(int) $row->is_connected) {
-					foreach ($values as $index => $value) {
-						$html .= '<td width="'.$columns[$index][1].'%">'.dol_escape_htmltag((string) $value).'</td>';
-					}
-					$remaining = count($columns) - count($values);
-					$html .= '<td colspan="'.$remaining.'" width="73%" style="color:#64748b;">'.dol_escape_htmltag($langs->transnoentities('PowerPlantPVNotUsedByPowerPlant')).'</td></tr>';
-					$rows[] = array($height, $html);
+					$values[] = $langs->transnoentities('PowerPlantPVNotUsedByPowerPlant');
+					$rows[] = array($height, $values, array(), false);
 					continue;
 				}
-				$values[] = is_numeric($row->open_circuit_voltage) ? price($row->open_circuit_voltage) : '—';
+				$values[] = is_numeric($row->open_circuit_voltage) ? price($row->open_circuit_voltage) : '-';
 				$values[] = $this->formatDcMeasureBoolean($row, $row->polarity_checked, $langs);
 				$values[] = $this->formatDcMeasureInsulationStatus($row, $langs);
 				foreach ($electricalColumns as $key => $column) {
 					$value = $row->{$key} ?? null;
-					$values[] = is_numeric($value) ? price($value) : '—';
+					$values[] = is_numeric($value) ? price($value) : '-';
 				}
-				foreach ($values as $index => $value) {
-					$conform = ($index === 4 && (int) $row->polarity_checked === 1)
-						|| ($index === 5 && (string) $row->insulation_status === 'valid');
-					$html .= '<td width="'.$columns[$index][1].'%"'.($conform ? ' style="color:#008963"' : '').'>'.dol_escape_htmltag((string) $value).'</td>';
-				}
-				$html .= '</tr>';
-				$rows[] = array($height, $html);
+				$checks = array(4 => (int) $row->polarity_checked === 1, 5 => (string) $row->insulation_status === 'valid');
+				$rows[] = array($height, $values, $checks, true);
 				if (trim((string) $row->observation) !== '') {
 					$notes[] = $row->string_ref.' : '.$row->observation;
 				}
 			}
 		}
-		// Render each page-sized batch with an explicit header. TCPDF can repeat a
-		// thead alone on the following page when the final row reaches the margin.
-		$headerHeight = 11.5;
 		for ($i = 0, $count = count($rows); $i < $count;) {
 			$this->ensureSpace($pdf, $headerHeight + $rows[$i][0]);
-			$available = $this->getContentBottomY() - $pdf->GetY() - $headerHeight;
-			$html = $header;
+			$pdf->SetFont('', '', 8);
+			$pdf->SetTextColor(100, 116, 139);
+			$y = $pdf->GetY();
+			$x = $left;
+			foreach ($headers as [$cellWidth, $label]) {
+				$pdf->MultiCell($cellWidth - 4, 0, $label, 0, 'L', false, 1, $x + 2, $y);
+				$x += $cellWidth;
+			}
+			$y += $headerHeight;
+			$pdf->SetDrawColor(218, 228, 240);
+			$pdf->Line($left, $y, $left + $width, $y);
 			do {
-				$available -= $rows[$i][0];
-				$html .= $rows[$i][1];
+				[$height, $values, $checks, $connected] = $rows[$i];
+				if ($i % 2) {
+					$pdf->SetFillColor(246, 248, 252);
+					$pdf->Rect($left, $y, $width, $height, 'F');
+				}
+				$x = $left;
+				foreach ($values as $index => $value) {
+					$cellWidth = !$connected && $index === 3 ? $width * 0.73 : $headers[$index][0];
+					$label = $langs->convToOutputCharset((string) $value);
+					if (!empty($checks[$index])) {
+						$badgeWidth = min($cellWidth - 4, $pdf->GetStringWidth($label) + 7);
+						$centerY = $y + $height / 2;
+						$pdf->SetFillColor(220, 242, 235);
+						$pdf->RoundedRect($x + 2, $centerY - 2, $badgeWidth, 4, 2, '1111', 'F');
+						$this->visualCheck($pdf, $x + 4.5, $centerY, 1.8, array(11, 112, 84));
+						$pdf->SetTextColor(11, 112, 84);
+						$pdf->SetXY($x + 6, $centerY - 2);
+						$pdf->Cell($badgeWidth - 4, 4, $label, 0, 0, 'C', false, '', 1);
+					} else {
+						$pdf->SetTextColor(40, 50, 68);
+						$pdf->MultiCell($cellWidth - 4, $height, $label, 0, 'L', false, 1, $x + 2, $y);
+					}
+					$x += $cellWidth;
+				}
+				$y += $height;
 				$i++;
-			} while ($i < $count && $rows[$i][0] <= $available);
-			$this->writeHtml($pdf, $html.'</tbody></table>');
+			} while ($i < $count && $y + $rows[$i][0] <= $this->getContentBottomY() - 1);
+			$pdf->SetY($y);
 			if ($i < $count) {
 				$this->completePageFooter($pdf, 1);
 				$pdf->AddPage();
