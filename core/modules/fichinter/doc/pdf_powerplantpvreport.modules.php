@@ -163,7 +163,7 @@ class pdf_powerplantpvreport extends ModelePDFFicheinter
 	public function write_file($object, $outputlangs, $srctemplatepath = '', $hidedetails = 0, $hidedesc = 0, $hideref = 0)
 	{
 		// phpcs:enable
-		global $conf, $langs, $user, $hookmanager, $action;
+		global $conf, $langs, $hookmanager, $action;
 
 		if (!is_object($outputlangs)) {
 			$outputlangs = $langs;
@@ -186,6 +186,15 @@ class pdf_powerplantpvreport extends ModelePDFFicheinter
 			$this->error = $langs->transnoentities('ErrorConstantNotDefined', 'FICHEINTER_OUTPUTDIR');
 			return 0;
 		}
+		$dir = rtrim($dir, '/\\');
+		$ownerRoot = realpath($conf->ficheinter->multidir_output[(int) $object->entity]);
+		$dataRoot = realpath(DOL_DATA_ROOT);
+		if ($ownerRoot === false || $dataRoot === false
+			|| !str_starts_with(str_replace('\\', '/', $ownerRoot).'/', rtrim(str_replace('\\', '/', $dataRoot), '/').'/')
+			|| is_link($dir)) {
+			$this->error = $outputlangs->transnoentities('PowerPlantPVDocumentDirectoryUnavailable');
+			return -1;
+		}
 		if (!file_exists($dir) && dol_mkdir($dir) < 0) {
 			$this->error = $langs->transnoentities('ErrorCanNotCreateDir', $dir);
 			return 0;
@@ -195,7 +204,15 @@ class pdf_powerplantpvreport extends ModelePDFFicheinter
 			return 0;
 		}
 
-		$file = $dir.'/'.(!empty($object->specimen) ? 'SPECIMEN' : dol_sanitizeFileName($object->ref)).'.pdf';
+		$realDirectory = realpath($dir);
+		if ($realDirectory === false || is_link($dir)
+			|| (dirname($realDirectory) !== $ownerRoot && (empty($object->specimen) || $realDirectory !== $ownerRoot))) {
+			$this->error = $outputlangs->transnoentities('PowerPlantPVDocumentDirectoryUnavailable');
+			return -1;
+		}
+		$basename = !empty($object->specimen) ? 'SPECIMEN' : dol_sanitizeFileName($object->ref);
+		$file = $dir.'/'.$basename.'.pdf';
+		$annexFile = $dir.'/'.$basename.'-annexe.pdf';
 
 		if (!is_object($hookmanager)) {
 			require_once DOL_DOCUMENT_ROOT.'/core/class/hookmanager.class.php';
@@ -218,6 +235,65 @@ class pdf_powerplantpvreport extends ModelePDFFicheinter
 			return -1;
 		}
 
+		$staged = array();
+		try {
+			foreach (array($annexFile => true, $file => false) as $destination => $annex) {
+				$temporaryFile = tempnam($realDirectory, '.ppv-');
+				if ($temporaryFile === false) {
+					throw new RuntimeException('Could not stage PDF');
+				}
+				$staged[$destination] = $temporaryFile;
+				if (realpath(dirname($temporaryFile)) !== $realDirectory) {
+					throw new RuntimeException('PDF staging directory unavailable');
+				}
+				$pdf = $this->buildReportPdf($object, $dataset, $outputlangs, $annex);
+				if (!$annex) {
+					$hookmanager->executeHooks('afterPDFCreation', $parameters, $this, $action);
+				}
+				$pdf->Close();
+				$pdf->Output($temporaryFile, 'F');
+				clearstatcache(true, $temporaryFile);
+				if (!filesize($temporaryFile)) {
+					throw new RuntimeException('Could not write PDF');
+				}
+				unset($pdf);
+			}
+			if (!$this->publishReportFiles($object, $ownerRoot, $staged, $annexFile)) {
+				throw new RuntimeException('Could not publish both PDFs');
+			}
+		} catch (Throwable $exception) {
+			dol_syslog(__METHOD__.': '.$exception->getMessage(), LOG_ERR);
+			$this->error = $outputlangs->transnoentities('PowerPlantPVReportPdfPairError');
+			return -1;
+		} finally {
+			foreach ($staged as $temporaryFile) {
+				if (is_file($temporaryFile)) {
+					dol_delete_file($temporaryFile, 1, 1, 1, null, false, 0);
+				}
+			}
+		}
+
+		if (!empty($this->update_main_doc_field)) {
+			$this->updateLastMainDoc($object, $file);
+		}
+
+		$this->result = array('fullpath' => $file, 'annex_fullpath' => $annexFile);
+
+		return 1;
+	}
+
+	/**
+	 * Render either document with its own header, footer and pagination.
+	 * @param CommonObject $object Intervention
+	 * @param array<string,mixed> $dataset Report snapshot
+	 * @param Translate $outputlangs Output language
+	 * @param bool $annex Render the technical appendix
+	 * @return TCPDF|TCPDI
+	 */
+	protected function buildReportPdf($object, array $dataset, $outputlangs, bool $annex)
+	{
+		global $user;
+
 		$pdf = pdf_getInstance($this->format);
 		'@phan-var-force TCPDI|TCPDF $pdf';
 		$defaultFontSize = pdf_getPDFFontSize($outputlangs);
@@ -234,7 +310,8 @@ class pdf_powerplantpvreport extends ModelePDFFicheinter
 		$pdf->SetFont(pdf_getPDFFont($outputlangs), '', $this->defaultFontSize);
 		$pdf->SetMargins($this->marge_gauche, 34, $this->marge_droite);
 		$pdf->SetTitle($outputlangs->convToOutputCharset($object->ref));
-		$pdf->SetSubject($outputlangs->convToOutputCharset($outputlangs->transnoentities('PowerPlantPVReportPdfTitle')));
+		$subject = $outputlangs->transnoentities($annex ? 'PowerPlantPVReportPdfAnnexTitle' : 'PowerPlantPVReportPdfTitle');
+		$pdf->SetSubject($outputlangs->convToOutputCharset($subject));
 		$pdf->SetCreator('Dolibarr '.DOL_VERSION);
 		$pdf->SetAuthor($outputlangs->convToOutputCharset($user->getFullName($outputlangs)));
 		$pdf->SetKeyWords($outputlangs->convToOutputCharset($object->ref.' '.$outputlangs->transnoentities('PowerPlantPVReportPdfTitle')));
@@ -248,30 +325,141 @@ class pdf_powerplantpvreport extends ModelePDFFicheinter
 		$this->completedPageFooters = array();
 		$this->visualHeaders = array();
 		$this->visualInverterNumbers = array();
-		$this->visualReportTitle = PowerPlantPVReportPdfDataset::localizedProperty($dataset['report'], 'report_template_label', $outputlangs);
+		$this->visualReportTitle = $annex ? $subject : PowerPlantPVReportPdfDataset::localizedProperty($dataset['report'] ?? null, 'report_template_label', $outputlangs);
 
 		$pdf->Open();
 		$pdf->AddPage();
 		$this->reserveFooterSpace($pdf);
 		if (!isset($this->visualHeaders[(int) $pdf->getPage()])) { $this->renderHeader($pdf, $object, $dataset, $outputlangs); }
-		$this->renderReport($pdf, $object, $dataset, $outputlangs);
+		if ($annex) {
+			$this->renderAnnex($pdf, $dataset, $outputlangs);
+		} else {
+			$this->renderReport($pdf, $object, $dataset, $outputlangs);
+		}
 		$this->renderFooters($pdf, $object, $outputlangs);
 
-		$hookmanager->executeHooks('afterPDFCreation', $parameters, $this, $action);
+		return $pdf;
+	}
 
-		$pdf->Close();
-		$pdf->Output($file, 'F');
-		if (!empty($conf->global->MAIN_UMASK)) {
-			dolChmod($file);
+	/**
+	 * Publish a complete pair, restoring the previous pair when publication or indexing fails.
+	 * @param CommonObject $object Intervention
+	 * @param string $ownerRoot Owner's intervention document root
+	 * @param array<string,string> $staged Destination to staging path
+	 * @param string $annexFile Annex destination
+	 * @return bool
+	 */
+	protected function publishReportFiles($object, string $ownerRoot, array $staged, string $annexFile): bool
+	{
+		$lockPath = $ownerRoot.'/.powerplantpv-report.lock';
+		$lock = is_link($lockPath) ? false : fopen($lockPath, 'c');
+		if ($lock === false) {
+			return false;
 		}
-
-		if (!empty($this->update_main_doc_field)) {
-			$this->updateLastMainDoc($object, $file);
+		$backups = array();
+		$published = array();
+		$success = false;
+		try {
+			if (!flock($lock, LOCK_EX)) {
+				return false;
+			}
+			foreach ($staged as $file => $temporaryFile) {
+				if (is_link($file) || (file_exists($file) && !is_file($file))) {
+					return false;
+				}
+				if (is_file($file)) {
+					$backup = tempnam(dirname($temporaryFile), '.ppv-');
+					if ($backup === false) {
+						return false;
+					}
+					$backups[$file] = $backup;
+					if (realpath(dirname($backup)) !== realpath(dirname($temporaryFile)) || !copy($file, $backup)) {
+						return false;
+					}
+					$permissions = fileperms($file);
+					if ($permissions !== false) {
+						chmod($backup, $permissions & 0777);
+					}
+				}
+				if (!rename($temporaryFile, $file)) {
+					return false;
+				}
+				$published[] = $file;
+				if (getDolGlobalString('MAIN_UMASK') !== '') {
+					dolChmod($file);
+				}
+			}
+			$success = !empty($object->specimen) || $this->indexAnnexFile($object, $annexFile);
+			return $success;
+		} finally {
+			if (!$success) {
+				foreach ($published as $file) {
+					if (isset($backups[$file])) {
+						if (!rename($backups[$file], $file)) {
+							dol_syslog(__METHOD__.': PDF rollback failed', LOG_ERR);
+							// Keep the backup available to the administrator on a failed restore.
+							unset($backups[$file]);
+						}
+					} else {
+						dol_delete_file($file, 1, 1, 1, null, false, 0);
+					}
+				}
+			}
+			foreach ($backups as $backup) {
+				if (is_file($backup)) {
+					dol_delete_file($backup, 1, 1, 1, null, false, 0);
+				}
+			}
+			flock($lock, LOCK_UN);
+			fclose($lock);
 		}
+	}
 
-		$this->result = array('fullpath' => $file);
+	/**
+	 * Index the appendix for its owner without changing the native main-document or sharing field.
+	 * @param CommonObject $object Intervention
+	 * @param string $path Published appendix
+	 * @return bool
+	 */
+	protected function indexAnnexFile($object, string $path): bool
+	{
+		global $user;
 
-		return 1;
+		require_once DOL_DOCUMENT_ROOT.'/ecm/class/ecmfiles.class.php';
+		$directory = str_replace('\\', '/', dirname($path));
+		$dataRoot = rtrim(str_replace('\\', '/', DOL_DATA_ROOT), '/').'/';
+		if (!str_starts_with($directory.'/', $dataRoot)) {
+			return false;
+		}
+		$relative = substr($directory, strlen($dataRoot));
+		$entity = (int) $object->entity;
+		$ecm = new EcmFiles($this->db);
+		$filter = '(t.entity:=:'.$entity.') AND (t.src_object_id:=:'.(int) $object->id.')';
+		if ($ecm->fetchAll('ASC', 't.rowid', 0, 0, $filter) < 0) {
+			return false;
+		}
+		$hash = md5_file($path);
+		if ($hash === false) {
+			return false;
+		}
+		$filename = basename($path);
+		foreach ($ecm->lines as $line) {
+			if ($line->filepath === $relative && $line->filename === $filename && $line->src_object_type === $object->table_element) {
+				if ($line->gen_or_uploaded !== 'generated' || $ecm->fetch((int) $line->id) <= 0 || (int) $ecm->entity !== $entity) {
+					return false;
+				}
+				$ecm->label = $hash;
+				return $ecm->update($user) > 0;
+			}
+		}
+		$ecm->entity = $entity;
+		$ecm->filepath = $relative;
+		$ecm->filename = $filename;
+		$ecm->label = $hash;
+		$ecm->gen_or_uploaded = 'generated';
+		$ecm->src_object_type = $object->table_element;
+		$ecm->src_object_id = (int) $object->id;
+		return $ecm->create($user) > 0;
 	}
 
 	/**

@@ -92,15 +92,33 @@ trait PowerPlantPVReportVisualPdf
 				foreach (PowerPlantPVReportPresentation::groupMeasures(PowerPlantPVReportPresentation::visibleMeasures($row['dc_measures'], false)) as $group) { $this->visualDcChart($pdf, $group, $outputlangs, $dcHeading); }
 				$this->visualSectionExtras($pdf, $row, $dataset, $outputlangs);
 			}
-			foreach ($dc as $row) {
-				foreach (PowerPlantPVReportPresentation::groupMeasures(PowerPlantPVReportPresentation::visibleMeasures($row['dc_measures'], false)) as $group) {
-					$this->ensureSpace($pdf, 42);
-					$this->renderSectionTitle($pdf, $outputlangs->transnoentities('PowerPlantPVVisualDcAnnex'), 2);
-					$this->visualDcAnnex($pdf, $group, $outputlangs);
-				}
+		}
+		$this->visualSignatures($pdf, $object, $dataset, $outputlangs);
+	}
+
+	/** @param TCPDF|TCPDI $pdf @param array<string,mixed> $dataset @param Translate $outputlangs @return void */
+	protected function renderAnnex(&$pdf, $dataset, $outputlangs)
+	{
+		$hasContent = false;
+		$plants = $dataset['powerplants'] ?? array();
+		$sections = $dataset['general_sections'] ?? array();
+		foreach ($dataset['sections_by_powerplant'] ?? array() as $rows) {
+			$sections = array_merge($sections, $rows);
+		}
+		foreach ($sections as $row) {
+			if (empty($row['section']->visible_pdf) || (string) $row['section']->section_code !== 'DC_ELECTRICAL_MEASURE') {
+				continue;
+			}
+			$groups = PowerPlantPVReportPresentation::groupMeasures(PowerPlantPVReportPresentation::visibleMeasures($row['dc_measures'], false));
+			foreach ($groups as $group) {
+				$this->ensureSpace($pdf, 42);
+				$this->renderSectionTitle($pdf, $outputlangs->transnoentities('PowerPlantPVVisualDcAnnex'), 2);
+				$this->visualDcAnnex($pdf, $group, $outputlangs);
+				$hasContent = true;
 			}
 		}
 		foreach (getDolGlobalInt('POWERPLANTPV_REPORT_PDF_HIDE_EQUIPMENT') ? array() : $plants as $plant) {
+			$hasContent = true;
 			$this->renderSectionTitle($pdf, $outputlangs->transnoentities('PowerPlantPVVisualMaterialAnnex'), 2);
 			$this->renderSectionTitle($pdf, $this->powerplantLabel($plant), 3);
 			$snapshot = $this->resolvePowerplantTechnicalSummarySnapshot($plant, $outputlangs);
@@ -115,7 +133,9 @@ trait PowerPlantPVReportVisualPdf
 			$url = dol_buildpath('/powerplantpv/powerplant_composition.php', 2).'?id='.(int) $plant->fk_powerplant;
 			$this->writeHtml($pdf, '<p style="color:#64748b;">'.dol_escape_htmltag($outputlangs->transnoentities('PowerPlantPVVisualSerialAnnex')).' <a href="'.dol_escape_htmltag($url).'">'.dol_escape_htmltag($outputlangs->transnoentities('PowerPlantPVConsultPowerplant')).'</a></p>');
 		}
-		$this->visualSignatures($pdf, $object, $dataset, $outputlangs);
+		if (!$hasContent) {
+			$this->renderEmptyBlock($pdf, $outputlangs->transnoentities('NoRecordFound'));
+		}
 	}
 
 	/**

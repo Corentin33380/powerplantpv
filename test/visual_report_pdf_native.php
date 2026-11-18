@@ -43,7 +43,11 @@ $conf = (object) array(
 $langs = new Translate('', $conf);
 $langs->setDefaultLang('fr_FR');
 $langs->loadLangs(array('main', 'companies', 'interventions', 'products', 'dict', 'powerplantpv@powerplantpv'));
-$user = (object) array('id' => 1, 'admin' => 0);
+$user = new class {
+	public $id = 1;
+	public $admin = 0;
+	public function getFullName($langs) { return 'Technicien Test'; }
+};
 $mysoc = (object) array('name' => 'Installateur test', 'logo' => '', 'logo_small' => '');
 require_once $core.'/core/lib/pdf.lib.php';
 require_once $module.'/core/modules/fichinter/doc/pdf_powerplantpvreport.modules.php';
@@ -59,6 +63,8 @@ function visualPdfCheck($condition, $message)
 class VisualPdfFixture extends pdf_powerplantpvreport
 {
 	public $snapshot = array();
+	public $indexResult = true;
+	public $indexedFile = '';
 	protected function resolvePowerplantTechnicalSummarySnapshot($powerplant, $outputlangs) { return $this->snapshot; }
 	protected function visualIllustration(&$pdf, $snapshot, $langs) {}
 	protected function _pagefoot(&$pdf, $object, $outputlangs, $hidefreetext = 0)
@@ -78,25 +84,22 @@ class VisualPdfFixture extends pdf_powerplantpvreport
 		return $model;
 	}
 	/** Same sequence as write_file(), with an injected dataset. */
-	public function build($object, $dataset, $file)
+	public function build($object, $dataset, $file, $annex = false)
 	{
 		$langs = $GLOBALS['langs'];
-		$pdf = pdf_getInstance($this->format);
-		$this->defaultFontSize = max(10.5, pdf_getPDFFontSize($langs) - 1);
-		$pdf->setPrintHeader(false); $pdf->setPrintFooter(false); $pdf->SetAutoPageBreak(true, 0);
-		$pdf->SetFont(pdf_getPDFFont($langs), '', $this->defaultFontSize);
-		$pdf->SetMargins($this->marge_gauche, 34, $this->marge_droite);
-		$pdf->SetCompression(false);
-		$this->heightforfooter = $this->computeFooterHeight(); $this->currentObject = $object; $this->currentOutputLangs = $langs;
-		$this->completedPageFooters = array(); $this->visualHeaders = array(); $this->visualInverterNumbers = array();
-		$this->visualReportTitle = 'Rapport de maintenance préventive';
-		$pdf->Open(); $pdf->AddPage(); $this->reserveFooterSpace($pdf);
-		if (!isset($this->visualHeaders[(int) $pdf->getPage()])) { $this->renderHeader($pdf, $object, $dataset, $langs); }
-		$this->renderReport($pdf, $object, $dataset, $langs);
-		$this->renderFooters($pdf, $object, $langs);
+		$pdf = $this->buildReportPdf($object, $dataset, $langs, $annex);
 		$pages = $pdf->getNumPages();
 		$pdf->Close(); $pdf->Output($file, 'F');
 		return $pages;
+	}
+	public function publish($object, $ownerRoot, $staged, $annexFile)
+	{
+		return $this->publishReportFiles($object, $ownerRoot, $staged, $annexFile);
+	}
+	protected function indexAnnexFile($object, string $path): bool
+	{
+		$this->indexedFile = $path;
+		return $this->indexResult;
 	}
 }
 
@@ -208,23 +211,32 @@ foreach ($runs as $name => $options) {
 	$model->snapshot = $snapshot;
 	$file = ($outputDir !== '' ? rtrim($outputDir, '/\\') : $dataRoot).'/visual-'.$name.'.pdf';
 	$pages = $model->build($object, $dataset, $file);
-	visualPdfCheck(is_file($file) && $pages >= 4, 'The '.$name.' PDF is written with several pages');
+	$annexFile = substr($file, 0, -4).'-annexe.pdf';
+	$annexPages = $model->build($object, $dataset, $annexFile, true);
+	visualPdfCheck(is_file($file) && $pages >= 3 && is_file($annexFile) && $annexPages >= 1, 'Both '.$name.' PDFs are rendered');
 	// Uncompressed core-font text: decode literal strings of the content streams.
-	$raw = file_get_contents($file);
-	preg_match_all('/\[((?:\\\\.|[^\]\\\\])*)\]\s*TJ|\(((?:\\\\.|[^)\\\\])*)\)\s*Tj/s', $raw, $matches, PREG_SET_ORDER);
-	$text = '';
-	foreach ($matches as $match) {
-		preg_match_all('/\(((?:\\\\.|[^)\\\\])*)\)/s', $match[1] !== '' ? $match[1] : '('.($match[2] ?? '').')', $pieces);
-		$text .= stripcslashes(implode('', $pieces[1]))."\n";
+	foreach (array($name => $file, $name.'-annexe' => $annexFile) as $key => $document) {
+		$raw = file_get_contents($document);
+		preg_match_all('/\[((?:\\\\.|[^\]\\\\])*)\]\s*TJ|\(((?:\\\\.|[^)\\\\])*)\)\s*Tj/s', $raw, $matches, PREG_SET_ORDER);
+		$text = '';
+		foreach ($matches as $match) {
+			preg_match_all('/\(((?:\\\\.|[^)\\\\])*)\)/s', $match[1] !== '' ? $match[1] : '('.($match[2] ?? '').')', $pieces);
+			$text .= stripcslashes(implode('', $pieces[1]))."\n";
+		}
+		$contents[$key] = mb_convert_encoding($text, 'UTF-8', 'Windows-1252');
 	}
-	$contents[$name] = mb_convert_encoding($text, 'UTF-8', 'Windows-1252');
 }
 $default = $contents['default']; $client = $contents['client'];
 visualPdfCheck(strpos($default, '6T22B9036710') !== false && strpos($default, 'SDO-RP-2022-003925') !== false, 'Default layout keeps inverter serials and the full connection block');
 visualPdfCheck(strpos($client, '6T22B9036710') === false && strpos($client, 'SUN2000') === false && strpos($client, 'HUAWEI') === false, 'Client layout hides inverter product references and serial numbers');
 visualPdfCheck(strpos($client, 'Onduleur 1') !== false && strpos($client, 'Onduleur 4') !== false, 'Inverters without marker are numbered in the client layout');
 visualPdfCheck(strpos($client, 'SDO-RP-2022-003925') === false && strpos($client, '50088794738676') !== false, 'Short connection keeps the PRM and drops the request number');
-visualPdfCheck(strpos($client, $langs->transnoentities('PowerPlantPVVisualMaterialAnnex')) === false && strpos($default, $langs->transnoentities('PowerPlantPVVisualMaterialAnnex')) !== false, 'Equipment appendix only in the default layout');
+$materialTitle = $langs->transnoentities('PowerPlantPVVisualMaterialAnnex');
+$dcTitle = $langs->transnoentities('PowerPlantPVVisualDcAnnex');
+visualPdfCheck(strpos($default, $materialTitle) === false && strpos($default, $dcTitle) === false, 'Appendices are absent from the signed main report');
+visualPdfCheck(strpos($contents['default-annexe'], $materialTitle) !== false && strpos($contents['default-annexe'], $dcTitle) !== false, 'Both appendices are present in one companion PDF');
+visualPdfCheck(strpos($contents['client-annexe'], $materialTitle) === false && strpos($contents['client-annexe'], $dcTitle) !== false && strpos($contents['client-annexe'], '6T22B9036710') === false, 'Companion PDF respects the equipment privacy option');
+visualPdfCheck(strpos($contents['default-annexe'], $langs->transnoentities('PowerPlantPVVisualCustomerSignature')) === false, 'Signature cards stay out of the companion PDF');
 visualPdfCheck(strpos($default, $langs->transnoentities('PowerPlantPVVisualVigilance', 5)) !== false, 'Cover lists observations and explicit No answers: 2 observations, switch, two missing caps');
 visualPdfCheck(strpos($default, $langs->transnoentities('PowerPlantPVVisualDelta').' : +525 416') !== false || strpos($default, '+525') !== false, 'Readings show the change since N-1');
 visualPdfCheck(strpos($default, 'Index consommation N') === false, 'A reading never taken does not produce an empty card');
@@ -240,10 +252,11 @@ visualPdfCheck(strpos($flat($default), $langs->transnoentities('PowerPlantPVVisu
 visualPdfCheck(strpos($flat($default), 'Nettoyage / lubrification des joints Sans objet') !== false, 'The cabinet cleaning row shows Sans objet in the PDF');
 visualPdfCheck(strpos($default, 'Bleu : tension') === false && strpos($default, 'Pointillés :') === false, 'The chart legend uses graphic markers instead of color names');
 visualPdfCheck(strpos($mixed, $langs->transnoentities('PowerPlantPVReportChartMissing')) !== false && strpos($mixed, $langs->transnoentities('PowerPlantPVVisualToCheck')) !== false, 'Incomplete insulation and an unconfirmed zero retain distinct messages');
-visualPdfCheck(strpos($mixed, $langs->transnoentities('PowerPlantPVPositiveToGroundVoltage')) !== false
-	&& strpos($mixed, $langs->transnoentities('PowerPlantPVInsulationNegativeToGround')) !== false
-	&& strpos($mixed, '-18') !== false, 'Signed ground voltages and historic insulation use distinct columns');
-visualPdfCheck(strpos($mixed, 'SDO-RP-2022-003925') === false && strpos($mixed, $langs->transnoentities('PowerPlantPVVisualMaterialAnnex')) !== false, 'Short connection is also applied when the material appendix is kept');
+$mixedAnnex = $flat($contents['mixed-annexe']);
+visualPdfCheck(strpos($mixedAnnex, $langs->transnoentities('PowerPlantPVPositiveToGroundVoltage')) !== false
+	&& strpos($mixedAnnex, $langs->transnoentities('PowerPlantPVInsulationNegativeToGround')) !== false
+	&& strpos($mixedAnnex, '-18') !== false, 'Signed ground voltages and historic insulation use distinct columns');
+visualPdfCheck(strpos($mixed, 'SDO-RP-2022-003925') === false && strpos($mixedAnnex, 'SDO-RP-2022-003925') === false && strpos($mixedAnnex, $materialTitle) !== false, 'Short connection is also applied when the material appendix is kept');
 visualPdfCheck(strpos($mixed, dol_strtoupper($langs->transnoentities('PowerPlantPVVisualProductionIndex'))) !== false, 'A valid zero production index takes precedence over the inverter sum');
 visualPdfCheck(strpos($default, 'Production annuelle historique') === false && strpos($default, 'Autoconsommation historique') === false, 'Historical annual and manual self-consumption entries stay out of the PDF');
 visualPdfCheck(strpos($flat($default), $langs->transnoentities('PowerPlantPVInverterProductionIndexCurrent')) !== false, 'Historical inverter field is labelled as an index');
@@ -253,5 +266,28 @@ visualPdfCheck(strpos($flat($client), 'Responsable Recette') !== false
 	&& strpos($flat($client), $langs->transnoentities('PowerPlantPVTechnicalSignAuthenticated')) !== false,
 	'An authenticated technical signature prints the recorded signer');
 visualPdfCheck(strpos($default, 'Technicien Test') !== false && strpos($default, $langs->transnoentities('PowerPlantPVVisualCustomerSignature')) !== false, 'Signature cards show the technician and the customer');
+
+$reportFile = $dataRoot.'/pair.pdf';
+$annexFile = $dataRoot.'/pair-annexe.pdf';
+$reportStage = $dataRoot.'/report.stage';
+$annexStage = $dataRoot.'/annex.stage';
+file_put_contents($reportFile, 'old report');
+file_put_contents($annexFile, 'old annex');
+file_put_contents($reportStage, 'new report');
+file_put_contents($annexStage, 'new annex');
+$pair = array($reportFile => $reportStage, $annexFile => $annexStage);
+$model->indexResult = false;
+visualPdfCheck(!$model->publish($object, $dataRoot, $pair, $annexFile)
+	&& file_get_contents($reportFile) === 'old report' && file_get_contents($annexFile) === 'old annex', 'An indexing failure restores both previous files');
+file_put_contents($reportStage, 'new report');
+file_put_contents($annexStage, 'new annex');
+$model->indexResult = true;
+visualPdfCheck($model->publish($object, $dataRoot, $pair, $annexFile)
+	&& $model->indexedFile === $annexFile && file_get_contents($reportFile) === 'new report' && file_get_contents($annexFile) === 'new annex',
+	'Regeneration replaces both files and indexes the appendix separately');
+unlink($reportFile);
+unlink($annexFile);
+unlink($dataRoot.'/.powerplantpv-report.lock');
+
 if ($outputDir === '') { foreach (glob($dataRoot.'/*.pdf') ?: array() as $pdfFile) { unlink($pdfFile); } }
 print 'OK: '.$checks.' visual PDF checks, PHP '.PHP_VERSION.', Dolibarr '.DOL_VERSION.' (real TCPDF, no database).'."\n";
