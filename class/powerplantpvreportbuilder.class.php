@@ -288,6 +288,7 @@ class PowerPlantPVReportBuilder
 		$oldDcValues = $this->fetchExistingDcMeasureValues((int) $report->id);
 
 		if ($this->db->begin() <= 0) { $this->setError($this->db->lasterror()); return -1; }
+		if (!$report->lockUnsignedForEdit()) { $this->setError('PowerPlantPVTechnicalSignEditLocked'); $this->db->rollback(); return -1; }
 		$report->status = $status;
 		$report->fk_soc = $context['fk_soc'];
 		$report->fk_project = $context['fk_project'];
@@ -415,6 +416,7 @@ class PowerPlantPVReportBuilder
 		}
 
 		if ($this->db->begin() <= 0) { $this->setError($this->db->lasterror()); return -1; }
+		if (!$report->lockUnsignedForEdit()) { $this->setError('PowerPlantPVTechnicalSignEditLocked'); $this->db->rollback(); return -1; }
 		if ($this->persistInverterProductionSections((int) $report->id, $user) < 0) { $this->db->rollback(); return -1; }
 
 		$fieldObject = new PowerPlantPVReportField($this->db);

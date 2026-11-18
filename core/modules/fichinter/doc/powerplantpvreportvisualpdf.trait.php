@@ -83,8 +83,8 @@ trait PowerPlantPVReportVisualPdf
 				$this->visualPanels($pdf, array($this->visualSectionPanel($row, $outputlangs)), false);
 				$this->visualSectionExtras($pdf, $row, $dataset, $outputlangs);
 			}
-			if ($production) { $this->renderSectionTitle($pdf, $outputlangs->transnoentities('PowerPlantPVVisualProduction'), 2); }
-			foreach ($production as $row) { $this->visualReadings($pdf, $row, $dataset, $outputlangs); }
+			$productionTitle = $outputlangs->transnoentities('PowerPlantPVVisualProduction');
+			foreach ($production as $row) { $this->visualReadings($pdf, $row, $dataset, $outputlangs, $productionTitle); }
 		}
 		if ($dc) {
 			$dcHeading = $outputlangs->transnoentities('PowerPlantPVVisualDcMeasures');
@@ -608,7 +608,7 @@ trait PowerPlantPVReportVisualPdf
 	}
 
 	/** @param TCPDF|TCPDI $pdf @param array<string,mixed> $row @param array<string,mixed> $dataset @param Translate $langs @return void */
-	protected function visualReadings(&$pdf, $row, $dataset, $langs)
+	protected function visualReadings(&$pdf, $row, $dataset, $langs, &$productionTitle)
 	{
 		$fields=PowerPlantPVReportPdfDataset::fieldsByCode($this->filterVisibleFields($row['fields'])); $cards=array();
 		$title=!empty($row['equipment'])?$this->visualIdentity($row['equipment'],true):$langs->transnoentities('PowerPlantPVVisualCommonMeters');
@@ -616,10 +616,10 @@ trait PowerPlantPVReportVisualPdf
 			if (substr($code,-10)==='_N_MINUS_1' || !PowerPlantPVReportPdfDataset::isNumericFieldType($field->field_type)) { continue; }
 			$value=$field->value_number; $label=PowerPlantPVReportPresentation::inverterIndexLabel($field, $langs) ?? PowerPlantPVReportPdfDataset::localizedProperty($field,'field_label',$langs); $previous=$fields[$code.'_N_MINUS_1'] ?? null;
 			$hasValue=$value!==null && $value!=='' && is_numeric($value); $hasPrevious=is_object($previous) && $previous->value_number!==null && $previous->value_number!=='' && is_numeric($previous->value_number);
-			if (!$hasValue && !$hasPrevious) { continue; } // A reading never taken would only add an empty card.
+			if (!$hasValue) { continue; }
 			$history=$hasPrevious ? 'N-1 : '.price($previous->value_number).' '.(string)$field->unit : $langs->transnoentities('PowerPlantPVReportNoPreviousReading');
-			if ($hasValue && $hasPrevious) { $delta=(float)$value-(float)$previous->value_number; $history.="\n".$langs->transnoentities('PowerPlantPVVisualDelta').' : '.($delta>=0?'+':'-').price(abs($delta)).' '.(string)$field->unit; }
-			$cards[]=array($hasValue?price($value).' '.(string)$field->unit:$langs->transnoentities('PowerPlantPVDataNotFilled'), $label."\n".$history);
+			if ($hasPrevious) { $delta=(float)$value-(float)$previous->value_number; $history.="\n".$langs->transnoentities('PowerPlantPVVisualDelta').' : '.($delta>=0?'+':'-').price(abs($delta)).' '.(string)$field->unit; }
+			$cards[]=array(price($value).' '.(string)$field->unit, $label."\n".$history);
 		}
 		if (empty($row['equipment'])) {
 			$calculated = PowerPlantPVReportPresentation::selfConsumptionBetweenReadings(array_values($fields), (int) PowerPlantPVReportPdfDataset::normalizeDateValue($this->currentObject->datei ?? null));
@@ -627,10 +627,25 @@ trait PowerPlantPVReportVisualPdf
 				$cards[] = array(price($calculated, 0, $langs, 0, 0).' kWh', $langs->transnoentities('PowerPlantPVSelfConsumptionBetweenReadings'));
 			}
 		}
-		if ($cards) { $this->ensureSpace($pdf, 49); }
+		$extras = array_filter($fields, static function ($field) use ($langs) {
+			if (PowerPlantPVReportPdfDataset::isFileField($field) || PowerPlantPVReportPdfDataset::isSignatureField($field)) {
+				return !empty($field->files);
+			}
+			return in_array((string) $field->field_type, array('textarea', 'html', 'text', 'varchar'), true)
+				&& trim(PowerPlantPVReportPdfDataset::formatFieldValue($field, $langs)) !== '';
+		});
+		if (!$cards && !$extras) {
+			return;
+		}
+		if ($cards) { $this->ensureSpace($pdf, $productionTitle !== '' ? 58 : 49); }
+		if ($productionTitle !== '') {
+			$this->renderSectionTitle($pdf, $productionTitle, 2);
+			$productionTitle = '';
+		}
 		$this->renderSectionTitle($pdf, $title, 3);
 		if ($cards) { $this->visualKpis($pdf,$cards,3,34); }
 		$this->renderReadingPhotos($pdf, $fields, $langs);
+		$row['fields'] = array_values($extras);
 		$this->visualSectionExtras($pdf,$row,$dataset,$langs,true);
 	}
 
@@ -762,7 +777,14 @@ trait PowerPlantPVReportVisualPdf
 		$customerImage = $this->visualSignatureImage($customerField, $dataset);
 		$customerName = is_object($customerField) ? trim(dol_string_nohtmltag(PowerPlantPVReportPdfDataset::formatFieldValue($customerField, $langs))) : '';
 		$cards = array(array($langs->transnoentities('PowerPlantPVReportTechnicianSignature'), implode(', ', array_unique($names)), $names || $technicianImage !== '' ? $date : '', $technicianImage));
-		if (getDolGlobalInt('POWERPLANTPV_REPORT_PDF_TECHNICAL_SERVICE_SIGNATURE')) { $cards[] = array($langs->transnoentities('PowerPlantPVVisualTechnicalServiceSignature'), '', '', ''); }
+		$report = $dataset['report'] ?? null;
+		$technicalSigned = !empty($report->fk_user_technical_sign);
+		$technicalEnabled = $report instanceof PowerPlantPVReport ? $report->technicalSignatureEnabled()
+			: getDolGlobalInt('POWERPLANTPV_REPORT_PDF_TECHNICAL_SERVICE_SIGNATURE') > 0;
+		if ($technicalSigned || $technicalEnabled) {
+			$technicalDate = $technicalSigned ? dol_print_date($report->date_technical_sign, 'day', 'tzuser', $langs) : '';
+			$cards[] = array($langs->transnoentities('PowerPlantPVVisualTechnicalServiceSignature'), (string) ($report->technical_signer_name ?? ''), $technicalDate, '', $technicalSigned);
+		}
 		$cards[] = array($langs->transnoentities('PowerPlantPVVisualCustomerSignature'), $customerName, $customerImage !== '' ? $date : '', $customerImage);
 
 		// The block sits at the bottom of the last page and the customer card covers the right half:
@@ -788,6 +810,12 @@ trait PowerPlantPVReportVisualPdf
 			$pdf->SetDrawColor(207, 213, 223); $pdf->SetLineStyle(array('width' => 0.2, 'dash' => '1,1')); $pdf->RoundedRect($bx, $by, $bw, $bh, 1.5, '1111', 'D'); $pdf->SetLineStyle(array('width' => 0.2, 'dash' => 0));
 			$size = $card[3] !== '' ? @getimagesize($card[3]) : false;
 			if (!empty($size[0]) && !empty($size[1])) { $ratio = min(($bw - 6) / $size[0], ($bh - 4) / $size[1]); $pdf->Image($card[3], $bx + ($bw - $size[0] * $ratio) / 2, $by + ($bh - $size[1] * $ratio) / 2, $size[0] * $ratio, $size[1] * $ratio); }
+			if (!empty($card[4])) {
+				$pdf->SetTextColor(24, 47, 79);
+				$pdf->SetFont('', 'I', 9);
+				$pdf->SetXY($bx + 2, $by + 10);
+				$pdf->MultiCell($bw - 4, 4, $langs->convToOutputCharset($langs->transnoentities('PowerPlantPVTechnicalSignAuthenticated')), 0, 'C');
+			}
 		}
 		$pdf->SetY($y + $height + 4); $pdf->SetFont('', '', $this->defaultFontSize); $pdf->SetTextColor(24, 47, 79);
 	}

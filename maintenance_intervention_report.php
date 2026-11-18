@@ -127,6 +127,24 @@ $reportFetch = $report->fetchByIntervention($id);
 if ($reportFetch < 0) {
 	setEventMessages($report->error, $report->errors, 'errors');
 }
+$technicalSigned = $reportFetch > 0 && (int) $report->fk_user_technical_sign > 0;
+$caneditreport = $caneditreport && !$technicalSigned;
+$canTechnicalSign = $reportFetch > 0 && !$technicalSigned && !$locked && $report->isSaved()
+	&& $user->hasRight('powerplantpv', 'maintenance', 'sign_technical')
+	&& $report->technicalSignatureEnabled() && $report->isTechnicalSupervisor($intervention, $user);
+if ($action === 'sign_technical') {
+	if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'POST' || !$canTechnicalSign || !powerplantpvReportSubmittedTokenValid($token)
+		|| GETPOSTINT('technical_sign_consent', 2) !== 1
+		|| powerplantpvReportSnapshotNeedsRebuild($builder, (int) $report->id)) {
+		accessforbidden();
+	}
+	if ($report->signAsTechnicalSupervisor($intervention, $user, $user->getFullName($langs)) > 0) {
+		setEventMessages($langs->trans('PowerPlantPVTechnicalSignRecorded'), null, 'mesgs');
+		header('Location: '.$_SERVER['PHP_SELF'].'?id='.(int) $id);
+		exit;
+	}
+	setEventMessages($langs->trans('PowerPlantPVTechnicalSignFailed'), null, 'errors');
+}
 
 if ($action === 'view_index_photo') {
 	$field = new PowerPlantPVReportField($db);
@@ -517,6 +535,19 @@ if (is_array($tree) && empty($tree['can_generate'])) {
 	}
 	print '</form>';
 
+	if ($technicalSigned) {
+		print '<p class="opacitymedium">'.$langs->trans('PowerPlantPVTechnicalSignSummary',
+			dol_escape_htmltag((string) $report->technical_signer_name), dol_print_date($report->date_technical_sign, 'dayhour')).'</p>';
+	} elseif ($canTechnicalSign && !$snapshotNeedsRebuild) {
+		print '<form method="POST" action="'.dol_escape_htmltag($_SERVER['PHP_SELF']).'">';
+		print '<input type="hidden" name="token" value="'.newToken().'">';
+		print '<input type="hidden" name="id" value="'.(int) $id.'">';
+		print '<input type="hidden" name="action" value="sign_technical">';
+		print '<label><input type="checkbox" name="technical_sign_consent" value="1" required> '.$langs->trans('PowerPlantPVTechnicalSignConsent').'</label>';
+		print ' <input type="submit" class="button" value="'.dol_escape_htmltag($langs->trans('PowerPlantPVTechnicalSignButton')).'">';
+		print '</form>';
+	}
+
 	if ($cangenerateserialannex && $reportFetch > 0) {
 		print '<form method="POST" action="'.dol_escape_htmltag($_SERVER['PHP_SELF']).'" class="powerplantpv-inline-form">';
 		print '<input type="hidden" name="token" value="'.newToken().'">';
@@ -567,7 +598,7 @@ function powerplantpvReportIsInterventionLocked($intervention)
 	$receiver = (class_exists('Fichinter') && defined('Fichinter::STATUS_SIGNED_RECEIVER')) ? (int) constant('Fichinter::STATUS_SIGNED_RECEIVER') : 2;
 	$all = (class_exists('Fichinter') && defined('Fichinter::STATUS_SIGNED_ALL')) ? (int) constant('Fichinter::STATUS_SIGNED_ALL') : 9;
 
-	return in_array($signedStatus, array($receiver, $all), true);
+	return in_array($signedStatus, array($receiver, 3, $all), true);
 }
 
 /**

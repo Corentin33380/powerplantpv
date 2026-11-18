@@ -160,6 +160,11 @@ $sections[] = visualSection('PRODUCTION_READING', 'Relevés', array(
 	visualField('PRODUCTION_READING_OBSERVATION', 'Observation', 'text', 'Relevés effectués sur site.'),
 ));
 $sections[] = visualSection('DC_ELECTRICAL_MEASURE', 'Mesures électriques DC', array(), null, $measures);
+$sections[] = visualSection('PRODUCTION_READING', 'Relevés', array(
+	visualField('INVERTER_INJECTION', 'Index injection', 'double', null, 'kWh'),
+	visualField('INVERTER_INJECTION_N_MINUS_1', 'Ancien index injection', 'double', 99991, 'kWh'),
+),
+	(object) array('fk_powerplant_line' => 99, 'equipment_marker' => 'OND-VIDE', 'equipment_identification' => 'Sans relevé'));
 $general = array(
 	array('section' => (object) array('section_code' => 'GENERAL_INFORMATION', 'section_label' => 'Informations générales', 'visible_pdf' => 1, 'fk_report_powerplant' => 0), 'fields' => array(visualField('GENERAL_INTERVENTION_CONTEXT', 'Contexte de l’intervention', 'textarea', 'Maintenance préventive annuelle de la centrale.')), 'equipment' => null, 'dc_measures' => array()),
 	array('section' => (object) array('section_code' => 'GENERAL_OBSERVATIONS', 'section_label' => 'Observations générales', 'visible_pdf' => 1, 'fk_report_powerplant' => 0), 'fields' => array(visualField('GENERAL_OBSERVATIONS_TEXT', 'Observations générales', 'textarea', "Les contrôles sont conformes.\nConclusion : Aucun défaut majeur ; la fixation du capot reste à reprendre.")), 'equipment' => null, 'dc_measures' => array()),
@@ -191,6 +196,13 @@ foreach ($runs as $name => $options) {
 	}
 	foreach (array('HIDE_EQUIPMENT', 'SHORT_CONNECTION', 'TECHNICAL_SERVICE_SIGNATURE') as $option) { unset($conf->global->{'POWERPLANTPV_REPORT_PDF_'.$option}); }
 	foreach ($options as $option) { $conf->global->{'POWERPLANTPV_REPORT_PDF_'.$option} = '1'; }
+	if ($name === 'client') {
+		$dataset['report']->fk_user_technical_sign = 15;
+		$dataset['report']->date_technical_sign = dol_mktime(10, 30, 0, 11, 18, 2026);
+		$dataset['report']->technical_signer_name = 'Responsable Recette';
+	} else {
+		unset($dataset['report']->fk_user_technical_sign, $dataset['report']->date_technical_sign, $dataset['report']->technical_signer_name);
+	}
 	$model = VisualPdfFixture::create($mysoc);
 	$model->snapshot = $snapshot;
 	$file = ($outputDir !== '' ? rtrim($outputDir, '/\\') : $dataRoot).'/visual-'.$name.'.pdf';
@@ -215,6 +227,7 @@ visualPdfCheck(strpos($client, $langs->transnoentities('PowerPlantPVVisualMateri
 visualPdfCheck(strpos($default, $langs->transnoentities('PowerPlantPVVisualVigilance', 5)) !== false, 'Cover lists observations and explicit No answers: 2 observations, switch, two missing caps');
 visualPdfCheck(strpos($default, $langs->transnoentities('PowerPlantPVVisualDelta').' : +525 416') !== false || strpos($default, '+525') !== false, 'Readings show the change since N-1');
 visualPdfCheck(strpos($default, 'Index consommation N') === false, 'A reading never taken does not produce an empty card');
+visualPdfCheck(strpos($default, 'OND-VIDE') === false, 'A section for an inverter without readings or comments does not leave an empty heading');
 visualPdfCheck(strpos($default, 'Relevés effectués sur site.') !== false, 'Short reading observation is printed');
 visualPdfCheck(strpos($default, $langs->transnoentities('PowerPlantPVVisualNoObservation')) !== false, 'Empty section observation remains visible');
 visualPdfCheck(strpos($default, $langs->transnoentities('PowerPlantPVVisualConclusion')) !== false && strpos($default, 'Conclusion : Aucun') === false, 'Conclusion paragraph is moved to its highlighted box');
@@ -233,6 +246,9 @@ visualPdfCheck(strpos($default, 'Production annuelle historique') === false && s
 visualPdfCheck(strpos($flat($default), $langs->transnoentities('PowerPlantPVInverterProductionIndexCurrent')) !== false, 'Historical inverter field is labelled as an index');
 $serviceTitle = $langs->transnoentities('PowerPlantPVVisualTechnicalServiceSignature');
 visualPdfCheck(strpos($flat($client), $serviceTitle) !== false && strpos($flat($default), $serviceTitle) === false, 'Technical department signature box is optional');
+visualPdfCheck(strpos($flat($client), 'Responsable Recette') !== false
+	&& strpos($flat($client), $langs->transnoentities('PowerPlantPVTechnicalSignAuthenticated')) !== false,
+	'An authenticated technical signature prints the recorded signer');
 visualPdfCheck(strpos($default, 'Technicien Test') !== false && strpos($default, $langs->transnoentities('PowerPlantPVVisualCustomerSignature')) !== false, 'Signature cards show the technician and the customer');
 if ($outputDir === '') { foreach (glob($dataRoot.'/*.pdf') ?: array() as $pdfFile) { unlink($pdfFile); } }
 print 'OK: '.$checks.' visual PDF checks, PHP '.PHP_VERSION.', Dolibarr '.DOL_VERSION.' (real TCPDF, no database).'."\n";

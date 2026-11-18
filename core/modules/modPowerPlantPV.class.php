@@ -597,6 +597,11 @@ class modPowerPlantPV extends DolibarrModules
 		$this->rights[$r][1] = 'PowerPlantPVMaintenancePermissionConfig';
 		$this->rights[$r][4] = 'maintenance';
 		$this->rights[$r][5] = 'config';
+		$r++;
+		$this->rights[$r][0] = $this->numero * 100 + $r;
+		$this->rights[$r][1] = 'PowerPlantPVMaintenancePermissionTechnicalSign';
+		$this->rights[$r][4] = 'maintenance';
+		$this->rights[$r][5] = 'sign_technical';
 
 		/* END MODULEBUILDER PERMISSIONS */
 
@@ -1934,6 +1939,9 @@ class modPowerPlantPV extends DolibarrModules
 			),
 			$this->db->prefix().'powerplantpv_report' => array(
 				'fk_fichinter' => array('type' => 'integer', 'value' => '', 'null' => 'NOT NULL'),
+				'fk_user_technical_sign' => array('type' => 'integer', 'value' => '', 'null' => ''),
+				'date_technical_sign' => array('type' => 'datetime', 'value' => '', 'null' => ''),
+				'technical_signer_name' => array('type' => 'varchar', 'value' => '255', 'null' => ''),
 				'source_mode' => array('type' => 'varchar', 'value' => '16', 'null' => "DEFAULT 'contract' NOT NULL"),
 				'status' => array('type' => 'varchar', 'value' => '16', 'null' => "DEFAULT 'draft' NOT NULL"),
 			),

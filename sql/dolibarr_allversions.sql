@@ -640,12 +640,18 @@ CREATE TABLE IF NOT EXISTS llx_powerplantpv_report(
 	report_template_label_en varchar(255),
 	source_mode varchar(16) DEFAULT 'contract' NOT NULL,
 	status varchar(16) DEFAULT 'draft' NOT NULL,
+	fk_user_technical_sign integer,
+	date_technical_sign datetime,
+	technical_signer_name varchar(255),
 	date_creation datetime,
 	tms timestamp DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
 	fk_user_creat integer,
 	fk_user_modif integer,
 	import_key varchar(14)
 ) ENGINE=innodb;
+ALTER TABLE llx_powerplantpv_report ADD COLUMN IF NOT EXISTS fk_user_technical_sign integer;
+ALTER TABLE llx_powerplantpv_report ADD COLUMN IF NOT EXISTS date_technical_sign datetime;
+ALTER TABLE llx_powerplantpv_report ADD COLUMN IF NOT EXISTS technical_signer_name varchar(255);
 ALTER TABLE llx_powerplantpv_report ADD UNIQUE INDEX IF NOT EXISTS uk_powerplantpv_report_fichinter (entity, fk_fichinter);
 ALTER TABLE llx_powerplantpv_report ADD INDEX IF NOT EXISTS idx_powerplantpv_report_entity (entity);
 ALTER TABLE llx_powerplantpv_report ADD INDEX IF NOT EXISTS idx_powerplantpv_report_soc (fk_soc);

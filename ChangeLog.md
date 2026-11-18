@@ -7,6 +7,7 @@
 - Mesures DC en volts entre les pôles et la terre dans le modèle de rapport par défaut. Les résistances historiques conservent leur unité.
 - En-têtes de l’annexe DC alignés sur les cellules, couleur de pied de page native et noms traduits des modèles PDF.
 - En-tête du rapport compact, barre de progression continue et légende de la photo avec référence, nom et ville de la centrale.
+- Signature nominative du responsable hiérarchique direct sur les rapports finalisés, activable par entité et protégée par une permission dédiée.
 
 ## 1.8.0 — 2026-11-18
 

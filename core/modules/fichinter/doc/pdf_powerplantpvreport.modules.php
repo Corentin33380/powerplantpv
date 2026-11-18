@@ -1185,16 +1185,19 @@ class pdf_powerplantpvreport extends ModelePDFFicheinter
 		}
 		$size = $level === 1 ? 19 : ($level === 2 ? 13 : 11);
 		$pdf->SetFont('', 'B', $size);
-		$width = $this->page_largeur - $this->marge_gauche - $this->marge_droite - 4;
+		$indent = $level <= 2 ? 4 : 0;
+		$width = $this->page_largeur - $this->marge_gauche - $this->marge_droite - $indent;
 		$title = $this->currentOutputLangs->convToOutputCharset($title);
 		$height = max(6, $pdf->getStringHeight($width, $title));
 		$this->ensureSpace($pdf, $height + ($level <= 2 ? 24 : 15));
 		$pdf->SetFont('', 'B', $size);
 		$pdf->SetTextColor(23, 40, 74);
 		$y = $pdf->GetY();
-		$pdf->SetFillColor(22, 136, 224);
-		$pdf->RoundedRect($this->marge_gauche, $y + 0.6, 1.6, 4.8, 0.8, '1111', 'F');
-		$pdf->MultiCell($width, $height, $title, 0, 'L', false, 1, $this->marge_gauche + 4, $y);
+		if ($level <= 2) {
+			$pdf->SetFillColor(22, 136, 224);
+			$pdf->RoundedRect($this->marge_gauche, $y + 0.6, 1.6, 4.8, 0.8, '1111', 'F');
+		}
+		$pdf->MultiCell($width, $height, $title, 0, 'L', false, 1, $this->marge_gauche + $indent, $y);
 		$pdf->Ln(1.5);
 		$pdf->SetFont('', '', $this->defaultFontSize);
 		$pdf->SetTextColor(0, 0, 0);
