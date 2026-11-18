@@ -815,7 +815,7 @@ trait PowerPlantPVReportVisualPdf
 			$cellWidth = $width * $column[1] / 100;
 			$label = $langs->convToOutputCharset($langs->transnoentities($column[0]).(isset($column[2]) ? ' ('.$column[2].')' : ''));
 			$headers[] = array($cellWidth, $label);
-			$headerHeight = max($headerHeight, $pdf->getStringHeight($cellWidth - 4, $label) + 2);
+			$headerHeight = max($headerHeight, $pdf->getStringHeight($cellWidth - 2, $label) + 2);
 		}
 		$rows = array();
 		$notes = array();
@@ -849,7 +849,7 @@ trait PowerPlantPVReportVisualPdf
 			$y = $pdf->GetY();
 			$x = $left;
 			foreach ($headers as [$cellWidth, $label]) {
-				$pdf->MultiCell($cellWidth - 4, 0, $label, 0, 'L', false, 1, $x + 2, $y);
+				$pdf->MultiCell($cellWidth - 2, 0, $label, 0, 'L', false, 1, $x + 2, $y);
 				$x += $cellWidth;
 			}
 			$y += $headerHeight;
