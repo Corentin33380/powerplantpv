@@ -154,6 +154,8 @@ $sections[] = visualSection('PRODUCTION_READING', 'Relevés', array(
 	visualField('INVERTER_PRODUCTION', 'Relevé production onduleur N', 'double', 561970, 'kWh'),
 	visualField('INJECTION_INDEX_N_MINUS_1', 'Index injection N-1', 'double', 1097814, 'kWh'),
 	visualField('INJECTION_INDEX', 'Index injection N', 'double', 1623230, 'kWh'),
+	visualField('ANNUAL_PRODUCTION', 'Production annuelle historique', 'double', 99999, 'kWh'),
+	visualField('SELF_CONSUMPTION', 'Autoconsommation historique', 'double', 88888, 'kWh'),
 	visualField('CONSUMPTION_INDEX', 'Index consommation N', 'double', null, 'kWh'),
 	visualField('PRODUCTION_READING_OBSERVATION', 'Observation', 'text', 'Relevés effectués sur site.'),
 ));
@@ -222,6 +224,8 @@ visualPdfCheck(strpos($flat($default), $langs->transnoentities('PowerPlantPVVisu
 visualPdfCheck(strpos($mixed, $langs->transnoentities('PowerPlantPVReportChartMissing')) !== false && strpos($mixed, $langs->transnoentities('PowerPlantPVVisualToCheck')) !== false, 'Incomplete insulation and an unconfirmed zero retain distinct messages');
 visualPdfCheck(strpos($mixed, 'SDO-RP-2022-003925') === false && strpos($mixed, $langs->transnoentities('PowerPlantPVVisualMaterialAnnex')) !== false, 'Short connection is also applied when the material appendix is kept');
 visualPdfCheck(strpos($mixed, dol_strtoupper($langs->transnoentities('PowerPlantPVVisualProductionIndex'))) !== false, 'A valid zero production index takes precedence over the inverter sum');
+visualPdfCheck(strpos($default, 'Production annuelle historique') === false && strpos($default, 'Autoconsommation historique') === false, 'Historical annual and manual self-consumption entries stay out of the PDF');
+visualPdfCheck(strpos($flat($default), $langs->transnoentities('PowerPlantPVInverterProductionIndexCurrent')) !== false, 'Historical inverter field is labelled as an index');
 $serviceTitle = $langs->transnoentities('PowerPlantPVVisualTechnicalServiceSignature');
 visualPdfCheck(strpos($flat($client), $serviceTitle) !== false && strpos($flat($default), $serviceTitle) === false, 'Technical department signature box is optional');
 visualPdfCheck(strpos($default, 'Technicien Test') !== false && strpos($default, $langs->transnoentities('PowerPlantPVVisualCustomerSignature')) !== false, 'Signature cards show the technician and the customer');

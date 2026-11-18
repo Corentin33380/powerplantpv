@@ -1403,7 +1403,8 @@ class pdf_powerplantpvreport extends ModelePDFFicheinter
 	{
 		$visible = array();
 		foreach ($fields as $field) {
-			if (is_object($field) && !empty($field->visible_pdf)) {
+			if (is_object($field) && !empty($field->visible_pdf)
+				&& !PowerPlantPVReportPresentation::isRetiredProductionField((string) ($field->field_code ?? ''))) {
 				$visible[] = $field;
 			}
 		}

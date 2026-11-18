@@ -35,6 +35,24 @@ foreach (array(10 => 'O10', 2 => 'O2', 1 => 'O1') as $id => $marker) {
 		}
 	}
 }
+$previousDate = 1700000000;
+$endDate = $previousDate + 300 * 86400;
+$meterFields = array(
+	(object) array('field_code' => 'PRODUCTION_INDEX', 'value_number' => 1900, 'unit' => 'kWh'),
+	(object) array('field_code' => 'PRODUCTION_INDEX_N_MINUS_1', 'value_number' => 1000, 'unit' => 'kWh', 'value_date' => $previousDate),
+	(object) array('field_code' => 'INJECTION_INDEX', 'value_number' => 1300, 'unit' => 'kWh'),
+	(object) array('field_code' => 'INJECTION_INDEX_N_MINUS_1', 'value_number' => 800, 'unit' => 'kWh', 'value_date' => $previousDate),
+);
+checkMaintenance(PowerPlantPVReportPresentation::selfConsumptionBetweenReadings($meterFields, $endDate) === 400.0, 'Self-consumption is calculated over the actual period without annualization');
+$meterFields[2]->value_number = 1700;
+checkMaintenance(PowerPlantPVReportPresentation::selfConsumptionBetweenReadings($meterFields, $endDate) === 0.0, 'A valid zero self-consumption is retained');
+$meterFields[2]->value_number = 700;
+checkMaintenance(PowerPlantPVReportPresentation::selfConsumptionBetweenReadings($meterFields, $endDate) === null, 'Counter reset is not interpreted as consumption');
+$meterFields[2]->value_number = 1300;
+$meterFields[3]->value_date = $previousDate - 86400;
+checkMaintenance(PowerPlantPVReportPresentation::selfConsumptionBetweenReadings($meterFields, $endDate) === null, 'Different start dates cannot be compared');
+$meterFields[3]->value_date = null;
+checkMaintenance(PowerPlantPVReportPresentation::selfConsumptionBetweenReadings($meterFields, $endDate) === null, 'Historical readings with unknown dates are not extrapolated');
 $groups = PowerPlantPVReportPresentation::groupMeasures($measures);
 checkMaintenance(count($groups) === 3, 'Identical catalog products remain three physical inverter groups');
 checkMaintenance(array_keys($groups) === array('2:line:1', '2:line:2', '2:line:10'), 'Natural marker order O1 O2 O10');

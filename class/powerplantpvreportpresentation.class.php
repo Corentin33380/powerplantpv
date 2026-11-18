@@ -6,6 +6,55 @@
 /** Shared presentation of installed equipment and frozen report data. */
 class PowerPlantPVReportPresentation
 {
+	/** @param string $code @return bool */
+	public static function isRetiredProductionField($code)
+	{
+		return in_array($code, array('ANNUAL_PRODUCTION', 'ANNUAL_PRODUCTION_N_MINUS_1', 'SELF_CONSUMPTION', 'SELF_CONSUMPTION_N_MINUS_1'), true);
+	}
+
+	/** @param object $field @param Translate $langs @return string|null */
+	public static function inverterIndexLabel($field, $langs)
+	{
+		$code = (string) ($field->field_code ?? '');
+		if ($code === 'INVERTER_PRODUCTION') { return $langs->transnoentities('PowerPlantPVInverterProductionIndexCurrent'); }
+		if ($code === 'INVERTER_PRODUCTION_N_MINUS_1') { return $langs->transnoentities('PowerPlantPVInverterProductionIndexPrevious'); }
+		return null;
+	}
+
+	/**
+	 * Energy used on site between comparable production and injection meter readings.
+	 * Previous index dates are frozen with their numeric values. No estimate if an
+	 * index or date is absent, the start dates differ, or a counter has decreased.
+	 * @param array<int,object> $fields Visible fields of the common meters section
+	 * @param int $endDate Timestamp of the current intervention reading
+	 * @return float|null Energy in kWh (zero is a valid result)
+	 */
+	public static function selfConsumptionBetweenReadings($fields, $endDate)
+	{
+		$required = array('PRODUCTION_INDEX', 'PRODUCTION_INDEX_N_MINUS_1', 'INJECTION_INDEX', 'INJECTION_INDEX_N_MINUS_1');
+		$values = array();
+		$previousDates = array();
+		foreach ($fields as $field) {
+			$code = (string) ($field->field_code ?? '');
+			if (!in_array($code, $required, true)) { continue; }
+			if (($field->unit ?? '') !== 'kWh' || !is_numeric($field->value_number ?? null) || isset($values[$code])) { return null; }
+			$value = (float) $field->value_number;
+			if (!is_finite($value) || $value < 0) { return null; }
+			$values[$code] = $value;
+			if (substr($code, -10) === '_N_MINUS_1') {
+				$rawDate = $field->value_date ?? null;
+				$previousDates[] = is_numeric($rawDate) ? (int) $rawDate : (is_string($rawDate) ? (int) strtotime($rawDate) : 0);
+			}
+		}
+		if (count($values) !== 4 || count($previousDates) !== 2 || $previousDates[0] <= 0
+			|| $previousDates[0] !== $previousDates[1] || $previousDates[0] >= $endDate) {
+			return null;
+		}
+		$production = $values['PRODUCTION_INDEX'] - $values['PRODUCTION_INDEX_N_MINUS_1'];
+		$injection = $values['INJECTION_INDEX'] - $values['INJECTION_INDEX_N_MINUS_1'];
+		return $injection >= 0 && $production >= $injection ? $production - $injection : null;
+	}
+
 	/**
 	 * Consolidate raw composition rows before locale-dependent formatting.
 	 * @param array<int,array<string,mixed>> $components Raw rows from one plant

@@ -577,12 +577,18 @@ trait PowerPlantPVReportVisualPdf
 		$title=!empty($row['equipment'])?$this->visualIdentity($row['equipment'],true):$langs->transnoentities('PowerPlantPVVisualCommonMeters');
 		foreach ($fields as $code=>$field) {
 			if (substr($code,-10)==='_N_MINUS_1' || !PowerPlantPVReportPdfDataset::isNumericFieldType($field->field_type)) { continue; }
-			$value=$field->value_number; $label=PowerPlantPVReportPdfDataset::localizedProperty($field,'field_label',$langs); $previous=$fields[$code.'_N_MINUS_1'] ?? null;
+			$value=$field->value_number; $label=PowerPlantPVReportPresentation::inverterIndexLabel($field, $langs) ?? PowerPlantPVReportPdfDataset::localizedProperty($field,'field_label',$langs); $previous=$fields[$code.'_N_MINUS_1'] ?? null;
 			$hasValue=$value!==null && $value!=='' && is_numeric($value); $hasPrevious=is_object($previous) && $previous->value_number!==null && $previous->value_number!=='' && is_numeric($previous->value_number);
 			if (!$hasValue && !$hasPrevious) { continue; } // A reading never taken would only add an empty card.
 			$history=$hasPrevious ? 'N-1 : '.price($previous->value_number).' '.(string)$field->unit : $langs->transnoentities('PowerPlantPVReportNoPreviousReading');
 			if ($hasValue && $hasPrevious) { $delta=(float)$value-(float)$previous->value_number; $history.="\n".$langs->transnoentities('PowerPlantPVVisualDelta').' : '.($delta>=0?'+':'-').price(abs($delta)).' '.(string)$field->unit; }
 			$cards[]=array($hasValue?price($value).' '.(string)$field->unit:$langs->transnoentities('PowerPlantPVDataNotFilled'), $label."\n".$history);
+		}
+		if (empty($row['equipment'])) {
+			$calculated = PowerPlantPVReportPresentation::selfConsumptionBetweenReadings(array_values($fields), (int) PowerPlantPVReportPdfDataset::normalizeDateValue($this->currentObject->datei ?? null));
+			if ($calculated !== null) {
+				$cards[] = array(price($calculated, 0, $langs, 0, 0).' kWh', $langs->transnoentities('PowerPlantPVSelfConsumptionBetweenReadings'));
+			}
 		}
 		if ($cards) { $this->ensureSpace($pdf, 49); }
 		$this->renderSectionTitle($pdf, $title, 3);

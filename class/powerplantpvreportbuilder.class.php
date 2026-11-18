@@ -14,6 +14,7 @@
  */
 
 require_once __DIR__.'/powerplantpvinverterproduction.class.php';
+require_once __DIR__.'/powerplantpvreportpresentation.class.php';
 dol_include_once('/powerplantpv/class/powerplantpvreport.class.php');
 dol_include_once('/powerplantpv/class/powerplantpvreportpowerplant.class.php');
 dol_include_once('/powerplantpv/class/powerplantpvreportsourceservice.class.php');
@@ -416,7 +417,7 @@ class PowerPlantPVReportBuilder
 		}
 
 		foreach ($fields as $field) {
-			if (!empty($field->readonly)) {
+			if (!empty($field->readonly) || PowerPlantPVReportPresentation::isRetiredProductionField((string) $field->field_code)) {
 				continue;
 			}
 			$stableKey = (string) $field->stable_key;
@@ -1238,7 +1239,10 @@ class PowerPlantPVReportBuilder
 		$latest = $archive->fetchLatestValue($fkPowerplant, $typeCode, '', (int) $excludeReportId);
 		$field->readonly = 1;
 		$field->value_text = null;
-		$field->value_date = null;
+		// Freeze the date alongside both historical indices, without revising old
+		// reports merely because they are displayed.
+		$field->value_date = is_array($latest) && in_array($typeCode, array('PRODUCTION_INDEX', 'INJECTION_INDEX'), true)
+			? $this->db->jdate($latest['reading_date']) : null;
 		$field->value_number = is_array($latest) ? (float) $latest['value'] : null;
 	}
 

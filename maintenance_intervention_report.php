@@ -835,7 +835,7 @@ function powerplantpvReportFindMissingRequiredFields($reportId)
 		if (!is_object($field) || empty($field->is_required)) {
 			continue;
 		}
-		if (!empty($field->readonly) || (int) $field->visible_form <= 0) {
+		if (!empty($field->readonly) || (int) $field->visible_form <= 0 || PowerPlantPVReportPresentation::isRetiredProductionField((string) $field->field_code)) {
 			continue;
 		}
 		if (in_array((string) $field->field_type, array('computed', 'signature'), true)) {
@@ -971,7 +971,7 @@ function powerplantpvReportTreeHasNonDcSectionWithoutFields($tree)
  */
 function powerplantpvReportRenderSections($sections, $editable, $form, $powerplants = array())
 {
-	global $langs;
+	global $intervention, $langs;
 
 	if (empty($sections) && empty($powerplants)) {
 		print '<table class="noborder centpercent">';
@@ -1048,6 +1048,14 @@ function powerplantpvReportRenderSections($sections, $editable, $form, $powerpla
 			print '<div class="powerplantpv-report-fields">';
 			foreach ($fields as $field) {
 				powerplantpvReportRenderField($field, $editable, $form);
+			}
+			if ($section->section_code === 'PRODUCTION_READING' && empty($row['equipment'])) {
+				$endDate = (int) ($intervention->datei ?? 0);
+				$calculated = PowerPlantPVReportPresentation::selfConsumptionBetweenReadings($fields, $endDate);
+				if ($calculated !== null) {
+					print '<div class="powerplantpv-report-field"><strong>'.$langs->trans('PowerPlantPVSelfConsumptionBetweenReadings').'</strong> ';
+					print dol_escape_htmltag(price($calculated, 0, $langs, 0, 0).' kWh').'</div>';
+				}
 			}
 			print '</div>';
 			print '</details>';
@@ -1332,7 +1340,8 @@ function powerplantpvReportFilterRenderableFields($fields)
 {
 	$filtered = array();
 	foreach ($fields as $field) {
-		if (!is_object($field) || (int) $field->visible_form <= 0 || (string) $field->field_type === 'signature') {
+		if (!is_object($field) || (int) $field->visible_form <= 0 || (string) $field->field_type === 'signature'
+			|| PowerPlantPVReportPresentation::isRetiredProductionField((string) $field->field_code)) {
 			continue;
 		}
 		$filtered[] = $field;
@@ -1769,6 +1778,10 @@ function powerplantpvReportLocalizedObjectLabel($object, $baseProperty)
 {
 	global $langs;
 
+	if ($baseProperty === 'field_label' && is_object($langs)) {
+		$indexLabel = PowerPlantPVReportPresentation::inverterIndexLabel($object, $langs);
+		if ($indexLabel !== null) { return $indexLabel; }
+	}
 	$label = isset($object->{$baseProperty}) ? (string) $object->{$baseProperty} : '';
 	$englishProperty = $baseProperty.'_en';
 	if (is_object($langs) && $langs->defaultlang == 'en_US' && !empty($object->{$englishProperty})) {
