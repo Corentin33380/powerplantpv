@@ -89,6 +89,9 @@ class PowerPlantPVReportField extends PowerPlantPVReportGeneratedBase
 	public $readonly;
 	public $position;
 
+	/** @var array<int, PowerPlantPVReportFile> Attached files loaded for display. */
+	public array $files = array();
+
 	/**
 	 * Fetch field by stable key.
 	 *
