@@ -685,7 +685,11 @@ trait PowerPlantPVReportVisualPdf
 		$width = $this->page_largeur - $this->marge_gauche - $this->marge_droite; $pdf->SetFont('', '', 8.5);
 		$height = max(16, $pdf->getStringHeight($width - 22, $conclusion) + 11); $this->ensureSpace($pdf, $height + 4); $y = $pdf->GetY();
 		$pdf->SetFillColor(227, 245, 238); $pdf->SetDrawColor(185, 228, 210); $pdf->RoundedRect($this->marge_gauche, $y, $width, $height, 2.65, '1111', 'DF');
-		$pdf->SetFillColor(18, 128, 92); $pdf->Circle($this->marge_gauche + 7, $y + $height / 2, 3, 0, 360, 'F');
+		$iconX = $this->marge_gauche + 7;
+		$iconY = $y + $height / 2;
+		$pdf->SetFillColor(18, 128, 92);
+		$pdf->Circle($iconX, $iconY, 3, 0, 360, 'F');
+		$this->visualCheck($pdf, $iconX, $iconY, 3.4, array(255, 255, 255));
 		$pdf->SetTextColor(18, 128, 92); $pdf->SetFont('', 'B', 9); $pdf->SetXY($this->marge_gauche + 14, $y + 3); $pdf->Cell($width - 19, 4, $langs->convToOutputCharset($langs->transnoentities('PowerPlantPVVisualConclusion')), 0, 0, 'L');
 		$pdf->SetTextColor(40, 50, 68); $pdf->SetFont('', '', 8.5); $pdf->SetXY($this->marge_gauche + 14, $y + 8); $pdf->MultiCell($width - 19, 4, $langs->convToOutputCharset($conclusion), 0, 'L');
 		$pdf->SetY($y + $height + 5); $pdf->SetFont('', '', $this->defaultFontSize); $pdf->SetTextColor(24, 47, 79);
