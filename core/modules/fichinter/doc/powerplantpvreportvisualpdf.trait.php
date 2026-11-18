@@ -706,17 +706,19 @@ trait PowerPlantPVReportVisualPdf
 		foreach ($electricalColumns as $column) {
 			$columns[] = array($column[0], 32 / count($electricalColumns), $column[1]);
 		}
-		$html = '<table width="100%" cellpadding="3" cellspacing="0" style="font-size:8pt;"><thead><tr style="color:#64748b;">';
+		$header = '<table width="100%" cellpadding="3" cellspacing="0" style="font-size:8pt;"><tbody><tr style="color:#64748b;">';
 		foreach ($columns as $column) {
 			$label = $langs->transnoentities($column[0]).(isset($column[2]) ? ' ('.$column[2].')' : '');
-			$html .= '<td width="'.$column[1].'%">'.dol_escape_htmltag($label).'</td>';
+			$header .= '<td width="'.$column[1].'%">'.dol_escape_htmltag($label).'</td>';
 		}
-		$html .= '</tr></thead><tbody>';
+		$header .= '</tr>';
+		$rows = array();
 		$notes = array();
 		$n = 0;
 		foreach ($group['mppts'] as $inputs) {
 			foreach ($inputs as $row) {
-				$html .= '<tr nobr="true" style="background-color:'.($n++ % 2 ? '#f6f8fc' : '#ffffff').';">';
+				$html = '<tr nobr="true" style="background-color:'.($n++ % 2 ? '#f6f8fc' : '#ffffff').';">';
+				$height = 5.75 + 4 * intdiv(dol_strlen((string) $row->string_ref), 13);
 				$values = array($row->mppt_number, $row->pv_input_number, $row->string_ref);
 				if (!(int) $row->is_connected) {
 					foreach ($values as $index => $value) {
@@ -724,6 +726,7 @@ trait PowerPlantPVReportVisualPdf
 					}
 					$remaining = count($columns) - count($values);
 					$html .= '<td colspan="'.$remaining.'" width="73%" style="color:#64748b;">'.dol_escape_htmltag($langs->transnoentities('PowerPlantPVNotUsedByPowerPlant')).'</td></tr>';
+					$rows[] = array($height, $html);
 					continue;
 				}
 				$values[] = is_numeric($row->open_circuit_voltage) ? price($row->open_circuit_voltage) : '—';
@@ -739,12 +742,31 @@ trait PowerPlantPVReportVisualPdf
 					$html .= '<td width="'.$columns[$index][1].'%"'.($conform ? ' style="color:#008963"' : '').'>'.dol_escape_htmltag((string) $value).'</td>';
 				}
 				$html .= '</tr>';
+				$rows[] = array($height, $html);
 				if (trim((string) $row->observation) !== '') {
 					$notes[] = $row->string_ref.' : '.$row->observation;
 				}
 			}
 		}
-		$this->writeHtml($pdf, $html.'</tbody></table>');
+		// Render each page-sized batch with an explicit header. TCPDF can repeat a
+		// thead alone on the following page when the final row reaches the margin.
+		$headerHeight = 11.5;
+		for ($i = 0, $count = count($rows); $i < $count;) {
+			$this->ensureSpace($pdf, $headerHeight + $rows[$i][0]);
+			$available = $this->getContentBottomY() - $pdf->GetY() - $headerHeight;
+			$html = $header;
+			do {
+				$available -= $rows[$i][0];
+				$html .= $rows[$i][1];
+				$i++;
+			} while ($i < $count && $rows[$i][0] <= $available);
+			$this->writeHtml($pdf, $html.'</tbody></table>');
+			if ($i < $count) {
+				$this->completePageFooter($pdf, 1);
+				$pdf->AddPage();
+				$this->reserveFooterSpace($pdf);
+			}
+		}
 		$pdf->Ln(3);
 		$this->visualNote($pdf, $langs->transnoentities('Observation'), implode("\n", $notes));
 	}
