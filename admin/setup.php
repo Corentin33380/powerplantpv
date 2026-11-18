@@ -851,18 +851,6 @@ if ($action === 'save_equipment_masks') {
 			setEventMessages($db->lasterror(), null, 'errors');
 		}
 	}
-} elseif ($action == 'save_report_pdf_settings') {
-	if (function_exists('checkToken') && !checkToken()) {
-		accessforbidden('Bad token');
-	}
-
-	$legalnotice = trim(GETPOST('report_pdf_legal_notice', 'restricthtml'));
-	$res = dolibarr_set_const($db, 'POWERPLANTPV_REPORT_PDF_LEGAL_NOTICE', $legalnotice, 'chaine', 0, '', (int) $conf->entity);
-	if ($res > 0) {
-		setEventMessages($langs->trans("SetupSaved"), null, 'mesgs');
-	} else {
-		setEventMessages($db->lasterror(), null, 'errors');
-	}
 }
 
 $action = 'edit';
@@ -962,6 +950,15 @@ print $form->selectarray('maintenance_scheduled_intervention_mode', array(
 ), $maintenancescheduledmode, 0, 0, 0, '', 0, 0, 0, '', 'flat minwidth300');
 print '<br><span class="opacitymedium">'.$langs->trans('PowerPlantPVMaintenanceScheduledInterventionModeHelp').'</span></td></tr>';
 print '<tr class="oddeven"><td>'.$langs->trans('PowerPlantPVHideUnusedMppt').'<br><span class="opacitymedium">'.$langs->trans('PowerPlantPVHideUnusedMpptHelp').'</span></td><td>'.ajax_constantonoff('POWERPLANTPV_HIDE_UNUSED_MPPT', array(), (int) $conf->entity, 0, 0, 0, 2, 0, 1).'</td></tr>';
+require_once __DIR__.'/../lib/powerplantpv_indexphoto.lib.php';
+print '<tr class="oddeven"><td>'.$langs->trans('PowerPlantPVRequireIndexPhoto').'<br><span class="opacitymedium">'.$langs->trans('PowerPlantPVRequireIndexPhotoHelp').'</span></td><td>';
+if (powerplantpvIndexPhotoAvailable() || getDolGlobalInt('POWERPLANTPV_REQUIRE_INDEX_PHOTO')) {
+	print ajax_constantonoff('POWERPLANTPV_REQUIRE_INDEX_PHOTO', array(), (int) $conf->entity, 0, 0, 0, 2, 0, 1);
+}
+if (!powerplantpvIndexPhotoAvailable()) {
+	print '<div class="opacitymedium">'.$langs->trans('PowerPlantPVIndexPhotoUnavailable').'</div>';
+}
+print '</td></tr>';
 print '<tr class="oddeven"><td>'.$langs->trans('PowerPlantPVMaintenanceWeeklyReminderEnable').'</td><td>'.ajax_constantonoff('POWERPLANTPV_MAINTENANCE_WEEKLY_REMINDER_ENABLE', array(), (int) $conf->entity, 0, 0, 0, 2, 0, 1).'</td></tr>';
 print '<tr class="oddeven"><td>'.$langs->trans('PowerPlantPVMaintenanceWeeklyReminderStartTime').'</td><td>'.$form->selectDate($maintenanceweeklystart, 'maintenance_weekly_reminder_start', 1, 1, 1, '', 1, 1).'</td></tr>';
 print '<tr class="oddeven"><td>'.$langs->trans('PowerPlantPVMaintenanceMonthlyReminderEnable').'</td><td>'.ajax_constantonoff('POWERPLANTPV_MAINTENANCE_MONTHLY_REMINDER_ENABLE', array(), (int) $conf->entity, 0, 0, 0, 2, 0, 1).'</td></tr>';
@@ -993,29 +990,13 @@ print '<br>';
 
 print load_fiche_titre($langs->trans('PowerPlantPVReportPdfSettings'), '', 'fa-file-pdf');
 print '<span class="opacitymedium">'.$langs->trans('PowerPlantPVReportPdfSettingsHelp').'</span>';
-print '<form method="POST" action="'.dol_escape_htmltag($_SERVER['PHP_SELF']).'">';
-print '<input type="hidden" name="token" value="'.newToken().'">';
-print '<input type="hidden" name="action" value="save_report_pdf_settings">';
 print '<table class="noborder centpercent">';
 foreach (array('HIDE_EQUIPMENT' => 'PowerPlantPVReportPdfHideEquipment', 'SHORT_CONNECTION' => 'PowerPlantPVReportPdfShortConnection', 'TECHNICAL_SERVICE_SIGNATURE' => 'PowerPlantPVReportPdfTechnicalServiceSignature') as $reportpdfoption => $reportpdflabel) {
 	print '<tr class="oddeven"><td class="titlefield">'.$langs->trans($reportpdflabel).'<br><span class="opacitymedium">'.$langs->trans($reportpdflabel.'Help').'</span></td><td>'.ajax_constantonoff('POWERPLANTPV_REPORT_PDF_'.$reportpdfoption, array(), (int) $conf->entity, 0, 0, 0, 2, 0, 1).'</td></tr>';
 }
-print '<tr class="oddeven"><td class="titlefield">'.$langs->trans('PowerPlantPVReportPdfLegalNotice').'</td><td>';
-$reportpdflegalnotice = getDolGlobalString('POWERPLANTPV_REPORT_PDF_LEGAL_NOTICE');
-if (isModEnabled('fckeditor')) {
-	require_once DOL_DOCUMENT_ROOT.'/core/class/doleditor.class.php';
-	$doleditor = new DolEditor('report_pdf_legal_notice', $reportpdflegalnotice, '', 140, 'dolibarr_notes', '', false, true, true, 4, '90%');
-	$doleditor->Create();
-} else {
-	print '<textarea class="flat centpercent" rows="4" name="report_pdf_legal_notice">'.dol_escape_htmltag($reportpdflegalnotice).'</textarea>';
-}
-print '<br><span class="opacitymedium">'.$langs->trans('PowerPlantPVReportPdfLegalNoticeHelp').'</span>';
-print '</td></tr>';
+print '<tr class="oddeven"><td class="titlefield">'.$langs->trans('PowerPlantPVReportPdfLegalNotice').'</td>';
+print '<td><a href="'.DOL_URL_ROOT.'/admin/fichinter.php">'.$langs->trans('PowerPlantPVReportPdfNativeFooterSettings').'</a></td></tr>';
 print '</table>';
-print '<div class="tabsAction">';
-print '<input type="submit" class="butAction" value="'.$langs->trans('Save').'">';
-print '</div>';
-print '</form>';
 print '<br>';
 
 $serialnumbercategories = powerplantpvSerialNumberFetchPhotovoltaicCategories(true);

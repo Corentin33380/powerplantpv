@@ -22,6 +22,7 @@ CREATE TABLE IF NOT EXISTS llx_powerplantpv_index_reading(
 	fk_report integer,
 	fk_report_powerplant integer DEFAULT 0 NOT NULL,
 	fk_report_equipment integer DEFAULT 0 NOT NULL,
+	fk_powerplant_line integer,
 	fk_index_type integer,
 	reading_type_code varchar(64) NOT NULL,
 	reading_date datetime NOT NULL,

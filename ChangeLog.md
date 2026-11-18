@@ -2,6 +2,14 @@
 
 ## 1.8.0 — 2026-11-18
 
+- Photos des index de production et d’injection, généraux ou par onduleur, avec obligation configurable par entité et affichage dans le PDF de maintenance pour les photos saisies dans le rapport.
+- Mise à jour du schéma des relevés pour lier les nouveaux index manuels à un onduleur. Les anciens relevés non attribués restent consultables.
+- Mesures DC en volts entre les pôles et la terre dans le modèle de rapport par défaut. Les résistances historiques conservent leur unité.
+- En-têtes de l’annexe DC alignés sur les cellules, couleur de pied de page native et noms traduits des modèles PDF.
+- En-tête du rapport compact, barre de progression continue et légende de la photo avec référence, nom et ville de la centrale.
+- Signature nominative du responsable hiérarchique direct sur les rapports finalisés, activable par entité et protégée par une permission dédiée.
+- Trois cadres de signature de même largeur sur une seule ligne, avec le tracé, le nom et la date de la signature en ligne dans le cadre client. Actualiser le module par l’action native de Dolibarr pour enregistrer le hook de signature.
+
 - Onduleurs installés : repère et identification individuels, repris dans les rapports, avec édition native et masques de numérotation par entité ; les chaînes sont numérotées par onduleur.
 - Configuration MPPT / chaînes : ajout et modification dans des modales natives, sélection des modules de la composition, puissance automatique de chaîne et suivi des modules raccordés / restants.
 - Rapports : matériels regroupés par référence, lien « Consulter la centrale » à la place des séries, mesures organisées par onduleur / MPPT / chaîne et séries des panneaux dans une annexe CSV séparée ; PDF lisibles par onduleur.

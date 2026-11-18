@@ -144,6 +144,7 @@ class modPowerPlantPV extends DolibarrModules
 					'contractcard',
 					'interventioncard',
 					'fichintercard',
+					'ajaxonlinesign',
 					'ticketcard',
 					'publicnewticketcard',
 					'category',
@@ -597,6 +598,11 @@ class modPowerPlantPV extends DolibarrModules
 		$this->rights[$r][1] = 'PowerPlantPVMaintenancePermissionConfig';
 		$this->rights[$r][4] = 'maintenance';
 		$this->rights[$r][5] = 'config';
+		$r++;
+		$this->rights[$r][0] = $this->numero * 100 + $r;
+		$this->rights[$r][1] = 'PowerPlantPVMaintenancePermissionTechnicalSign';
+		$this->rights[$r][4] = 'maintenance';
+		$this->rights[$r][5] = 'sign_technical';
 
 		/* END MODULEBUILDER PERMISSIONS */
 
@@ -1288,6 +1294,19 @@ class modPowerPlantPV extends DolibarrModules
 		$sqlreportmodel .= ")";
 		$sql[] = $sqlreportmodel;
 
+		// Dolibarr 20–22 displays the stored label without a model-list hook.
+		require_once __DIR__.'/../../lib/powerplantpv_pdfmodels.lib.php';
+		$langs->load('powerplantpv@powerplantpv');
+		foreach (powerplantpvPdfModelLabels() as $type => $models) {
+			foreach ($models as $id => $label) {
+				$labelSql = $this->db->escape($langs->transnoentities($label));
+				$idSql = $this->db->escape($id);
+				$typeSql = $this->db->escape($type);
+				$sql[] = "UPDATE ".$this->db->prefix()."document_model SET libelle = '".$labelSql."' WHERE entity = ".((int) $conf->entity)
+					." AND type = '".$typeSql."' AND nom = '".$idSql."' AND (libelle IS NULL OR libelle = '' OR libelle = nom)";
+			}
+		}
+
 		// Migrate legacy agenda links to the canonical Dolibarr element type used by this module.
 		$sqlmigrateagenda = "UPDATE ".$this->db->prefix()."actioncomm";
 		$sqlmigrateagenda .= " SET elementtype = 'powerplant@powerplantpv'";
@@ -1878,6 +1897,8 @@ class modPowerPlantPV extends DolibarrModules
 				insulation_status varchar(32),
 				insulation_positive_to_ground double(24,8),
 				insulation_negative_to_ground double(24,8),
+				positive_to_ground_voltage double(24,8),
+				negative_to_ground_voltage double(24,8),
 				observation text,
 				stable_key varchar(255) NOT NULL,
 				position integer DEFAULT 0 NOT NULL,
@@ -1919,6 +1940,9 @@ class modPowerPlantPV extends DolibarrModules
 			),
 			$this->db->prefix().'powerplantpv_report' => array(
 				'fk_fichinter' => array('type' => 'integer', 'value' => '', 'null' => 'NOT NULL'),
+				'fk_user_technical_sign' => array('type' => 'integer', 'value' => '', 'null' => ''),
+				'date_technical_sign' => array('type' => 'datetime', 'value' => '', 'null' => ''),
+				'technical_signer_name' => array('type' => 'varchar', 'value' => '255', 'null' => ''),
 				'source_mode' => array('type' => 'varchar', 'value' => '16', 'null' => "DEFAULT 'contract' NOT NULL"),
 				'status' => array('type' => 'varchar', 'value' => '16', 'null' => "DEFAULT 'draft' NOT NULL"),
 			),
@@ -1972,6 +1996,8 @@ class modPowerPlantPV extends DolibarrModules
 				'stable_key' => array('type' => 'varchar', 'value' => '255', 'null' => 'NOT NULL'),
 				'is_connected' => array('type' => 'smallint', 'value' => '', 'null' => 'DEFAULT 1 NOT NULL'),
 				'polarity_checked' => array('type' => 'smallint', 'value' => '', 'null' => 'DEFAULT 0 NOT NULL'),
+				'positive_to_ground_voltage' => array('type' => 'double', 'value' => '24,8', 'null' => ''),
+				'negative_to_ground_voltage' => array('type' => 'double', 'value' => '24,8', 'null' => ''),
 			),
 		);
 
@@ -2114,6 +2140,7 @@ class modPowerPlantPV extends DolibarrModules
 			fk_report integer,
 			fk_report_powerplant integer DEFAULT 0 NOT NULL,
 			fk_report_equipment integer DEFAULT 0 NOT NULL,
+			fk_powerplant_line integer,
 			fk_index_type integer,
 			reading_type_code varchar(64) NOT NULL,
 			reading_date datetime NOT NULL,
@@ -2140,6 +2167,7 @@ class modPowerPlantPV extends DolibarrModules
 			'fk_report' => array('type' => 'integer', 'value' => '', 'null' => ''),
 			'fk_report_powerplant' => array('type' => 'integer', 'value' => '', 'null' => 'DEFAULT 0 NOT NULL'),
 			'fk_report_equipment' => array('type' => 'integer', 'value' => '', 'null' => 'DEFAULT 0 NOT NULL'),
+			'fk_powerplant_line' => array('type' => 'integer', 'value' => '', 'null' => ''),
 			'fk_index_type' => array('type' => 'integer', 'value' => '', 'null' => ''),
 			'reading_type_code' => array('type' => 'varchar', 'value' => '64', 'null' => 'NOT NULL'),
 			'reading_date' => array('type' => 'datetime', 'value' => '', 'null' => 'NOT NULL'),
@@ -2173,6 +2201,7 @@ class modPowerPlantPV extends DolibarrModules
 			'idx_powerplantpv_index_reading_report' => 'fk_report',
 			'idx_powerplantpv_index_reading_report_powerplant' => 'fk_report_powerplant',
 			'idx_powerplantpv_index_reading_report_equipment' => 'fk_report_equipment',
+			'idx_ppv_reading_inverter' => 'fk_powerplant_line',
 			'idx_powerplantpv_index_reading_index_type' => 'fk_index_type',
 			'idx_powerplantpv_index_reading_source' => 'source_type',
 			'idx_powerplantpv_index_reading_active' => 'active',
@@ -3027,6 +3056,7 @@ class modPowerPlantPV extends DolibarrModules
 
 		$indexRows = array(
 			array('code' => 'INVERTER_PRODUCTION', 'label' => 'Relevé production onduleur', 'label_en' => 'Inverter production reading', 'description' => 'Relevé de production directement lu sur l’onduleur.', 'description_en' => 'Production reading directly read from the inverter.', 'default_unit' => 'kWh', 'active' => 1, 'position' => 10),
+			array('code' => 'INVERTER_INJECTION', 'label' => 'Index d’injection onduleur', 'label_en' => 'Inverter export meter index', 'description' => 'Index d’injection mesuré pour un onduleur.', 'description_en' => 'Export meter index measured for one inverter.', 'default_unit' => 'kWh', 'active' => 1, 'position' => 15),
 			array('code' => 'PRODUCTION_INDEX', 'label' => 'Index production', 'label_en' => 'Production index', 'description' => 'Index de production.', 'description_en' => 'Production index.', 'default_unit' => 'kWh', 'active' => 1, 'position' => 20),
 			array('code' => 'INJECTION_INDEX', 'label' => 'Index injection', 'label_en' => 'Injection index', 'description' => 'Index d’injection réseau.', 'description_en' => 'Grid injection index.', 'default_unit' => 'kWh', 'active' => 1, 'position' => 30),
 			array('code' => 'CONSUMPTION_INDEX', 'label' => 'Index consommation', 'label_en' => 'Consumption index', 'description' => 'Index de consommation.', 'description_en' => 'Consumption index.', 'default_unit' => 'kWh', 'active' => 1, 'position' => 40),
@@ -3178,21 +3208,19 @@ class modPowerPlantPV extends DolibarrModules
 			array('section' => 'DC_ELECTRICAL_MEASURE', 'service' => 'DC_ELECTRICAL_MEASURE', 'code' => 'DC_OPEN_CIRCUIT_VOLTAGE', 'label' => 'Tension à vide DC', 'label_en' => 'DC open circuit voltage', 'field_type' => 'double', 'scope_type' => 'dc_measure', 'unit' => 'V', 'position' => 4020),
 			array('section' => 'DC_ELECTRICAL_MEASURE', 'service' => 'DC_ELECTRICAL_MEASURE', 'code' => 'DC_POLARITY_CHECKED', 'label' => 'Polarité contrôlée', 'label_en' => 'Polarity checked', 'field_type' => 'boolean', 'scope_type' => 'dc_measure', 'unit' => '', 'position' => 4030),
 			array('section' => 'DC_ELECTRICAL_MEASURE', 'service' => 'DC_ELECTRICAL_MEASURE', 'code' => 'DC_INSULATION_STATUS', 'label' => 'Contrôle isolement', 'label_en' => 'Insulation check', 'field_type' => 'status', 'scope_type' => 'dc_measure', 'unit' => '', 'position' => 4040),
-			array('section' => 'DC_ELECTRICAL_MEASURE', 'service' => 'DC_ELECTRICAL_MEASURE', 'code' => 'DC_INSULATION_POSITIVE_GROUND', 'label' => 'Isolement + / terre', 'label_en' => 'Positive / ground insulation', 'field_type' => 'double', 'scope_type' => 'dc_measure', 'unit' => 'MOhm', 'position' => 4050),
-			array('section' => 'DC_ELECTRICAL_MEASURE', 'service' => 'DC_ELECTRICAL_MEASURE', 'code' => 'DC_INSULATION_NEGATIVE_GROUND', 'label' => 'Isolement - / terre', 'label_en' => 'Negative / ground insulation', 'field_type' => 'double', 'scope_type' => 'dc_measure', 'unit' => 'MOhm', 'position' => 4060),
+			array('section' => 'DC_ELECTRICAL_MEASURE', 'service' => 'DC_ELECTRICAL_MEASURE', 'code' => 'DC_POSITIVE_GROUND_VOLTAGE', 'label' => 'Tension + / terre', 'label_en' => 'Voltage + / ground', 'field_type' => 'double', 'scope_type' => 'dc_measure', 'unit' => 'V', 'position' => 4050),
+			array('section' => 'DC_ELECTRICAL_MEASURE', 'service' => 'DC_ELECTRICAL_MEASURE', 'code' => 'DC_NEGATIVE_GROUND_VOLTAGE', 'label' => 'Tension - / terre', 'label_en' => 'Voltage - / ground', 'field_type' => 'double', 'scope_type' => 'dc_measure', 'unit' => 'V', 'position' => 4060),
 			array('section' => 'DC_ELECTRICAL_MEASURE', 'service' => 'DC_ELECTRICAL_MEASURE', 'code' => 'DC_MEASURE_OBSERVATION', 'label' => 'Observation', 'label_en' => 'Observation', 'field_type' => 'text', 'scope_type' => 'dc_measure', 'unit' => '', 'position' => 4070),
-			array('section' => 'PRODUCTION_READING', 'service' => 'PRODUCTION_READING', 'code' => 'INVERTER_PRODUCTION_N_MINUS_1', 'label' => 'Relevé production onduleur N-1', 'label_en' => 'Inverter production reading N-1', 'field_type' => 'double', 'scope_type' => 'powerplant', 'unit' => 'kWh', 'position' => 5005),
-			array('section' => 'PRODUCTION_READING', 'service' => 'PRODUCTION_READING', 'code' => 'INVERTER_PRODUCTION', 'label' => 'Relevé production onduleur N', 'label_en' => 'Inverter production reading N', 'field_type' => 'double', 'scope_type' => 'powerplant', 'unit' => 'kWh', 'position' => 5010),
+			array('section' => 'PRODUCTION_READING', 'service' => 'PRODUCTION_READING', 'code' => 'INVERTER_PRODUCTION_N_MINUS_1', 'label' => 'Index de production onduleur N-1', 'label_en' => 'Inverter production index N-1', 'field_type' => 'double', 'scope_type' => 'powerplant', 'unit' => 'kWh', 'position' => 5005),
+			array('section' => 'PRODUCTION_READING', 'service' => 'PRODUCTION_READING', 'code' => 'INVERTER_PRODUCTION', 'label' => 'Index de production onduleur N', 'label_en' => 'Inverter production index N', 'field_type' => 'double', 'scope_type' => 'powerplant', 'unit' => 'kWh', 'position' => 5010),
+			array('section' => 'PRODUCTION_READING', 'service' => 'PRODUCTION_READING', 'code' => 'INVERTER_INJECTION_N_MINUS_1', 'label' => 'Index d’injection onduleur N-1', 'label_en' => 'Inverter export meter index N-1', 'field_type' => 'double', 'scope_type' => 'powerplant', 'unit' => 'kWh', 'position' => 5011),
+			array('section' => 'PRODUCTION_READING', 'service' => 'PRODUCTION_READING', 'code' => 'INVERTER_INJECTION', 'label' => 'Index d’injection onduleur N', 'label_en' => 'Inverter export meter index N', 'field_type' => 'double', 'scope_type' => 'powerplant', 'unit' => 'kWh', 'position' => 5012),
 			array('section' => 'PRODUCTION_READING', 'service' => 'PRODUCTION_READING', 'code' => 'PRODUCTION_INDEX_N_MINUS_1', 'label' => 'Index production N-1', 'label_en' => 'Production index N-1', 'field_type' => 'double', 'scope_type' => 'powerplant', 'unit' => 'kWh', 'position' => 5015),
 			array('section' => 'PRODUCTION_READING', 'service' => 'PRODUCTION_READING', 'code' => 'PRODUCTION_INDEX', 'label' => 'Index production N', 'label_en' => 'Production index N', 'field_type' => 'double', 'scope_type' => 'powerplant', 'unit' => 'kWh', 'position' => 5020),
 			array('section' => 'PRODUCTION_READING', 'service' => 'PRODUCTION_READING', 'code' => 'INJECTION_INDEX_N_MINUS_1', 'label' => 'Index injection N-1', 'label_en' => 'Injection index N-1', 'field_type' => 'double', 'scope_type' => 'powerplant', 'unit' => 'kWh', 'position' => 5025),
 			array('section' => 'PRODUCTION_READING', 'service' => 'PRODUCTION_READING', 'code' => 'INJECTION_INDEX', 'label' => 'Index injection N', 'label_en' => 'Injection index N', 'field_type' => 'double', 'scope_type' => 'powerplant', 'unit' => 'kWh', 'position' => 5030),
 			array('section' => 'PRODUCTION_READING', 'service' => 'PRODUCTION_READING', 'code' => 'CONSUMPTION_INDEX_N_MINUS_1', 'label' => 'Index consommation N-1', 'label_en' => 'Consumption index N-1', 'field_type' => 'double', 'scope_type' => 'powerplant', 'unit' => 'kWh', 'position' => 5035),
 			array('section' => 'PRODUCTION_READING', 'service' => 'PRODUCTION_READING', 'code' => 'CONSUMPTION_INDEX', 'label' => 'Index consommation N', 'label_en' => 'Consumption index N', 'field_type' => 'double', 'scope_type' => 'powerplant', 'unit' => 'kWh', 'position' => 5040),
-			array('section' => 'PRODUCTION_READING', 'service' => 'PRODUCTION_READING', 'code' => 'ANNUAL_PRODUCTION_N_MINUS_1', 'label' => 'Production annuelle N-1', 'label_en' => 'Annual production N-1', 'field_type' => 'double', 'scope_type' => 'powerplant', 'unit' => 'kWh', 'position' => 5045),
-			array('section' => 'PRODUCTION_READING', 'service' => 'PRODUCTION_READING', 'code' => 'ANNUAL_PRODUCTION', 'label' => 'Production annuelle N', 'label_en' => 'Annual production N', 'field_type' => 'double', 'scope_type' => 'powerplant', 'unit' => 'kWh', 'position' => 5050),
-			array('section' => 'PRODUCTION_READING', 'service' => 'PRODUCTION_READING', 'code' => 'SELF_CONSUMPTION_N_MINUS_1', 'label' => 'Autoconsommation N-1', 'label_en' => 'Self-consumption N-1', 'field_type' => 'double', 'scope_type' => 'powerplant', 'unit' => 'kWh', 'position' => 5055),
-			array('section' => 'PRODUCTION_READING', 'service' => 'PRODUCTION_READING', 'code' => 'SELF_CONSUMPTION', 'label' => 'Autoconsommation N', 'label_en' => 'Self-consumption N', 'field_type' => 'double', 'scope_type' => 'powerplant', 'unit' => 'kWh', 'position' => 5058),
 			array('section' => 'PRODUCTION_READING', 'service' => 'PRODUCTION_READING', 'code' => 'PRODUCTION_READING_OBSERVATION', 'label' => 'Observation', 'label_en' => 'Observation', 'field_type' => 'text', 'scope_type' => 'powerplant', 'unit' => '', 'position' => 5060),
 			array('section' => 'GENERAL_OBSERVATIONS', 'service' => '', 'code' => 'GENERAL_OBSERVATIONS_TEXT', 'label' => 'Observations générales', 'label_en' => 'General observations', 'field_type' => 'textarea', 'scope_type' => 'intervention', 'unit' => '', 'position' => 7010),
 			array('section' => 'CUSTOMER_SIGNATURE', 'service' => '', 'code' => 'CUSTOMER_SIGNATURE_CAPTURE', 'label' => 'Signature client', 'label_en' => 'Customer signature', 'field_type' => 'signature', 'scope_type' => 'intervention', 'unit' => '', 'position' => 9990),
@@ -3365,12 +3393,15 @@ class modPowerPlantPV extends DolibarrModules
 		$fieldDefaults = array(
 			'EQUIPMENT_SUMMARY_OBSERVATION' => array('visible_form' => array('value' => 0, 'old' => array(1)), 'visible_pdf' => array('value' => 0, 'old' => array(1)), 'readonly' => array('value' => 1, 'old' => array(0))),
 			'INSTALLATION_DESCRIPTION_TEXT' => array('visible_form' => array('value' => 0, 'old' => array(1)), 'visible_pdf' => array('value' => 0, 'old' => array(1)), 'readonly' => array('value' => 1, 'old' => array(0))),
-			'INVERTER_PRODUCTION' => array('label' => array('value' => 'Relevé production onduleur N', 'old' => array('Relevé production onduleur')), 'label_en' => array('value' => 'Inverter production reading N', 'old' => array('Inverter production reading')), 'scope_type' => array('value' => 'powerplant', 'old' => array('', 'production_reading'))),
+			'INVERTER_PRODUCTION' => array('label' => array('value' => 'Index de production onduleur N', 'old' => array('Relevé production onduleur', 'Relevé production onduleur N')), 'label_en' => array('value' => 'Inverter production index N', 'old' => array('Inverter production reading', 'Inverter production reading N')), 'scope_type' => array('value' => 'powerplant', 'old' => array('', 'production_reading'))),
+			'INVERTER_PRODUCTION_N_MINUS_1' => array('label' => array('value' => 'Index de production onduleur N-1', 'old' => array('Relevé production onduleur N-1')), 'label_en' => array('value' => 'Inverter production index N-1', 'old' => array('Inverter production reading N-1'))),
 			'PRODUCTION_INDEX' => array('label' => array('value' => 'Index production N', 'old' => array('Index production')), 'label_en' => array('value' => 'Production index N', 'old' => array('Production index')), 'scope_type' => array('value' => 'powerplant', 'old' => array('', 'production_reading'))),
 			'INJECTION_INDEX' => array('label' => array('value' => 'Index injection N', 'old' => array('Index injection')), 'label_en' => array('value' => 'Injection index N', 'old' => array('Injection index')), 'scope_type' => array('value' => 'powerplant', 'old' => array('', 'production_reading'))),
 			'CONSUMPTION_INDEX' => array('label' => array('value' => 'Index consommation N', 'old' => array('Index consommation')), 'label_en' => array('value' => 'Consumption index N', 'old' => array('Consumption index')), 'scope_type' => array('value' => 'powerplant', 'old' => array('', 'production_reading'))),
-			'ANNUAL_PRODUCTION' => array('label' => array('value' => 'Production annuelle N', 'old' => array('Production annuelle')), 'label_en' => array('value' => 'Annual production N', 'old' => array('Annual production')), 'scope_type' => array('value' => 'powerplant', 'old' => array('', 'production_reading'))),
 		);
+		foreach (array('DC_INSULATION_POSITIVE_GROUND', 'DC_INSULATION_NEGATIVE_GROUND', 'ANNUAL_PRODUCTION', 'ANNUAL_PRODUCTION_N_MINUS_1', 'SELF_CONSUMPTION', 'SELF_CONSUMPTION_N_MINUS_1') as $retiredCode) {
+			$fieldDefaults[$retiredCode] = array('active' => array('value' => 0, 'old' => array(1)));
+		}
 		foreach ($fieldDefaults as $fieldCode => $columns) {
 			$where = "entity = ".((int) $entity)." AND fk_report_template = ".((int) $templateId)." AND code = '".$this->db->escape($fieldCode)."'";
 			foreach ($columns as $column => $definition) {

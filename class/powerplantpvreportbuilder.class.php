@@ -196,9 +196,10 @@ class PowerPlantPVReportBuilder
 			$sourceId = (int) $equipment->fk_powerplant_line;
 			if ($sourceId <= 0) { $sourceId = (int) $equipment->fk_source_equipment; }
 			foreach ($row['fields'] as $field) {
-				if ((string) $field->field_code !== 'INVERTER_PRODUCTION_N_MINUS_1') { continue; }
+				$typeCode = $this->productionReadingTypeCodeFromField((string) $field->field_code, 1);
+				if (!in_array($typeCode, array('INVERTER_PRODUCTION', 'INVERTER_INJECTION'), true)) { continue; }
 				$archive = new PowerPlantPVIndexReading($this->db);
-				$latest = $archive->fetchLatestValue((int) $equipment->fk_powerplant, 'INVERTER_PRODUCTION', '', (int) $report->id, $sourceId);
+				$latest = $archive->fetchLatestValue((int) $equipment->fk_powerplant, $typeCode, '', (int) $report->id, $sourceId);
 				if ($archive->error !== '') { $this->copyErrorsFrom($archive); return -1; }
 				$field->value_number = is_array($latest) ? $latest['value'] : null;
 			}
@@ -287,6 +288,7 @@ class PowerPlantPVReportBuilder
 		$oldDcValues = $this->fetchExistingDcMeasureValues((int) $report->id);
 
 		if ($this->db->begin() <= 0) { $this->setError($this->db->lasterror()); return -1; }
+		if (!$report->lockUnsignedForEdit()) { $this->setError('PowerPlantPVTechnicalSignEditLocked'); $this->db->rollback(); return -1; }
 		$report->status = $status;
 		$report->fk_soc = $context['fk_soc'];
 		$report->fk_project = $context['fk_project'];
@@ -374,11 +376,19 @@ class PowerPlantPVReportBuilder
 				}
 			} elseif ((string) $section->section_code === 'PRODUCTION_READING' && (int) $section->fk_report_equipment > 0) {
 				foreach ($row['fields'] as $field) {
-					if ((string) $field->field_code === 'INVERTER_PRODUCTION_N_MINUS_1' && $field->update($user, 0) < 0) { $this->copyErrorsFrom($field); $this->db->rollback(); return -1; }
+					if ((int) $field->id <= 0) {
+						if (isset($oldValues[(string) $field->stable_key]) && empty($field->readonly)) { $this->copyStoredValueToField($field, $oldValues[(string) $field->stable_key]); }
+						$result = $field->create($user, 0);
+					} elseif (in_array((string) $field->field_code, array('INVERTER_PRODUCTION_N_MINUS_1', 'INVERTER_INJECTION_N_MINUS_1'), true)) {
+						$result = $field->update($user, 0);
+					} else {
+						continue;
+					}
+					if ($result <= 0) { $this->copyErrorsFrom($field); $this->db->rollback(); return -1; }
 				}
 			} elseif ((string) $section->section_code === 'PRODUCTION_READING' && (int) $section->fk_report_equipment === 0) {
 				foreach ($row['fields'] as $field) {
-					if (in_array((string) $field->field_code, array('INVERTER_PRODUCTION', 'INVERTER_PRODUCTION_N_MINUS_1'), true) && $field->update($user, 0) < 0) { $this->copyErrorsFrom($field); $this->db->rollback(); return -1; }
+					if (in_array((string) $field->field_code, array('INVERTER_PRODUCTION', 'INVERTER_PRODUCTION_N_MINUS_1', 'INVERTER_INJECTION', 'INVERTER_INJECTION_N_MINUS_1'), true) && $field->update($user, 0) < 0) { $this->copyErrorsFrom($field); $this->db->rollback(); return -1; }
 				}
 			}
 		}
@@ -406,6 +416,7 @@ class PowerPlantPVReportBuilder
 		}
 
 		if ($this->db->begin() <= 0) { $this->setError($this->db->lasterror()); return -1; }
+		if (!$report->lockUnsignedForEdit()) { $this->setError('PowerPlantPVTechnicalSignEditLocked'); $this->db->rollback(); return -1; }
 		if ($this->persistInverterProductionSections((int) $report->id, $user) < 0) { $this->db->rollback(); return -1; }
 
 		$fieldObject = new PowerPlantPVReportField($this->db);
@@ -1255,6 +1266,7 @@ class PowerPlantPVReportBuilder
 	{
 		return array(
 			'INVERTER_PRODUCTION' => 'INVERTER_PRODUCTION',
+			'INVERTER_INJECTION' => 'INVERTER_INJECTION',
 			'PRODUCTION_INDEX' => 'PRODUCTION_INDEX',
 			'INJECTION_INDEX' => 'INJECTION_INDEX',
 			'CONSUMPTION_INDEX' => 'CONSUMPTION_INDEX',
@@ -2466,7 +2478,7 @@ class PowerPlantPVReportBuilder
 
 		$sql = "SELECT rowid, fk_report_powerplant, fk_report_equipment, fk_powerplant, fk_inverter, inverter_ref, inverter_label, inverter_serial, inverter_marker, inverter_identification";
 		$sql .= ", mppt_number, pv_input_number, string_ref, is_connected, open_circuit_voltage, polarity_checked, insulation_status";
-		$sql .= ", insulation_positive_to_ground, insulation_negative_to_ground, observation, stable_key, position";
+		$sql .= ", insulation_positive_to_ground, insulation_negative_to_ground, positive_to_ground_voltage, negative_to_ground_voltage, observation, stable_key, position";
 		$sql .= " FROM ".$this->db->prefix()."powerplantpv_report_dc_measure";
 		$sql .= " WHERE fk_report = ".((int) $reportId);
 
@@ -2496,6 +2508,8 @@ class PowerPlantPVReportBuilder
 				'insulation_status' => isset($obj->insulation_status) ? (string) $obj->insulation_status : '',
 				'insulation_positive_to_ground' => isset($obj->insulation_positive_to_ground) ? $obj->insulation_positive_to_ground : null,
 				'insulation_negative_to_ground' => isset($obj->insulation_negative_to_ground) ? $obj->insulation_negative_to_ground : null,
+				'positive_to_ground_voltage' => $obj->positive_to_ground_voltage ?? null,
+				'negative_to_ground_voltage' => $obj->negative_to_ground_voltage ?? null,
 				'observation' => isset($obj->observation) ? (string) $obj->observation : '',
 				'stable_key' => (string) $obj->stable_key,
 				'position' => isset($obj->position) ? (int) $obj->position : 0,
@@ -2585,6 +2599,8 @@ class PowerPlantPVReportBuilder
 		$measure->insulation_status = isset($value['insulation_status']) ? (string) $value['insulation_status'] : '';
 		$measure->insulation_positive_to_ground = isset($value['insulation_positive_to_ground']) && $value['insulation_positive_to_ground'] !== null ? (float) $value['insulation_positive_to_ground'] : null;
 		$measure->insulation_negative_to_ground = isset($value['insulation_negative_to_ground']) && $value['insulation_negative_to_ground'] !== null ? (float) $value['insulation_negative_to_ground'] : null;
+		$measure->positive_to_ground_voltage = isset($value['positive_to_ground_voltage']) ? (float) $value['positive_to_ground_voltage'] : null;
+		$measure->negative_to_ground_voltage = isset($value['negative_to_ground_voltage']) ? (float) $value['negative_to_ground_voltage'] : null;
 		$measure->observation = isset($value['observation']) ? (string) $value['observation'] : '';
 	}
 
@@ -2609,8 +2625,8 @@ class PowerPlantPVReportBuilder
 		$measure->open_circuit_voltage = (isset($row['open_circuit_voltage']) && (string) $row['open_circuit_voltage'] !== '') ? (float) price2num((string) $row['open_circuit_voltage']) : null;
 		$measure->polarity_checked = isset($row['polarity_checked']) ? $this->normalizeDcTriStateValue($row['polarity_checked'], -1) : -1;
 		$measure->insulation_status = isset($row['insulation_status']) ? dol_string_nohtmltag((string) $row['insulation_status']) : '';
-		$measure->insulation_positive_to_ground = (isset($row['insulation_positive_to_ground']) && (string) $row['insulation_positive_to_ground'] !== '') ? (float) price2num((string) $row['insulation_positive_to_ground']) : null;
-		$measure->insulation_negative_to_ground = (isset($row['insulation_negative_to_ground']) && (string) $row['insulation_negative_to_ground'] !== '') ? (float) price2num((string) $row['insulation_negative_to_ground']) : null;
+		$measure->positive_to_ground_voltage = isset($row['positive_to_ground_voltage']) && $row['positive_to_ground_voltage'] !== '' ? (float) price2num((string) $row['positive_to_ground_voltage']) : null;
+		$measure->negative_to_ground_voltage = isset($row['negative_to_ground_voltage']) && $row['negative_to_ground_voltage'] !== '' ? (float) price2num((string) $row['negative_to_ground_voltage']) : null;
 		$measure->observation = isset($row['observation']) ? dol_string_nohtmltag((string) $row['observation']) : '';
 	}
 
@@ -2657,6 +2673,13 @@ class PowerPlantPVReportBuilder
 	 */
 	private function assignSubmittedValueToField(PowerPlantPVReportField $field, $value)
 	{
+		if (PowerPlantPVReportPresentation::allowsNotApplicable((string) $field->field_code, (string) $field->field_type)) {
+			if (!in_array($value, array('', '0', '1', 'not_applicable'), true)) {
+				return false;
+			}
+			$field->value_text = $value;
+			return true;
+		}
 		if ($value === null && in_array((string) $field->field_type, array('checkbox', 'yesno'), true)) {
 			$value = 0;
 		}

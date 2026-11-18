@@ -84,6 +84,14 @@ nativeMaintenanceCheck(method_exists($descriptor, 'init'), 'Descriptor loads bef
 
 require_once $module.'/class/powerplantpvreportbuilder.class.php';
 $builder = (new ReflectionClass('PowerPlantPVReportBuilder'))->newInstanceWithoutConstructor();
+$cleaning = (new ReflectionClass('PowerPlantPVReportField'))->newInstanceWithoutConstructor();
+$cleaning->field_type = 'yesno';
+$cleaning->field_code = 'BOX_JOINTS_HINGES_CLEANING';
+$assignField = new ReflectionMethod($builder, 'assignSubmittedValueToField');
+$assignField->setAccessible(true);
+nativeMaintenanceCheck($assignField->invoke($builder, $cleaning, 'not_applicable') && $cleaning->value_text === 'not_applicable', 'Save retains the third cabinet cleaning answer');
+nativeMaintenanceCheck(!$assignField->invoke($builder, $cleaning, null) && !$assignField->invoke($builder, $cleaning, array('0')) && $cleaning->value_text === 'not_applicable', 'Missing or invalid input preserves the existing third answer');
+nativeMaintenanceCheck($assignField->invoke($builder, $cleaning, '0') && $cleaning->value_text === '0', 'Explicit No remains distinct from not applicable');
 $guess = new ReflectionMethod($builder, 'guessEquipmentType'); $guess->setAccessible(true);
 nativeMaintenanceCheck($guess->invoke($builder, (object) array('category_code'=>'ONDACC','inverter_id'=>20,'product_ref'=>'INV-CABLE','product_label'=>'Accessoire onduleur')) === 'OTHER', 'Native accessory category is not an installed inverter');
 nativeMaintenanceCheck($guess->invoke($builder, (object) array('category_code'=>'MODULE','product_ref'=>'PV','product_label'=>'Panel')) === 'PANEL', 'Native PV category identifies panel serial policy');
@@ -227,24 +235,33 @@ $readingDb = new class {
 };
 $reading->db = $readingDb;
 $reading->fetchLatestValue(6, 'INVERTER_PRODUCTION', '', 14, 114);
-nativeMaintenanceCheck(strpos($readingDb->sql, 'e.fk_powerplant_line') !== false && strpos($readingDb->sql, '= 114)') !== false, 'Inverter previous reading uses the installed source identity across report snapshots');
+nativeMaintenanceCheck(strpos($readingDb->sql, 'e.fk_powerplant_line') !== false && strpos($readingDb->sql, '= 114)') !== false
+	&& strpos($readingDb->sql, 'fk_powerplant_line = 114 OR EXISTS') !== false, 'Inverter history includes manual and report readings of the same installed inverter');
 nativeMaintenanceCheck(strpos($readingDb->sql, 'e.entity = '.MAIN_DB_PREFIX.'powerplantpv_index_reading.entity') !== false && strpos($readingDb->sql, 'fk_report <> 14') !== false, 'Reading history keeps owner entity and excludes the current report');
 $reading->fetchLatestValue(6, 'INVERTER_PRODUCTION');
-nativeMaintenanceCheck(strpos($readingDb->sql, 'COALESCE(fk_report_equipment, 0) = 0') !== false, 'Legacy global history excludes readings attributed to an inverter');
+nativeMaintenanceCheck(strpos($readingDb->sql, 'COALESCE(fk_report_equipment, 0) = 0 AND fk_powerplant_line IS NULL') !== false, 'Legacy global history excludes manual and report readings attributed to an inverter');
+$reading->fetchPreviousValue(6, 'INVERTER_INJECTION', '2026-11-18 00:00:00', 20, 115);
+nativeMaintenanceCheck(strpos($readingDb->sql, 'COALESCE(t.fk_powerplant_line, NULLIF(e.fk_powerplant_line, 0), e.fk_source_equipment) = 115') !== false, 'Delta history follows the same inverter across manual and report sources');
 $reading->fetchLatestValue(6, 'PRODUCTION_INDEX');
 nativeMaintenanceCheck(strpos($readingDb->sql, 'e.fk_powerplant_line') === false, 'Common plant meter history is not filtered by inverter');
 nativeMaintenanceCheck(method_exists('CommonObject', 'setValueFrom'), 'Native single-field update API exists on the tested core');
+
+require_once $module.'/class/actions_powerplantpv.class.php';
+$langs->tab_translate['PowerPlantPVInterventionReportPdfName'] = 'Rapport de maintenance photovoltaïque';
+$models = array('powerplantpvreport' => 'powerplantpvreport', 'soleil' => 'soleil');
+(new ActionsPowerplantpv())->getListOfModels(array('type' => 'ficheinter', 'list' => &$models));
+nativeMaintenanceCheck($models === array('powerplantpvreport' => 'Rapport de maintenance photovoltaïque', 'soleil' => 'soleil'), 'The selector translates the module title without changing model keys or other vendors’ choices');
 
 require_once $module.'/core/modules/fichinter/doc/pdf_powerplantpvreport.modules.php';
 class NativeMaintenancePdfLifecycle extends pdf_powerplantpvreport
 {
  public $footers = array();
  public function __construct() { $this->heightforfooter = 30; $this->page_hauteur = 297; $this->currentOutputLangs = $GLOBALS['langs']; }
- protected function _pagefoot(&$pdf, $object, $outputlangs, $hidefreetext = 0) { $this->footers[] = array($pdf->getPage(), $hidefreetext, $pdf->automatic); return 0; }
- public function renderTest(&$pdf) { $this->writeHtml($pdf, '<p>Two-page simulated HTML</p>'); $this->renderFooters($pdf, null, $this->currentOutputLangs); }
+ protected function _pagefoot(&$pdf, $object, $outputlangs, $hidefreetext = 0) { $this->footers[] = array($pdf->getPage(), $hidefreetext, $pdf->automatic, $pdf->textColor); return 0; }
+ public function renderTest(&$pdf) { $pdf->SetTextColor(18, 128, 92); $this->writeHtml($pdf, '<p>Two-page simulated HTML</p>'); $pdf->SetTextColor(18, 128, 92); $this->renderFooters($pdf, null, $this->currentOutputLangs); }
 }
 $pdfCapture = new class {
- public $page = 1; public $y = 20; public $automatic = true;
+ public $page = 1; public $y = 20; public $automatic = true; public $textColor = array();
  public function GetY() { return $this->y; }
  public function SetY($y) { $this->y = $y; }
  public function getPage() { return $this->page; }
@@ -256,11 +273,11 @@ $pdfCapture = new class {
  public function getFontStyle() { return ''; }
  public function getFontSizePt() { return 9; }
  public function SetFont(...$args) {}
- public function SetTextColor(...$args) {}
+ public function SetTextColor(...$args) { $this->textColor = $args; }
 };
 $pdfLifecycle = new NativeMaintenancePdfLifecycle();
 $pdfLifecycle->renderTest($pdfCapture);
-nativeMaintenanceCheck($pdfLifecycle->footers === array(array(1, 1, false), array(2, 0, false)), 'HTML split completes the intermediate footer and prints the final footer once with automatic breaks disabled');
+nativeMaintenanceCheck($pdfLifecycle->footers === array(array(1, 1, false, array(0, 0, 0)), array(2, 0, false, array(0, 0, 0))), 'Intermediate and final native footers start in black regardless of the last content color');
 nativeMaintenanceCheck($pdfCapture->page === 2 && $pdfCapture->y === 50 && $pdfCapture->automatic, 'HTML rendering restores its current page, cursor and reserved bottom margin');
 $field = (new ReflectionClass('PowerPlantPVReportField'))->newInstanceWithoutConstructor();
 $field->field_type = 'conformity_so_valid_obs'; $field->value_text = '-1';

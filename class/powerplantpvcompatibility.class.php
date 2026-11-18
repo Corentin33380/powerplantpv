@@ -109,6 +109,7 @@ class PowerPlantPVCompatibility
 	 */
 	public static function getFeatures()
 	{
+		require_once __DIR__.'/../lib/powerplantpv_indexphoto.lib.php';
 		dol_include_once('/powerplantpv/lib/powerplantpv_serialnumber.lib.php');
 		require_once DOL_DOCUMENT_ROOT.'/core/lib/geturl.lib.php';
 
@@ -157,6 +158,14 @@ class PowerPlantPVCompatibility
 		}
 
 		return array(
+			'index_photos' => array(
+				'label' => 'PowerPlantPVIndexPhoto',
+				'description' => 'PowerPlantPVRequireIndexPhotoHelp',
+				'min_dolibarr' => self::MIN_DOLIBARR_VERSION,
+				'min_php' => self::MIN_PHP_VERSION,
+				'available' => $baseavailable && powerplantpvIndexPhotoAvailable(),
+				'reason' => ($baseavailable ? 'PowerPlantPVIndexPhotoUnavailable' : 'PowerPlantPVRequiresDolibarr20Php80'),
+			),
 			'powerplant_core' => array(
 				'label' => 'PowerPlant',
 				'description' => 'PowerPlantCompatibilityCoreDescription',

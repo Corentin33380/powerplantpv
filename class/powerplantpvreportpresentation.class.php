@@ -6,6 +6,12 @@
 /** Shared presentation of installed equipment and frozen report data. */
 class PowerPlantPVReportPresentation
 {
+	/** Allow a third answer on the standard cabinet cleaning check, including legacy snapshots. */
+	public static function allowsNotApplicable(string $code, string $type): bool
+	{
+		return $code === 'BOX_JOINTS_HINGES_CLEANING' && in_array($type, array('yesno', 'boolean'), true);
+	}
+
 	/** @param string $code @return bool */
 	public static function isRetiredProductionField($code)
 	{
@@ -112,7 +118,7 @@ class PowerPlantPVReportPresentation
 		return array_values(array_filter($measures, static function ($row) use ($hideUnused) {
 			if ($hideUnused && (int) ($row->is_connected ?? 1) === 0) { return false; }
 			if (strpos((string) ($row->stable_key ?? ''), ':dc:manual:') === false) { return true; }
-			foreach (array('inverter_ref', 'inverter_label', 'string_ref', 'open_circuit_voltage', 'polarity_checked', 'insulation_status', 'insulation_positive_to_ground', 'insulation_negative_to_ground', 'observation') as $field) {
+			foreach (array('inverter_ref', 'inverter_label', 'string_ref', 'open_circuit_voltage', 'polarity_checked', 'insulation_status', 'insulation_positive_to_ground', 'insulation_negative_to_ground', 'positive_to_ground_voltage', 'negative_to_ground_voltage', 'observation') as $field) {
 				$value = $row->{$field} ?? null;
 				if ($value !== null && trim((string) $value) !== '' && (string) $value !== '-1') { return true; }
 			}

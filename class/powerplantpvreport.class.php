@@ -45,6 +45,9 @@ class PowerPlantPVReport extends PowerPlantPVReportGeneratedBase
 		'report_template_label_en' => array('type' => 'varchar(255)', 'label' => 'PowerPlantPVEnglishLabel', 'enabled' => 1, 'position' => 53, 'notnull' => 0, 'visible' => 1),
 		'source_mode' => array('type' => 'varchar(16)', 'label' => 'PowerPlantPVReportSourceMode', 'enabled' => 1, 'position' => 60, 'notnull' => 1, 'visible' => 1, 'default' => 'contract'),
 		'status' => array('type' => 'varchar(16)', 'label' => 'Status', 'enabled' => 1, 'position' => 70, 'notnull' => 1, 'visible' => 1, 'default' => self::STATUS_DRAFT),
+		'fk_user_technical_sign' => array('type' => 'integer:User:user/class/user.class.php', 'label' => 'PowerPlantPVVisualTechnicalServiceSignature', 'enabled' => 1, 'position' => 71, 'notnull' => 0, 'visible' => 0),
+		'date_technical_sign' => array('type' => 'datetime', 'label' => 'Date', 'enabled' => 1, 'position' => 72, 'notnull' => 0, 'visible' => 0),
+		'technical_signer_name' => array('type' => 'varchar(255)', 'label' => 'Name', 'enabled' => 1, 'position' => 73, 'notnull' => 0, 'visible' => 0),
 		'date_creation' => array('type' => 'datetime', 'label' => 'DateCreation', 'enabled' => 1, 'position' => 500, 'notnull' => 0, 'visible' => -2),
 		'tms' => array('type' => 'timestamp', 'label' => 'DateModification', 'enabled' => 1, 'position' => 501, 'notnull' => 0, 'visible' => -2),
 		'fk_user_creat' => array('type' => 'integer:User:user/class/user.class.php', 'label' => 'UserAuthor', 'enabled' => 1, 'position' => 510, 'notnull' => 0, 'visible' => -2),
@@ -65,6 +68,93 @@ class PowerPlantPVReport extends PowerPlantPVReportGeneratedBase
 	public $report_template_label_en;
 	public $source_mode;
 	public $status;
+	public $fk_user_technical_sign;
+	public $date_technical_sign;
+	public $technical_signer_name;
+
+	public function technicalSignatureEnabled(): bool
+	{
+		global $conf;
+		if ((int) $this->entity === (int) $conf->entity) {
+			return getDolGlobalInt('POWERPLANTPV_REPORT_PDF_TECHNICAL_SERVICE_SIGNATURE') > 0;
+		}
+		require_once DOL_DOCUMENT_ROOT.'/core/lib/admin.lib.php';
+
+		return (int) dolibarr_get_const($this->db, 'POWERPLANTPV_REPORT_PDF_TECHNICAL_SERVICE_SIGNATURE', (int) $this->entity) > 0;
+	}
+
+	/**
+	 * Check the direct supervisor of an assigned internal technician.
+	 * @param Fichinter $intervention Authorized intervention with native contacts
+	 * @param User $signer Authenticated internal user
+	 */
+	public function isTechnicalSupervisor($intervention, User $signer): bool
+	{
+		if ((int) $signer->socid > 0 || (int) $signer->id <= 0 || (int) $this->fk_fichinter !== (int) $intervention->id
+			|| (int) $this->entity !== (int) $intervention->entity) {
+			return false;
+		}
+		$contacts = $intervention->liste_contact(-1, 'internal');
+		if (!is_array($contacts)) {
+			return false;
+		}
+		$technicians = array_filter($contacts, static function ($contact) {
+			return ($contact['code'] ?? '') === 'INTERVENING';
+		});
+		if (!$technicians) {
+			// Standard Dolibarr installations use the internal intervention manager role for the technician.
+			$technicians = array_filter($contacts, static function ($contact) {
+				return ($contact['code'] ?? '') === 'INTERREPFOLL';
+			});
+		}
+		foreach ($technicians as $contact) {
+			$technicianId = (int) ($contact['id'] ?? 0);
+			if ($technicianId <= 0 || $technicianId === (int) $signer->id) {
+				continue;
+			}
+			$technician = new User($this->db);
+			if ($technician->fetch($technicianId) > 0 && (int) $technician->socid === 0 && (int) $technician->fk_user === (int) $signer->id) {
+				return true;
+			}
+		}
+
+		return false;
+	}
+
+	/** Record the signer's identity and date once for this finalized snapshot. */
+	public function signAsTechnicalSupervisor($intervention, User $signer, string $signerName): int
+	{
+		if (!$signer->hasRight('powerplantpv', 'maintenance', 'sign_technical')
+			|| !$this->isSaved() || !$this->technicalSignatureEnabled() || !$this->isTechnicalSupervisor($intervention, $signer)) {
+			return -1;
+		}
+		$id = (int) $this->id;
+		$entity = (int) $this->entity;
+		$now = dol_now();
+		$sql = "UPDATE ".$this->db->prefix().$this->table_element;
+		$sql .= " SET fk_user_technical_sign = ".((int) $signer->id).", date_technical_sign = '".$this->db->idate($now)."'";
+		$sql .= ", technical_signer_name = '".$this->db->escape(dol_substr($signerName, 0, 255))."'";
+		$sql .= " WHERE rowid = ".$id." AND entity = ".$entity;
+		$sql .= " AND status = '".self::STATUS_SAVED."' AND fk_user_technical_sign IS NULL";
+		$result = $this->db->query($sql);
+
+		return $result && (int) $this->db->affected_rows($result) === 1 ? 1 : -1;
+	}
+
+	/** Check the technical signature under a database lock within a report edit transaction. */
+	public function lockUnsignedForEdit(): bool
+	{
+		$sql = "SELECT fk_user_technical_sign FROM ".$this->db->prefix().$this->table_element;
+		$sql .= " WHERE rowid = ".((int) $this->id)." AND entity = ".((int) $this->entity)." FOR UPDATE";
+		$result = $this->db->query($sql);
+		if (!$result) {
+			return false;
+		}
+		$row = $this->db->fetch_object($result);
+		$this->db->free($result);
+
+		return is_object($row) && empty($row->fk_user_technical_sign);
+	}
 
 	/**
 	 * Fetch report by intervention.

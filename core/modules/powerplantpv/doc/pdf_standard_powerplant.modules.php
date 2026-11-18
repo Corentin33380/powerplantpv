@@ -113,7 +113,8 @@ class pdf_standard_powerplant extends ModelePDFPowerPlant
 		$langs->loadLangs(array("main", "bills"));
 
 		$this->db = $db;
-		$this->name = "standard";
+		$langs->load('powerplantpv@powerplantpv');
+		$this->name = $langs->trans('PowerPlantPVStandardPdfName');
 		$this->description = $langs->trans('DocumentModelStandardPDF');
 		$this->update_main_doc_field = 1; // Save the name of generated file as the main doc when generating a doc with this template
 

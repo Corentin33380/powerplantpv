@@ -58,6 +58,7 @@ dol_include_once('/powerplantpv/class/powerplantpvreport.class.php');
 dol_include_once('/powerplantpv/class/powerplantpvreportbuilder.class.php');
 dol_include_once('/powerplantpv/class/powerplantpvreportfield.class.php');
 dol_include_once('/powerplantpv/class/powerplantpvreportfile.class.php');
+require_once __DIR__.'/lib/powerplantpv_indexphoto.lib.php';
 dol_include_once('/powerplantpv/class/powerplantpvreportdcmeasure.class.php');
 dol_include_once('/powerplantpv/class/powerplantpvpowerplantsummary.class.php');
 require_once __DIR__.'/class/powerplantpvreportpresentation.class.php';
@@ -125,6 +126,34 @@ $report = new PowerPlantPVReport($db);
 $reportFetch = $report->fetchByIntervention($id);
 if ($reportFetch < 0) {
 	setEventMessages($report->error, $report->errors, 'errors');
+}
+$technicalSigned = $reportFetch > 0 && (int) $report->fk_user_technical_sign > 0;
+$caneditreport = $caneditreport && !$technicalSigned;
+$canTechnicalSign = $reportFetch > 0 && !$technicalSigned && !$locked && $report->isSaved()
+	&& $user->hasRight('powerplantpv', 'maintenance', 'sign_technical')
+	&& $report->technicalSignatureEnabled() && $report->isTechnicalSupervisor($intervention, $user);
+if ($action === 'sign_technical') {
+	if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'POST' || !$canTechnicalSign || !powerplantpvReportSubmittedTokenValid($token)
+		|| GETPOSTINT('technical_sign_consent', 2) !== 1
+		|| powerplantpvReportSnapshotNeedsRebuild($builder, (int) $report->id)) {
+		accessforbidden();
+	}
+	if ($report->signAsTechnicalSupervisor($intervention, $user, $user->getFullName($langs)) > 0) {
+		setEventMessages($langs->trans('PowerPlantPVTechnicalSignRecorded'), null, 'mesgs');
+		header('Location: '.$_SERVER['PHP_SELF'].'?id='.(int) $id);
+		exit;
+	}
+	setEventMessages($langs->trans('PowerPlantPVTechnicalSignFailed'), null, 'errors');
+}
+
+if ($action === 'view_index_photo') {
+	$field = new PowerPlantPVReportField($db);
+	if ($reportFetch <= 0 || $field->fetch(GETPOSTINT('field_id')) <= 0
+		|| (int) $field->fk_report !== (int) $report->id || (int) $field->entity !== (int) $report->entity
+		|| !powerplantpvReportIndexPhotoField($field)) {
+		accessforbidden();
+	}
+	powerplantpvIndexPhotoDownload(powerplantpvReportIndexPhotoPath($field));
 }
 
 $sensitiveActions = array('save_draft', 'save', 'recalculate', 'upload_file', 'delete_file', 'add_dc_measure_line');
@@ -208,6 +237,14 @@ if (($action === 'save_draft' || $action === 'save') && $caneditreport) {
 		}
 		$interventionValidationResult = 0;
 		$requiredValidationFailed = 0;
+		if ($result >= 0) {
+			$photoErrors = powerplantpvReportSaveIndexPhotos($report, (string) $status === PowerPlantPVReport::STATUS_SAVED);
+			if ($photoErrors) {
+				$result = -1;
+				$requiredValidationFailed = 1;
+				setEventMessages(null, $photoErrors, 'errors');
+			}
+		}
 		if ($result >= 0 && (string) $status === PowerPlantPVReport::STATUS_SAVED) {
 			$missingRequiredFields = powerplantpvReportFindMissingRequiredFields((int) $report->id);
 			if (!is_array($missingRequiredFields)) {
@@ -498,6 +535,19 @@ if (is_array($tree) && empty($tree['can_generate'])) {
 	}
 	print '</form>';
 
+	if ($technicalSigned) {
+		print '<p class="opacitymedium">'.$langs->trans('PowerPlantPVTechnicalSignSummary',
+			dol_escape_htmltag((string) $report->technical_signer_name), dol_print_date($report->date_technical_sign, 'dayhour')).'</p>';
+	} elseif ($canTechnicalSign && !$snapshotNeedsRebuild) {
+		print '<form method="POST" action="'.dol_escape_htmltag($_SERVER['PHP_SELF']).'">';
+		print '<input type="hidden" name="token" value="'.newToken().'">';
+		print '<input type="hidden" name="id" value="'.(int) $id.'">';
+		print '<input type="hidden" name="action" value="sign_technical">';
+		print '<label><input type="checkbox" name="technical_sign_consent" value="1" required> '.$langs->trans('PowerPlantPVTechnicalSignConsent').'</label>';
+		print ' <input type="submit" class="button" value="'.dol_escape_htmltag($langs->trans('PowerPlantPVTechnicalSignButton')).'">';
+		print '</form>';
+	}
+
 	if ($cangenerateserialannex && $reportFetch > 0) {
 		print '<form method="POST" action="'.dol_escape_htmltag($_SERVER['PHP_SELF']).'" class="powerplantpv-inline-form">';
 		print '<input type="hidden" name="token" value="'.newToken().'">';
@@ -548,7 +598,7 @@ function powerplantpvReportIsInterventionLocked($intervention)
 	$receiver = (class_exists('Fichinter') && defined('Fichinter::STATUS_SIGNED_RECEIVER')) ? (int) constant('Fichinter::STATUS_SIGNED_RECEIVER') : 2;
 	$all = (class_exists('Fichinter') && defined('Fichinter::STATUS_SIGNED_ALL')) ? (int) constant('Fichinter::STATUS_SIGNED_ALL') : 9;
 
-	return in_array($signedStatus, array($receiver, $all), true);
+	return in_array($signedStatus, array($receiver, 3, $all), true);
 }
 
 /**
@@ -805,8 +855,8 @@ function powerplantpvReportGetSubmittedDcMeasures()
 		$clean['open_circuit_voltage'] = isset($row['open_circuit_voltage']) ? dol_string_nohtmltag((string) $row['open_circuit_voltage']) : '';
 		$clean['polarity_checked'] = isset($row['polarity_checked']) && in_array((string) $row['polarity_checked'], array('-1', '0', '1'), true) ? (int) $row['polarity_checked'] : -1;
 		$clean['insulation_status'] = isset($row['insulation_status']) ? dol_string_nohtmltag((string) $row['insulation_status']) : '';
-		$clean['insulation_positive_to_ground'] = isset($row['insulation_positive_to_ground']) ? dol_string_nohtmltag((string) $row['insulation_positive_to_ground']) : '';
-		$clean['insulation_negative_to_ground'] = isset($row['insulation_negative_to_ground']) ? dol_string_nohtmltag((string) $row['insulation_negative_to_ground']) : '';
+		$clean['positive_to_ground_voltage'] = isset($row['positive_to_ground_voltage']) ? dol_string_nohtmltag((string) $row['positive_to_ground_voltage']) : '';
+		$clean['negative_to_ground_voltage'] = isset($row['negative_to_ground_voltage']) ? dol_string_nohtmltag((string) $row['negative_to_ground_voltage']) : '';
 		$clean['observation'] = isset($row['observation']) ? dol_string_nohtmltag((string) $row['observation']) : '';
 		$values[(string) $key] = $clean;
 	}
@@ -879,6 +929,9 @@ function powerplantpvReportRequiredFieldIsEmpty($field)
 	}
 	if ($type === 'date' || $type === 'datetime') {
 		return empty($field->value_date);
+	}
+	if (PowerPlantPVReportPresentation::allowsNotApplicable((string) $field->field_code, $type)) {
+		return !in_array((string) $field->value_text, array('0', '1', 'not_applicable'), true);
 	}
 	if ($type === 'checkbox' || $type === 'yesno') {
 		return !in_array((string) $field->value_text, array('0', '1'), true);
@@ -1584,6 +1637,16 @@ function powerplantpvReportRenderDcMeasureCard($measure, $editable, $form)
 		return;
 	}
 
+	$historicalResistance = array(
+		'PowerPlantPVInsulationPositiveToGround' => $measure->insulation_positive_to_ground,
+		'PowerPlantPVInsulationNegativeToGround' => $measure->insulation_negative_to_ground,
+	);
+	foreach ($historicalResistance as $label => $value) {
+		if ($value !== null && $value !== '') {
+			print '<div class="opacitymedium">'.dol_escape_htmltag($langs->trans($label).' : '.powerplantpvReportDcDisplayNumber($measure, $value, 'MOhm')).'</div>';
+		}
+	}
+
 	if (!$editable) {
 		print '<div class="powerplantpv-dc-readonly">';
 		print '<span>'.dol_escape_htmltag($langs->trans('PowerPlantPVStringRef')).' : '.dol_escape_htmltag(powerplantpvReportDcDisplayText($measure, $measure->string_ref)).'</span>';
@@ -1591,8 +1654,8 @@ function powerplantpvReportRenderDcMeasureCard($measure, $editable, $form)
 		print '<span>'.dol_escape_htmltag($langs->trans('PowerPlantPVOpenCircuitVoltage')).' : '.dol_escape_htmltag(powerplantpvReportDcDisplayNumber($measure, $measure->open_circuit_voltage, 'V')).'</span>';
 		print '<span>'.dol_escape_htmltag($langs->trans('PowerPlantPVPolarityChecked')).' : '.dol_escape_htmltag(powerplantpvReportDcDisplayBoolean($measure, $measure->polarity_checked)).'</span>';
 		print '<span>'.dol_escape_htmltag($langs->trans('PowerPlantPVInsulationStatus')).' : '.dol_escape_htmltag(powerplantpvReportDcDisplayInsulationStatus($measure, $insulationOptions)).'</span>';
-		print '<span>'.dol_escape_htmltag($langs->trans('PowerPlantPVInsulationPositiveToGround')).' : '.dol_escape_htmltag(powerplantpvReportDcDisplayNumber($measure, $measure->insulation_positive_to_ground, 'MOhm')).'</span>';
-		print '<span>'.dol_escape_htmltag($langs->trans('PowerPlantPVInsulationNegativeToGround')).' : '.dol_escape_htmltag(powerplantpvReportDcDisplayNumber($measure, $measure->insulation_negative_to_ground, 'MOhm')).'</span>';
+		print '<span>'.dol_escape_htmltag($langs->trans('PowerPlantPVPositiveToGroundVoltage')).' : '.dol_escape_htmltag(powerplantpvReportDcDisplayNumber($measure, $measure->positive_to_ground_voltage, 'V')).'</span>';
+		print '<span>'.dol_escape_htmltag($langs->trans('PowerPlantPVNegativeToGroundVoltage')).' : '.dol_escape_htmltag(powerplantpvReportDcDisplayNumber($measure, $measure->negative_to_ground_voltage, 'V')).'</span>';
 		print '<span>'.dol_htmlentitiesbr(powerplantpvReportDcDisplayText($measure, $measure->observation, false)).'</span>';
 		print '</div></div></details>';
 		return;
@@ -1615,8 +1678,8 @@ function powerplantpvReportRenderDcMeasureCard($measure, $editable, $form)
 	print '<label>'.$langs->trans('PowerPlantPVOpenCircuitVoltage').'<span class="powerplantpv-control-with-unit"><input type="text" class="flat powerplantpv-report-control right" name="'.$name.'[open_circuit_voltage]" value="'.dol_escape_htmltag(powerplantpvReportDcInputNumberValue($measure->open_circuit_voltage)).'"><span class="opacitymedium">V</span></span></label>';
 	print '<label>'.$langs->trans('PowerPlantPVPolarityChecked').$form->selectarray($name.'[polarity_checked]', array(-1 => $langs->trans('PowerPlantPVDataNotFilled'), 0 => $langs->trans('No'), 1 => $langs->trans('Yes')), (int) $measure->polarity_checked, 0, 0, 0, '', 0, 0, 0, '', 'powerplantpv-report-control').'</label>';
 	print '<label>'.$langs->trans('PowerPlantPVInsulationStatus').$form->selectarray($name.'[insulation_status]', $insulationOptions, (string) $measure->insulation_status, 1, 0, 0, '', 0, 0, 0, '', 'powerplantpv-report-control').'</label>';
-	print '<label>'.$langs->trans('PowerPlantPVInsulationPositiveToGround').'<span class="powerplantpv-control-with-unit"><input type="text" class="flat powerplantpv-report-control right" name="'.$name.'[insulation_positive_to_ground]" value="'.dol_escape_htmltag(powerplantpvReportDcInputNumberValue($measure->insulation_positive_to_ground)).'"><span class="opacitymedium">MOhm</span></span></label>';
-	print '<label>'.$langs->trans('PowerPlantPVInsulationNegativeToGround').'<span class="powerplantpv-control-with-unit"><input type="text" class="flat powerplantpv-report-control right" name="'.$name.'[insulation_negative_to_ground]" value="'.dol_escape_htmltag(powerplantpvReportDcInputNumberValue($measure->insulation_negative_to_ground)).'"><span class="opacitymedium">MOhm</span></span></label>';
+	print '<label>'.$langs->trans('PowerPlantPVPositiveToGroundVoltage').'<span class="powerplantpv-control-with-unit"><input type="text" class="flat powerplantpv-report-control right" name="'.$name.'[positive_to_ground_voltage]" value="'.dol_escape_htmltag(powerplantpvReportDcInputNumberValue($measure->positive_to_ground_voltage)).'"><span class="opacitymedium">V</span></span></label>';
+	print '<label>'.$langs->trans('PowerPlantPVNegativeToGroundVoltage').'<span class="powerplantpv-control-with-unit"><input type="text" class="flat powerplantpv-report-control right" name="'.$name.'[negative_to_ground_voltage]" value="'.dol_escape_htmltag(powerplantpvReportDcInputNumberValue($measure->negative_to_ground_voltage)).'"><span class="opacitymedium">V</span></span></label>';
 	print '<label class="powerplantpv-dc-observation">'.$langs->trans('Observation').'<textarea class="flat powerplantpv-report-control" rows="2" name="'.$name.'[observation]">'.dol_escape_htmltag((string) $measure->observation).'</textarea></label>';
 	print '</div></details>';
 }
@@ -1638,6 +1701,7 @@ function powerplantpvReportRenderField($field, $editable, $form)
 	$name = 'report_values['.dol_escape_htmltag((string) $field->stable_key).']';
 	$type = (string) $field->field_type;
 	$value = powerplantpvReportFieldDisplayValue($field);
+	$allowsNotApplicable = PowerPlantPVReportPresentation::allowsNotApplicable((string) $field->field_code, $type);
 	$fieldClass = 'powerplantpv-report-field';
 	$fieldClass .= powerplantpvReportFieldCanInline($field) ? ' powerplantpv-report-field-inline' : ' powerplantpv-report-field-block';
 	$inputClass = 'powerplantpv-report-input'.(powerplantpvReportFieldHasInlineUnit($field) ? ' powerplantpv-report-input-with-unit' : '');
@@ -1661,12 +1725,17 @@ function powerplantpvReportRenderField($field, $editable, $form)
 			print '<div class="powerplantpv-report-readonly">';
 			powerplantpvReportPrintHtmlValue((string) $value);
 			print '</div>';
+		} elseif ($allowsNotApplicable) {
+			$options = powerplantpvReportFieldOptions($field);
+			print '<div class="powerplantpv-report-readonly">'.dol_escape_htmltag($options[$value] ?? '').'</div>';
 		} elseif ($value === '' && powerplantpvReportFieldIsPreviousReading($field)) {
 			print '<div class="powerplantpv-report-readonly opacitymedium">'.$langs->trans('PowerPlantPVReportNoPreviousReading').'</div>';
 		} else {
 			print '<div class="powerplantpv-report-readonly">'.dol_htmlentitiesbr((string) $value).'</div>';
 		}
-		print '</div></div>';
+		print '</div>';
+		powerplantpvReportRenderIndexPhoto($field, false);
+		print '</div>';
 		return;
 	}
 
@@ -1683,6 +1752,8 @@ function powerplantpvReportRenderField($field, $editable, $form)
 		print '<div class="powerplantpv-report-date">';
 		print $form->selectDate($timestamp, 'report_date_'.$hash, ($type === 'datetime' ? 1 : 0), ($type === 'datetime' ? 1 : 0), 1, 'powerplantpvreportform', 1, 1);
 		print '</div>';
+	} elseif ($allowsNotApplicable) {
+		print $form->selectarray($name, powerplantpvReportFieldOptions($field), (string) $value, 0, 0, 0, '', 0, 0, 0, '', 'powerplantpv-report-control');
 	} elseif ($type === 'checkbox' || $type === 'yesno') {
 		print $form->selectarray($name, array(0 => $langs->trans('No'), 1 => $langs->trans('Yes')), (int) $value, 0, 0, 0, '', 0, 0, 0, '', 'powerplantpv-report-control');
 	} elseif ($type === 'select' || $type === 'conformity_so_valid_obs') {
@@ -1711,7 +1782,63 @@ function powerplantpvReportRenderField($field, $editable, $form)
 		print '<span class="opacitymedium powerplantpv-report-unit">'.dol_escape_htmltag((string) $field->unit).'</span>';
 	}
 	print '</div>';
+	powerplantpvReportRenderIndexPhoto($field, true);
 	print '</div>';
+}
+
+function powerplantpvReportIndexPhotoField(PowerPlantPVReportField $field): bool
+{
+	return empty($field->readonly) && (int) $field->visible_form > 0
+		&& powerplantpvIndexPhotoApplies((string) $field->field_code)
+		&& powerplantpvReportIsNumericFieldType((string) $field->field_type);
+}
+
+/** @return list<string> Labels of uploads or required photos that need attention. */
+function powerplantpvReportSaveIndexPhotos(PowerPlantPVReport $report, bool $finalize): array
+{
+	global $db, $langs;
+
+	$required = $finalize && powerplantpvIndexPhotoRequired((int) $report->entity);
+	$fields = (new PowerPlantPVReportField($db))->fetchAllByReport((int) $report->id, 'position', 'ASC');
+	if (!is_array($fields)) {
+		return array($langs->trans('ErrorRecordNotFound'));
+	}
+	$errors = array();
+	foreach ($fields as $field) {
+		if (!powerplantpvReportIndexPhotoField($field)) {
+			continue;
+		}
+		$key = 'index_photo_'.hash('sha256', (string) $field->stable_key);
+		$upload = $_FILES[$key] ?? array();
+		$hasUpload = is_array($upload) && ($upload['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_NO_FILE;
+		$path = powerplantpvReportIndexPhotoPath($field, $hasUpload);
+		$label = powerplantpvReportLocalizedObjectLabel($field, 'field_label');
+		if ($hasUpload && !powerplantpvIndexPhotoStore($upload, $path)) {
+			$errors[] = $label.' — '.$langs->trans('PowerPlantPVIndexPhotoInvalid');
+		} elseif ($required && is_numeric($field->value_number) && ($path === '' || !is_file($path))) {
+			$errors[] = $label.' — '.$langs->trans('PowerPlantPVIndexPhotoRequired');
+		}
+	}
+	return $errors;
+}
+
+function powerplantpvReportRenderIndexPhoto(PowerPlantPVReportField $field, bool $editable): void
+{
+	global $langs;
+
+	if (!powerplantpvReportIndexPhotoField($field)) {
+		return;
+	}
+	$path = powerplantpvReportIndexPhotoPath($field);
+	if ($path !== '' && is_file($path)) {
+		$url = dol_buildpath('/powerplantpv/maintenance_intervention_report.php', 1).'?id='.GETPOSTINT('id').'&action=view_index_photo&field_id='.(int) $field->id;
+		print '<div><a href="'.dol_escape_htmltag($url).'">'.img_picto('', 'fa-camera').' '.$langs->trans('PowerPlantPVIndexPhoto').'</a></div>';
+	}
+	if ($editable && powerplantpvIndexPhotoAvailable()) {
+		$key = 'index_photo_'.hash('sha256', (string) $field->stable_key);
+		print '<div><label for="'.$key.'">'.$langs->trans('PowerPlantPVIndexPhoto').'</label>';
+		print '<input type="file" id="'.$key.'" name="'.$key.'" accept="image/jpeg,image/png" class="flat"></div>';
+	}
 }
 
 /**
@@ -1878,6 +2005,9 @@ function powerplantpvReportFieldDisplayValue($field)
 	if ((string) $field->field_type === 'date' || (string) $field->field_type === 'datetime') {
 		return !empty($field->value_date) ? dol_print_date(strtotime((string) $field->value_date), ((string) $field->field_type === 'datetime' ? 'dayhour' : 'day')) : '';
 	}
+	if (PowerPlantPVReportPresentation::allowsNotApplicable((string) $field->field_code, (string) $field->field_type)) {
+		return (string) $field->value_text;
+	}
 	if ((string) $field->field_type === 'checkbox' || (string) $field->field_type === 'yesno') {
 		return !empty($field->value_text) ? '1' : '0';
 	}
@@ -1928,6 +2058,14 @@ function powerplantpvReportFieldOptions($field)
 {
 	global $langs;
 
+	if (PowerPlantPVReportPresentation::allowsNotApplicable((string) $field->field_code, (string) $field->field_type)) {
+		return array(
+			'' => $langs->trans('PowerPlantPVDataNotFilled'),
+			'1' => $langs->trans('Yes'),
+			'0' => $langs->trans('No'),
+			'not_applicable' => $langs->trans('PowerPlantPVReportConformityNotApplicable'),
+		);
+	}
 	if ((string) $field->field_type === 'conformity_so_valid_obs') {
 		return array(
 			'valid' => $langs->trans('PowerPlantPVReportConformityValid'),
