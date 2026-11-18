@@ -320,6 +320,19 @@
 			}
 		}
 
-		restoreScrollPosition();
+		var dcHistoryTarget = /^#powerplantpv-dc-measures-\d+$/.test(window.location.hash)
+			? document.getElementById(window.location.hash.slice(1)) : null;
+		if (dcHistoryTarget) {
+			dcHistoryTarget.open = true;
+			var showDcHistory = function () {
+				dcHistoryTarget.scrollIntoView({block: 'start'});
+			};
+			window.requestAnimationFrame(showDcHistory);
+			if (document.readyState !== 'complete') {
+				window.addEventListener('load', showDcHistory, {once: true});
+			}
+		} else {
+			restoreScrollPosition();
+		}
 	});
 }());
