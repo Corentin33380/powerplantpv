@@ -1,5 +1,9 @@
 # CHANGELOG MODULE POWERPLANTPV FOR [DOLIBARR ERP CRM](https://www.dolibarr.org)
 
+## 1.8.1 — 2026-11-18
+
+- Mesures DC : détail des chaînes dans le rapport principal. Une action par chaîne permet de reprendre dans les champs de tension vides les anciennes valeurs dont la mesure en volts est confirmée.
+
 ## 1.8.0 — 2026-11-18
 
 - Photos des index de production et d’injection, généraux ou par onduleur, avec obligation configurable par entité et affichage dans le PDF de maintenance pour les photos saisies dans le rapport.

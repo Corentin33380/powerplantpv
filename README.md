@@ -25,7 +25,7 @@
 
 Other external modules are available on [Dolistore.com](https://www.dolistore.com).
 
-## Maintenance reports — 1.8.0
+## Maintenance reports — 1.8
 
 The development branch adds installed inverter markers and identification, frozen report identities,
 DC groups by physical inverter, and material summaries consolidated by product reference.

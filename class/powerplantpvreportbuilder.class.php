@@ -473,9 +473,10 @@ class PowerPlantPVReportBuilder
 	 * @param	int						$reportId	Report id
 	 * @param	array<string,mixed>		$values		Submitted rows
 	 * @param	User					$user		User
+	 * @param	string	$legacyVoltageCard	Form key of the input whose legacy values were measured in volts
 	 * @return	int									>0 if OK, <0 on error
 	 */
-	public function saveDcMeasureValues($reportId, $values, User $user)
+	public function saveDcMeasureValues($reportId, $values, User $user, string $legacyVoltageCard = '')
 	{
 		if (empty($values) || !is_array($values)) {
 			return 1;
@@ -502,7 +503,7 @@ class PowerPlantPVReportBuilder
 		}
 
 		if ($this->db->begin() <= 0) { $this->setError($this->db->lasterror()); return -1; }
-		foreach ($values as $row) {
+		foreach ($values as $cardKey => $row) {
 			if (!is_array($row)) {
 				continue;
 			}
@@ -517,7 +518,17 @@ class PowerPlantPVReportBuilder
 			if (!$measure instanceof PowerPlantPVReportDcMeasure) {
 				continue;
 			}
+			$adoptLegacy = $legacyVoltageCard !== '' && $cardKey === $legacyVoltageCard
+				&& md5((string) $measure->stable_key) === $legacyVoltageCard;
+			$positiveVoltage = $measure->positive_to_ground_voltage;
+			$negativeVoltage = $measure->negative_to_ground_voltage;
 			$this->assignSubmittedValueToDcMeasure($measure, $row);
+			if ($adoptLegacy) {
+				// An empty submission on an outdated form must not erase an existing voltage.
+				$measure->positive_to_ground_voltage ??= $positiveVoltage;
+				$measure->negative_to_ground_voltage ??= $negativeVoltage;
+				$measure->adoptLegacyPoleVoltages();
+			}
 			if ($measure->update($user, 0) < 0) {
 				$this->copyErrorsFrom($measure);
 				$this->db->rollback();

@@ -1861,6 +1861,9 @@ PowerPlantPVReportChartMissing=Les mesures absentes ne sont pas représentées ;
 
 PowerPlantPVVisualProduction=Relevés de production et compteurs
 PowerPlantPVVisualDcMeasures=Mesures électriques DC - Synthèse
+PowerPlantPVVisualDcDetails=Détail des mesures électriques DC
+PowerPlantPVAdoptLegacyVoltages=Reprendre les valeurs anciennes en volts
+PowerPlantPVAdoptLegacyVoltagesHelp=À utiliser uniquement si les valeurs de cette chaîne ont été mesurées en volts. Les tensions déjà renseignées sont prioritaires.
 PowerPlantPVVisualDcAnnex=Annexe - Mesures électriques DC
 PowerPlantPVReportPdfAnnexTitle=Annexe technique du rapport de maintenance
 PowerPlantPVReportPdfPairError=Impossible de générer le rapport et son annexe technique.

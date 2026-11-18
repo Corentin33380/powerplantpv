@@ -78,10 +78,11 @@ $fieldId = GETPOSTINT('field_id');
 $fileId = GETPOSTINT('file_id');
 $dcSectionId = GETPOSTINT('add_dc_section_id');
 $reportRestoreScrollY = GETPOSTINT('report_scroll_y');
+$legacyVoltageCard = GETPOST('adopt_legacy_voltage_submit', 'aZ09', 2);
 $manualServiceIds = powerplantpvSanitizeIdArray(GETPOST('manual_services', 'array:int'));
 
 if ($action === '') {
-	if (GETPOSTISSET('save_draft_submit')) {
+	if (GETPOSTISSET('save_draft_submit') || $legacyVoltageCard !== '') {
 		$action = 'save_draft';
 	} elseif (GETPOSTISSET('save_report_submit')) {
 		$action = 'save';
@@ -233,7 +234,7 @@ if (($action === 'save_draft' || $action === 'save') && $caneditreport) {
 		$dcValues = powerplantpvReportGetSubmittedDcMeasures();
 		$result = $builder->saveValues((int) $report->id, $values, $dateValues, $user, $persistStatus);
 		if ($result >= 0) {
-			$result = $builder->saveDcMeasureValues((int) $report->id, $dcValues, $user);
+			$result = $builder->saveDcMeasureValues((int) $report->id, $dcValues, $user, $legacyVoltageCard);
 		}
 		$interventionValidationResult = 0;
 		$requiredValidationFailed = 0;
@@ -1661,6 +1662,12 @@ function powerplantpvReportRenderDcMeasureCard($measure, $editable, $form)
 		return;
 	}
 
+	if ($measure instanceof PowerPlantPVReportDcMeasure && $measure->hasLegacyPoleVoltages()) {
+		print '<div class="powerplantpv-dc-observation">';
+		print '<button type="submit" class="button" name="adopt_legacy_voltage_submit" value="'.$key.'">';
+		print dol_escape_htmltag($langs->trans('PowerPlantPVAdoptLegacyVoltages')).'</button>';
+		print '<div class="opacitymedium">'.dol_escape_htmltag($langs->trans('PowerPlantPVAdoptLegacyVoltagesHelp')).'</div></div>';
+	}
 	print '<input type="hidden" name="'.$name.'[id]" value="'.((int) $measure->id).'">';
 	print '<input type="hidden" name="'.$name.'[stable_key]" value="'.dol_escape_htmltag((string) $measure->stable_key).'">';
 	if ($isManual) {

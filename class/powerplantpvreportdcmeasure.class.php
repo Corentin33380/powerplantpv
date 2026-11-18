@@ -88,6 +88,31 @@ class PowerPlantPVReportDcMeasure extends PowerPlantPVReportGeneratedBase
 	public $inverter_identification;
 	public $position;
 
+	/** Whether this connected input has an older value that can fill an empty voltage. */
+	public function hasLegacyPoleVoltages(): bool
+	{
+		return (int) $this->is_connected === 1 && (
+			($this->positive_to_ground_voltage === null && is_numeric($this->insulation_positive_to_ground))
+			|| ($this->negative_to_ground_voltage === null && is_numeric($this->insulation_negative_to_ground))
+		);
+	}
+
+	/** Reclassify numbers explicitly confirmed to have been measured in volts. */
+	public function adoptLegacyPoleVoltages(): void
+	{
+		if (!$this->hasLegacyPoleVoltages()) {
+			return;
+		}
+		if ($this->positive_to_ground_voltage === null && is_numeric($this->insulation_positive_to_ground)) {
+			$this->positive_to_ground_voltage = $this->insulation_positive_to_ground;
+			$this->insulation_positive_to_ground = null;
+		}
+		if ($this->negative_to_ground_voltage === null && is_numeric($this->insulation_negative_to_ground)) {
+			$this->negative_to_ground_voltage = $this->insulation_negative_to_ground;
+			$this->insulation_negative_to_ground = null;
+		}
+	}
+
 	/**
 	 * Fetch one measure by report and stable key.
 	 *
