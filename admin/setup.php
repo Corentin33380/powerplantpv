@@ -997,6 +997,9 @@ print '<form method="POST" action="'.dol_escape_htmltag($_SERVER['PHP_SELF']).'"
 print '<input type="hidden" name="token" value="'.newToken().'">';
 print '<input type="hidden" name="action" value="save_report_pdf_settings">';
 print '<table class="noborder centpercent">';
+foreach (array('HIDE_EQUIPMENT' => 'PowerPlantPVReportPdfHideEquipment', 'SHORT_CONNECTION' => 'PowerPlantPVReportPdfShortConnection', 'TECHNICAL_SERVICE_SIGNATURE' => 'PowerPlantPVReportPdfTechnicalServiceSignature') as $reportpdfoption => $reportpdflabel) {
+	print '<tr class="oddeven"><td class="titlefield">'.$langs->trans($reportpdflabel).'<br><span class="opacitymedium">'.$langs->trans($reportpdflabel.'Help').'</span></td><td>'.ajax_constantonoff('POWERPLANTPV_REPORT_PDF_'.$reportpdfoption, array(), (int) $conf->entity, 0, 0, 0, 2, 0, 1).'</td></tr>';
+}
 print '<tr class="oddeven"><td class="titlefield">'.$langs->trans('PowerPlantPVReportPdfLegalNotice').'</td><td>';
 $reportpdflegalnotice = getDolGlobalString('POWERPLANTPV_REPORT_PDF_LEGAL_NOTICE');
 if (isModEnabled('fckeditor')) {

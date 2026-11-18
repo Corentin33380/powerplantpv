@@ -50,3 +50,5 @@ jobs:
           php powerplantpv/test/inverter_maintenance.php
       - name: Native contracts with simulated schema and PDF capture
         run: php powerplantpv/test/inverter_maintenance_native.php dolibarr/htdocs powerplantpv
+      - name: Visual PDF rendered with the core TCPDF
+        run: php powerplantpv/test/visual_report_pdf_native.php dolibarr/htdocs powerplantpv
