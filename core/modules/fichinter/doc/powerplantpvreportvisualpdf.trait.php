@@ -1039,7 +1039,7 @@ trait PowerPlantPVReportVisualPdf
 			$bx = $x + 4; $by = $y + 24; $bw = $width - 8;
 			$bh = $height - ($i === count($cards) - 1 ? 25 : 28);
 			$pdf->SetDrawColor(207, 213, 223); $pdf->SetLineStyle(array('width' => 0.2, 'dash' => '1,1')); $pdf->RoundedRect($bx, $by, $bw, $bh, 1.5, '1111', 'D'); $pdf->SetLineStyle(array('width' => 0.2, 'dash' => 0));
-			if ($columns === 3 && $i === $columns - 1) {
+			if ($i === $columns - 1) {
 				// Record the placement on the actual PDF being signed, even if the settings later change.
 				$pdf->setExtraXMPRDF(sprintf(
 					'<rdf:Description rdf:about="" xmlns:ppv="urn:powerplantpv:report" ppv:clientSignature="%d %.3F %.3F %.3F"/>',

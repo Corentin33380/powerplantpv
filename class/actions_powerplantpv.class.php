@@ -392,8 +392,7 @@ class ActionsPowerplantpv
 		global $conf, $langs, $online_sign_name;
 
 		if ($action !== 'importSignature' || !$object instanceof Fichinter || !isModEnabled('powerplantpv')
-			|| !in_array('ajaxonlinesign', $this->getContexts($parameters, $hookmanager), true)
-			|| !function_exists('dolPrintSignatureImage')) {
+			|| !in_array('ajaxonlinesign', $this->getContexts($parameters, $hookmanager), true)) {
 			return 0;
 		}
 
@@ -438,8 +437,9 @@ class ActionsPowerplantpv
 		$x = (float) $placement[2];
 		$y = (float) $placement[3];
 		$width = (float) $placement[4];
-		if ((int) $placement[1] !== $pages || $x < 0 || $y < 0 || $width <= 0
-			|| realpath($image) !== $image || (getimagesize($image)[2] ?? 0) !== IMAGETYPE_PNG
+		$imageSize = realpath($image) === $image ? getimagesize($image) : false;
+		if ((int) $placement[1] !== $pages || $x < 0 || $y < 14 || $width <= 10
+			|| ($imageSize[2] ?? 0) !== IMAGETYPE_PNG
 			|| is_link($target) || file_exists($target)) {
 			// In this core hook, a negative return still advances the intervention's signed status.
 			throw new RuntimeException('Unable to place the client signature in the maintenance report.');
@@ -456,17 +456,24 @@ class ActionsPowerplantpv
 			$pdf->AddPage($size['h'] > $size['w'] ? 'P' : 'L', array($size['w'], $size['h']));
 			$pdf->useTemplate($template);
 		}
-		if ($x + $width > $pdf->getPageWidth() || $y + $width / 4 + 12 > $pdf->getPageHeight()) {
+		if ($x + $width > $pdf->getPageWidth() || $y + 29 > $pdf->getPageHeight()) {
 			throw new RuntimeException('Invalid client signature placement in the maintenance report.');
 		}
 
-		dolPrintSignatureImage($pdf, $langs, array(
-			'online_sign_name' => dol_trunc((string) $online_sign_name, 60, 'right', 'UTF-8', 1),
-			'pathtoimage' => $image,
-			'xforimgstart' => $x,
-			'yforimgstart' => $y,
-			'wforimg' => $width,
-		));
+		// The placement starts 2 mm inside the signature area. The name and date rows are above it.
+		$pdf->SetFont('', 'B', 8);
+		$pdf->SetTextColor(25, 39, 60);
+		$pdf->SetFillColor(255, 255, 255);
+		$pdf->SetXY($x + 10, $y - 14);
+		$pdf->Cell($width - 8, 4, $langs->convToOutputCharset((string) $online_sign_name), 0, 0, 'L', true, '', 1);
+		$pdf->SetXY($x + 10, $y - 9);
+		$pdf->Cell($width - 8, 4, $langs->convToOutputCharset(dol_print_date(dol_now(), 'day', false, $langs, true)), 0, 0, 'L', true);
+
+		$scale = min($width / $imageSize[0], 29 / $imageSize[1]);
+		$signatureWidth = $imageSize[0] * $scale;
+		$signatureHeight = $imageSize[1] * $scale;
+		$pdf->Image($image, $x + ($width - $signatureWidth) / 2, $y + (29 - $signatureHeight) / 2, $signatureWidth, $signatureHeight);
+
 		$temporaryFile = tempnam($directory, '.ppv-signed-');
 		if ($temporaryFile === false) {
 			throw new RuntimeException('Unable to stage the signed maintenance report.');
