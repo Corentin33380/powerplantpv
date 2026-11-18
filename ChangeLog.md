@@ -6,6 +6,7 @@
 - Mise à jour du schéma des relevés pour lier les nouveaux index manuels à un onduleur. Les anciens relevés non attribués restent consultables.
 - Mesures DC en volts entre les pôles et la terre dans le modèle de rapport par défaut. Les résistances historiques conservent leur unité.
 - En-têtes de l’annexe DC alignés sur les cellules, couleur de pied de page native et noms traduits des modèles PDF.
+- En-tête du rapport compact, barre de progression continue et légende de la photo avec référence, nom et ville de la centrale.
 
 ## 1.8.0 — 2026-11-18
 

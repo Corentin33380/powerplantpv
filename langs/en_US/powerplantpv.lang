@@ -1416,6 +1416,7 @@ PowerPlantPVReadProductionIndex = Enter a meter reading
 PowerPlantPVInverterProductionIndex=Inverter production index
 PowerPlantPVInverterInjectionIndex=Inverter export meter index
 PowerPlantPVInterventionReportPdfName=Photovoltaic maintenance report
+PowerPlantPVReportInterventionHeader=Intervention dated %s · %s
 PowerPlantPVStandardPdfName=Standard photovoltaic plant sheet
 PowerPlantPVIndexInverter=Inverter for an individual reading
 PowerPlantPVIndexInverterRequired=Select an inverter belonging to this plant for the individual reading.

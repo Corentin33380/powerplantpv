@@ -331,30 +331,18 @@ class pdf_powerplantpvreport extends ModelePDFFicheinter
 
 		$title = $this->visualReportTitle !== '' ? $this->visualReportTitle : $outputlangs->transnoentities('PowerPlantPVReportPdfTitle');
 		$pdf->SetTextColor(23, 40, 74);
-		$pdf->SetFont('', 'B', 19);
+		$pdf->SetFont('', 'B', 11);
 		$pdf->SetXY($this->marge_gauche + 55, $posy);
-		$pdf->MultiCell(0, 7, $outputlangs->convToOutputCharset($title), 0, 'R');
-		$pdf->SetFont('', '', 10);
+		$pdf->MultiCell(0, 5, $outputlangs->convToOutputCharset($title), 0, 'R');
 		$dateIntervention = $this->getInterventionDate($object);
+		$ref = $outputlangs->transnoentities('Intervention').' '.$object->ref;
 		if (!empty($dateIntervention)) {
-			$pdf->SetTextColor(102, 112, 133);
-			$pdf->SetX($this->marge_gauche + 55);
-			$pdf->MultiCell(0, 5, $outputlangs->convToOutputCharset(dol_print_date($dateIntervention, 'day', 'tzuser', $outputlangs)), 0, 'R');
+			$ref = $outputlangs->transnoentities('PowerPlantPVReportInterventionHeader', dol_print_date($dateIntervention, 'day', 'tzuser', $outputlangs), $object->ref);
 		}
-		$ref = $outputlangs->convToOutputCharset($outputlangs->transnoentities('Intervention').' '.$object->ref);
 		$pdf->SetFont('', 'B', 10);
-		$right = $this->page_largeur - $this->marge_droite;
-		$badgeWidth = min($right - $this->marge_gauche, $pdf->GetStringWidth($ref) + 7);
-		$badgeY = $pdf->GetY() + 1;
-		$pdf->SetFillColor(23, 40, 74);
-		$pdf->RoundedRect($right - $badgeWidth, $badgeY, $badgeWidth, 6, 1.6, '1111', 'F');
-		$pdf->SetTextColor(255, 255, 255);
-		$pdf->SetXY($right - $badgeWidth, $badgeY);
-		$pdf->Cell($badgeWidth, 6, $ref, 0, 0, 'C', false, '', 1);
-		$ruleY = max($logoBottom, $badgeY + 6) + 2.5;
-		$pdf->SetFillColor(22, 136, 224);
-		$pdf->Rect($this->marge_gauche, $ruleY, $right - $this->marge_gauche, 0.8, 'F');
-		$pdf->SetY(max(34, $ruleY + 4));
+		$pdf->SetX($this->marge_gauche + 55);
+		$pdf->MultiCell(0, 5, $outputlangs->convToOutputCharset($ref), 0, 'R');
+		$pdf->SetY(max($logoBottom, $pdf->GetY()) + 5);
 		$pdf->SetTextColor(29, 36, 51);
 		$this->visualHeaders[(int) $pdf->getPage()] = true;
 		$pdf->SetFont('', '', $this->defaultFontSize);

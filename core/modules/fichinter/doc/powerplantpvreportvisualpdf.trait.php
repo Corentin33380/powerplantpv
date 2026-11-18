@@ -290,12 +290,14 @@ trait PowerPlantPVReportVisualPdf
 			$barHeight = 2.65;
 			$pdf->StartTransform();
 			$pdf->RoundedRect($barX, $barY, $textWidth, $barHeight, $barHeight / 2, '1111', 'CNZ');
-			foreach (array(array(18, 128, 92), array(240, 195, 90), array(201, 206, 216), array(123, 138, 160)) as $i => $color) {
+			$colors = array(array(18, 128, 92), array(240, 195, 90), array(201, 206, 216), array(123, 138, 160));
+			// Overpaint cumulative lengths from right to left so joins have no unpainted edge.
+			$remaining = $total;
+			for ($i = count($colors) - 1; $i >= 0; $i--) {
 				if ($counts[$i] <= 0) { continue; }
-				$segment = $textWidth * $counts[$i] / $total;
-				$pdf->SetFillColorArray($color);
-				$pdf->Rect($barX, $barY, $segment, $barHeight, 'F');
-				$barX += $segment;
+				$pdf->SetFillColorArray($colors[$i]);
+				$pdf->Rect($barX, $barY, $textWidth * $remaining / $total, $barHeight, 'F');
+				$remaining -= $counts[$i];
 			}
 			$pdf->StopTransform();
 		}
@@ -328,11 +330,46 @@ trait PowerPlantPVReportVisualPdf
 		if (!restrictedArea($user, 'powerplantpv', $plant, $plant->table_element.'&'.$plant->element, $plant->element, 'fk_soc', 'rowid', (int) ((int) $plant->status === PowerPlant::STATUS_DRAFT), 1)) { return; }
 		$source = new PowerPlantPVReportIllustration($this->db); $files = $source->files($plant);
 		if (!is_array($files) || !isset($files[(int) $plant->fk_report_illustration])) { $this->renderEmptyBlock($pdf, $langs->transnoentities('PowerPlantPVReportIllustrationInvalid')); return; }
-		$path = $files[(int) $plant->fk_report_illustration]['path']; $size = @getimagesize($path);
+		$caption = $this->powerplantLabel($snapshot);
+		$town = trim((string) $plant->town);
+		if ($town !== '') {
+			$caption .= ' · '.$town;
+		}
+		$this->drawPlantIllustration($pdf, $files[(int) $plant->fk_report_illustration]['path'], $caption, $langs);
+	}
+
+	/**
+	 * Draw the authorized plant photograph and its identifying caption.
+	 * @param TCPDF|TCPDI $pdf PDF handler
+	 * @param string $path Resolved image
+	 * @param string $caption Plant reference, name and town
+	 * @param Translate $langs Output language
+	 * @return void
+	 */
+	protected function drawPlantIllustration(&$pdf, $path, $caption, $langs)
+	{
+		$size = @getimagesize($path);
 		if (!$size) { return; }
-		$width = $this->page_largeur - $this->marge_gauche - $this->marge_droite; $height = min(67, $width * $size[1] / $size[0]); $drawWidth = $height * $size[0] / $size[1];
-		$this->ensureSpace($pdf, $height + 8); $y = $pdf->GetY(); $pdf->Image($path, $this->marge_gauche + ($width - $drawWidth) / 2, $y, $drawWidth, $height);
-		$pdf->SetFont('', '', 7); $pdf->SetTextColor(100,116,139); $pdf->SetXY($this->marge_gauche, $y + $height + 1); $pdf->MultiCell($width, 3, $langs->convToOutputCharset($this->powerplantLabel($snapshot)), 0, 'C'); $pdf->SetY($y + $height + 7);
+		$x = $this->marge_gauche;
+		$width = $this->page_largeur - $x - $this->marge_droite;
+		$height = 66.15; // Visible image height measured in the reference PDF.
+		$scale = max($width / $size[0], $height / $size[1]);
+		$drawWidth = $size[0] * $scale;
+		$drawHeight = $size[1] * $scale;
+		$this->ensureSpace($pdf, $height + 8);
+		$y = $pdf->GetY();
+		$autoPageBreak = $pdf->getAutoPageBreak();
+		$breakMargin = $pdf->getBreakMargin();
+		// The clipped image can extend outside the reserved frame, especially in portrait.
+		$pdf->SetAutoPageBreak(false, $breakMargin);
+		$pdf->StartTransform();
+		$pdf->RoundedRect($x, $y, $width, $height, 2.65, '1111', 'CNZ');
+		$pdf->Image($path, $x + ($width - $drawWidth) / 2, $y + ($height - $drawHeight) / 2, $drawWidth, $drawHeight);
+		$pdf->StopTransform();
+		$pdf->SetAutoPageBreak($autoPageBreak, $breakMargin);
+		$pdf->SetFont('', '', 7); $pdf->SetTextColor(100,116,139); $pdf->SetXY($this->marge_gauche, $y + $height + 1);
+		$pdf->MultiCell($width, 3, $langs->convToOutputCharset($caption), 0, 'C');
+		$pdf->SetY($pdf->GetY() + 3);
 	}
 
 	/** @param float $power @param string $unit @param Translate $langs @return string */

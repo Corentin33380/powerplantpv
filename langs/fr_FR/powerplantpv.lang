@@ -1049,6 +1049,7 @@ PowerPlantPVReportTab = Rapport
 PowerPlantPVReport = Rapport
 PowerPlantPVInterventionReportPdfModel = Rapport d'intervention PowerPlantPV
 PowerPlantPVInterventionReportPdfName=Rapport de maintenance photovoltaïque
+PowerPlantPVReportInterventionHeader=Intervention du %s · %s
 PowerPlantPVStandardPdfName=Fiche centrale photovoltaïque standard
 PowerPlantPVReportPdfTitle = Rapport d'intervention
 PowerPlantPVReportNoSnapshot = Aucun rapport saisi n'est disponible pour cette intervention.
