@@ -89,7 +89,15 @@ trait PowerPlantPVReportVisualPdf
 		if ($dc) {
 			$dcHeading = $outputlangs->transnoentities('PowerPlantPVVisualDcMeasures');
 			foreach ($dc as $row) {
-				foreach (PowerPlantPVReportPresentation::groupMeasures(PowerPlantPVReportPresentation::visibleMeasures($row['dc_measures'], false)) as $group) { $this->visualDcChart($pdf, $group, $outputlangs, $dcHeading); }
+				$groups = PowerPlantPVReportPresentation::groupMeasures(PowerPlantPVReportPresentation::visibleMeasures($row['dc_measures'], false));
+				foreach ($groups as $group) {
+					$this->visualDcChart($pdf, $group, $outputlangs, $dcHeading);
+				}
+				foreach ($groups as $group) {
+					$this->ensureSpace($pdf, 42);
+					$this->renderSectionTitle($pdf, $outputlangs->transnoentities('PowerPlantPVVisualDcDetails'), 2);
+					$this->visualDcTable($pdf, $group, $outputlangs);
+				}
 				$this->visualSectionExtras($pdf, $row, $dataset, $outputlangs);
 			}
 		}
@@ -101,22 +109,6 @@ trait PowerPlantPVReportVisualPdf
 	{
 		$hasContent = false;
 		$plants = $dataset['powerplants'] ?? array();
-		$sections = $dataset['general_sections'] ?? array();
-		foreach ($dataset['sections_by_powerplant'] ?? array() as $rows) {
-			$sections = array_merge($sections, $rows);
-		}
-		foreach ($sections as $row) {
-			if (empty($row['section']->visible_pdf) || (string) $row['section']->section_code !== 'DC_ELECTRICAL_MEASURE') {
-				continue;
-			}
-			$groups = PowerPlantPVReportPresentation::groupMeasures(PowerPlantPVReportPresentation::visibleMeasures($row['dc_measures'], false));
-			foreach ($groups as $group) {
-				$this->ensureSpace($pdf, 42);
-				$this->renderSectionTitle($pdf, $outputlangs->transnoentities('PowerPlantPVVisualDcAnnex'), 2);
-				$this->visualDcAnnex($pdf, $group, $outputlangs);
-				$hasContent = true;
-			}
-		}
 		foreach (getDolGlobalInt('POWERPLANTPV_REPORT_PDF_HIDE_EQUIPMENT') ? array() : $plants as $plant) {
 			$hasContent = true;
 			$this->renderSectionTitle($pdf, $outputlangs->transnoentities('PowerPlantPVVisualMaterialAnnex'), 2);
@@ -880,7 +872,7 @@ trait PowerPlantPVReportVisualPdf
 	}
 
 	/** @param TCPDF|TCPDI $pdf @param array<string,mixed> $group @param Translate $langs @return void */
-	protected function visualDcAnnex(&$pdf, $group, $langs)
+	protected function visualDcTable(&$pdf, $group, $langs)
 	{
 		$this->renderSectionTitle($pdf, $this->visualIdentity($group['identity'], true), 3);
 		$electricalColumns = $this->dcPoleColumns($group);
@@ -908,9 +900,11 @@ trait PowerPlantPVReportVisualPdf
 		foreach ($group['mppts'] as $inputs) {
 			foreach ($inputs as $row) {
 				$values = array($row->mppt_number, $row->pv_input_number, $row->string_ref);
-				$height = max(5.75, $pdf->getStringHeight($headers[2][0] - 4, $langs->convToOutputCharset((string) $row->string_ref)) + 1);
+				$height = 5.75;
 				if (!(int) $row->is_connected) {
 					$values[] = $langs->transnoentities('PowerPlantPVNotUsedByPowerPlant');
+					$height = max($height, $pdf->getStringHeight($headers[2][0] - 4, $langs->convToOutputCharset((string) $values[2])) + 1);
+					$height = max($height, $pdf->getStringHeight($width * 0.73 - 4, $langs->convToOutputCharset($values[3])) + 1);
 					$rows[] = array($height, $values, array(), false);
 					continue;
 				}
@@ -922,6 +916,12 @@ trait PowerPlantPVReportVisualPdf
 					$values[] = is_numeric($value) ? price($value) : '-';
 				}
 				$checks = array(4 => (int) $row->polarity_checked === 1, 5 => (string) $row->insulation_status === 'valid');
+				foreach ($values as $index => $value) {
+					if (empty($checks[$index])) {
+						$label = $langs->convToOutputCharset((string) $value);
+						$height = max($height, $pdf->getStringHeight($headers[$index][0] - 4, $label) + 1);
+					}
+				}
 				$rows[] = array($height, $values, $checks, true);
 				if (trim((string) $row->observation) !== '') {
 					$notes[] = $row->string_ref.' : '.$row->observation;

@@ -98,6 +98,26 @@ nativeMaintenanceCheck($guess->invoke($builder, (object) array('category_code'=>
 $measure = (new ReflectionClass('PowerPlantPVReportDcMeasure'))->newInstanceWithoutConstructor();
 $measure->stable_key = 'plant:line:1:dc:inverter:1:mppt:1:pvinput:1';
 $measure->inverter_label = 'Original'; $measure->mppt_number = 1; $measure->pv_input_number = 1; $measure->is_connected = 1;
+$legacyVoltage = clone $measure;
+$legacyVoltage->is_connected = 1;
+$legacyVoltage->insulation_positive_to_ground = '0.00000000';
+$legacyVoltage->insulation_negative_to_ground = '-18.25000000';
+$legacyVoltage->negative_to_ground_voltage = '17.00000000';
+nativeMaintenanceCheck($legacyVoltage->hasLegacyPoleVoltages(), 'A legacy zero can fill a missing voltage');
+$legacyVoltage->adoptLegacyPoleVoltages();
+nativeMaintenanceCheck($legacyVoltage->positive_to_ground_voltage === '0.00000000'
+	&& $legacyVoltage->insulation_positive_to_ground === null, 'Reclassification preserves zero and removes the incorrect historical unit');
+nativeMaintenanceCheck($legacyVoltage->negative_to_ground_voltage === '17.00000000'
+	&& $legacyVoltage->insulation_negative_to_ground === '-18.25000000', 'A separately recorded voltage and its historical resistance are preserved');
+$legacyVoltage->negative_to_ground_voltage = null;
+$legacyVoltage->is_connected = 0;
+$legacyVoltage->adoptLegacyPoleVoltages();
+nativeMaintenanceCheck($legacyVoltage->negative_to_ground_voltage === null, 'An unused input is ineligible');
+$legacyVoltage->is_connected = 1;
+$legacyVoltage->adoptLegacyPoleVoltages();
+$legacyVoltage->adoptLegacyPoleVoltages();
+nativeMaintenanceCheck($legacyVoltage->negative_to_ground_voltage === '-18.25000000'
+	&& $legacyVoltage->insulation_negative_to_ground === null && !$legacyVoltage->hasLegacyPoleVoltages(), 'Negative voltage is reclassified exactly once');
 $assign = new ReflectionMethod($builder, 'assignSubmittedValueToDcMeasure'); $assign->setAccessible(true);
 $assign->invoke($builder, $measure, array('inverter_label' => 'Falsified', 'mppt_number' => '99', 'pv_input_number' => '99', 'is_connected' => '0', 'open_circuit_voltage' => '0', 'polarity_checked' => '0'));
 nativeMaintenanceCheck($measure->inverter_label === 'Original' && $measure->mppt_number === 1 && $measure->pv_input_number === 1 && $measure->is_connected === 1, 'Posted hidden controls cannot alter generated equipment topology');

@@ -232,10 +232,10 @@ visualPdfCheck(strpos($client, '6T22B9036710') === false && strpos($client, 'SUN
 visualPdfCheck(strpos($client, 'Onduleur 1') !== false && strpos($client, 'Onduleur 4') !== false, 'Inverters without marker are numbered in the client layout');
 visualPdfCheck(strpos($client, 'SDO-RP-2022-003925') === false && strpos($client, '50088794738676') !== false, 'Short connection keeps the PRM and drops the request number');
 $materialTitle = $langs->transnoentities('PowerPlantPVVisualMaterialAnnex');
-$dcTitle = $langs->transnoentities('PowerPlantPVVisualDcAnnex');
-visualPdfCheck(strpos($default, $materialTitle) === false && strpos($default, $dcTitle) === false, 'Appendices are absent from the signed main report');
-visualPdfCheck(strpos($contents['default-annexe'], $materialTitle) !== false && strpos($contents['default-annexe'], $dcTitle) !== false, 'Both appendices are present in one companion PDF');
-visualPdfCheck(strpos($contents['client-annexe'], $materialTitle) === false && strpos($contents['client-annexe'], $dcTitle) !== false && strpos($contents['client-annexe'], '6T22B9036710') === false, 'Companion PDF respects the equipment privacy option');
+$dcTitle = $langs->transnoentities('PowerPlantPVVisualDcDetails');
+visualPdfCheck(strpos($default, $materialTitle) === false && strpos($default, $dcTitle) !== false, 'Detailed DC measurements are in the main report, with equipment kept separate');
+visualPdfCheck(strpos($contents['default-annexe'], $materialTitle) !== false && strpos($contents['default-annexe'], $dcTitle) === false, 'The companion PDF contains equipment without DC tables');
+visualPdfCheck(strpos($contents['client-annexe'], $materialTitle) === false && strpos($client, $dcTitle) !== false && strpos($contents['client-annexe'], '6T22B9036710') === false, 'Companion PDF respects the equipment privacy option');
 visualPdfCheck(strpos($contents['default-annexe'], $langs->transnoentities('PowerPlantPVVisualCustomerSignature')) === false, 'Signature cards stay out of the companion PDF');
 visualPdfCheck(strpos($default, $langs->transnoentities('PowerPlantPVVisualVigilance', 5)) !== false, 'Cover lists observations and explicit No answers: 2 observations, switch, two missing caps');
 visualPdfCheck(strpos($default, $langs->transnoentities('PowerPlantPVVisualDelta').' : +525 416') !== false || strpos($default, '+525') !== false, 'Readings show the change since N-1');
@@ -253,9 +253,9 @@ visualPdfCheck(strpos($flat($default), 'Nettoyage / lubrification des joints San
 visualPdfCheck(strpos($default, 'Bleu : tension') === false && strpos($default, 'Pointillés :') === false, 'The chart legend uses graphic markers instead of color names');
 visualPdfCheck(strpos($mixed, $langs->transnoentities('PowerPlantPVReportChartMissing')) !== false && strpos($mixed, $langs->transnoentities('PowerPlantPVVisualToCheck')) !== false, 'Incomplete insulation and an unconfirmed zero retain distinct messages');
 $mixedAnnex = $flat($contents['mixed-annexe']);
-visualPdfCheck(strpos($mixedAnnex, $langs->transnoentities('PowerPlantPVPositiveToGroundVoltage')) !== false
-	&& strpos($mixedAnnex, $langs->transnoentities('PowerPlantPVInsulationNegativeToGround')) !== false
-	&& strpos($mixedAnnex, '-18') !== false, 'Signed ground voltages and historic insulation use distinct columns');
+visualPdfCheck(strpos($mixed, $langs->transnoentities('PowerPlantPVPositiveToGroundVoltage')) !== false
+	&& strpos($mixed, $langs->transnoentities('PowerPlantPVInsulationNegativeToGround')) !== false
+	&& strpos($mixed, '-18') !== false, 'Signed ground voltages and historic insulation use distinct columns');
 visualPdfCheck(strpos($mixed, 'SDO-RP-2022-003925') === false && strpos($mixedAnnex, 'SDO-RP-2022-003925') === false && strpos($mixedAnnex, $materialTitle) !== false, 'Short connection is also applied when the material appendix is kept');
 visualPdfCheck(strpos($mixed, dol_strtoupper($langs->transnoentities('PowerPlantPVVisualProductionIndex'))) !== false, 'A valid zero production index takes precedence over the inverter sum');
 visualPdfCheck(strpos($default, 'Production annuelle historique') === false && strpos($default, 'Autoconsommation historique') === false, 'Historical annual and manual self-consumption entries stay out of the PDF');

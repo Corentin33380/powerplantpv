@@ -177,30 +177,46 @@ class PowerPlantPVReportPresentation
 	}
 
 	/**
-	 * Group by stable installed identity, never by a human-readable label.
+	 * Group installed inverters by line ID and legacy manual entries by their recorded inverter label.
 	 * @param array<int,object> $measures Frozen DC measures
 	 * @return array<string,array{identity:object,mppts:array<string,array<int,object>>}>
 	 */
 	public static function groupMeasures($measures)
 	{
-		usort($measures, static function ($a, $b) {
-			$plant = (int) $a->fk_powerplant <=> (int) $b->fk_powerplant;
-			$marker = strnatcasecmp((string) ($a->inverter_marker ?? ''), (string) ($b->inverter_marker ?? ''));
-			return $plant ?: $marker ?: ((int) $a->fk_inverter <=> (int) $b->fk_inverter)
-				?: ((int) $a->mppt_number <=> (int) $b->mppt_number)
-				?: ((int) $a->pv_input_number <=> (int) $b->pv_input_number)
-				?: ((int) $a->position <=> (int) $b->position);
-		});
 		$groups = array();
 		foreach ($measures as $row) {
 			$source = (int) $row->fk_inverter;
-			$key = (int) $row->fk_powerplant.':'.($source > 0 ? 'line:'.$source : 'manual:'.(string) $row->stable_key);
+			$label = trim((string) ($row->inverter_label ?? ''));
+			$key = (int) $row->fk_powerplant.':line:'.$source;
+			if ($source <= 0) {
+				$key = (int) $row->fk_powerplant.':manual:'.($label !== '' ? 'label:'.$label : 'row:'.(string) $row->stable_key);
+			}
 			$mppt = $row->mppt_number === null ? '' : (string) $row->mppt_number;
 			if (!isset($groups[$key])) {
 				$groups[$key] = array('identity' => $row, 'mppts' => array());
 			}
 			$groups[$key]['mppts'][$mppt][] = $row;
 		}
+		uasort($groups, static function ($a, $b) {
+			$left = $a['identity'];
+			$right = $b['identity'];
+			return ((int) $left->fk_powerplant <=> (int) $right->fk_powerplant)
+				?: strnatcasecmp(self::identity($left, false), self::identity($right, false))
+				?: ((int) $left->fk_inverter <=> (int) $right->fk_inverter);
+		});
+		foreach ($groups as &$group) {
+			uksort($group['mppts'], static function ($a, $b) {
+				return (($a === '') <=> ($b === '')) ?: ((int) $a <=> (int) $b);
+			});
+			foreach ($group['mppts'] as &$rows) {
+				usort($rows, static function ($a, $b) {
+					return ((int) $a->pv_input_number <=> (int) $b->pv_input_number)
+						?: ((int) $a->position <=> (int) $b->position);
+				});
+			}
+			unset($rows);
+		}
+		unset($group);
 		return $groups;
 	}
 

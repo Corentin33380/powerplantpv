@@ -473,9 +473,10 @@ class PowerPlantPVReportBuilder
 	 * @param	int						$reportId	Report id
 	 * @param	array<string,mixed>		$values		Submitted rows
 	 * @param	User					$user		User
+	 * @param	string	$legacyVoltageCard	Form key of the input whose legacy values were measured in volts
 	 * @return	int									>0 if OK, <0 on error
 	 */
-	public function saveDcMeasureValues($reportId, $values, User $user)
+	public function saveDcMeasureValues($reportId, $values, User $user, string $legacyVoltageCard = '')
 	{
 		if (empty($values) || !is_array($values)) {
 			return 1;
@@ -502,7 +503,7 @@ class PowerPlantPVReportBuilder
 		}
 
 		if ($this->db->begin() <= 0) { $this->setError($this->db->lasterror()); return -1; }
-		foreach ($values as $row) {
+		foreach ($values as $cardKey => $row) {
 			if (!is_array($row)) {
 				continue;
 			}
@@ -517,7 +518,17 @@ class PowerPlantPVReportBuilder
 			if (!$measure instanceof PowerPlantPVReportDcMeasure) {
 				continue;
 			}
+			$adoptLegacy = $legacyVoltageCard !== '' && $cardKey === $legacyVoltageCard
+				&& md5((string) $measure->stable_key) === $legacyVoltageCard;
+			$positiveVoltage = $measure->positive_to_ground_voltage;
+			$negativeVoltage = $measure->negative_to_ground_voltage;
 			$this->assignSubmittedValueToDcMeasure($measure, $row);
+			if ($adoptLegacy) {
+				// An empty submission on an outdated form must not erase an existing voltage.
+				$measure->positive_to_ground_voltage ??= $positiveVoltage;
+				$measure->negative_to_ground_voltage ??= $negativeVoltage;
+				$measure->adoptLegacyPoleVoltages();
+			}
 			if ($measure->update($user, 0) < 0) {
 				$this->copyErrorsFrom($measure);
 				$this->db->rollback();
@@ -2742,7 +2753,7 @@ class PowerPlantPVReportBuilder
 			return 1;
 		}
 
-		$rows = $this->fetchProductionReadingRowsForReport((int) $report->id);
+		$rows = $this->fetchProductionReadingRowsForReport($report);
 		if (!is_array($rows)) {
 			return -1;
 		}
@@ -2750,15 +2761,29 @@ class PowerPlantPVReportBuilder
 		$typeIdsByCode = $this->fetchIndexTypeIdsByCode();
 		$readingDate = $this->fetchReportReadingDate($report);
 
+		$readings = array();
 		foreach ($rows as $row) {
 			$typeCode = $this->productionReadingTypeCodeFromField((string) $row['field_code'], 0);
-			if ($typeCode === '') {
+			if ($typeCode === '' || PowerPlantPVReportPresentation::isRetiredProductionField($row['field_code'])
+				|| (int) $row['fk_powerplant'] <= 0) {
 				continue;
 			}
+			if ($row['legacy_unassigned'] && in_array($typeCode, array('INVERTER_PRODUCTION', 'INVERTER_INJECTION'), true)) {
+				continue;
+			}
+			$sourceKey = $row['fk_powerplant'].':'.$row['fk_report_equipment'].':'.$typeCode;
+			$value = $this->normalizeProductionReadingValue($row);
+			$priority = ($value === null ? 0 : 2) + (int) !$row['legacy_unassigned'];
+			if (!isset($readings[$sourceKey]) || $readings[$sourceKey]['priority'] < $priority) {
+				$readings[$sourceKey] = array('row' => $row, 'type' => $typeCode, 'value' => $value, 'priority' => $priority);
+			}
+		}
+
+		foreach ($readings as $candidate) {
+			$row = $candidate['row'];
+			$typeCode = $candidate['type'];
+			$value = $candidate['value'];
 			$fkPowerplant = (int) $row['fk_powerplant'];
-			if ($fkPowerplant <= 0) {
-				continue;
-			}
 			$meterRef = '';
 			$fkReportEquipment = (int) $row['fk_report_equipment'];
 			$reading = new PowerPlantPVIndexReading($this->db);
@@ -2768,7 +2793,6 @@ class PowerPlantPVReportBuilder
 				return -1;
 			}
 
-			$value = $this->normalizeProductionReadingValue($row);
 			if ($value === null) {
 				if ($existing > 0 && !empty($reading->active)) {
 					$reading->active = 0;
@@ -2830,17 +2854,35 @@ class PowerPlantPVReportBuilder
 	/**
 	 * Fetch production reading N fields from a report.
 	 *
-	 * @param	int	$reportId	Report id
+	 * @param	PowerPlantPVReport	$report	Report owning the fields
 	 * @return	array<int,array<string,mixed>>|int	Rows or <0 on error
 	 */
-	private function fetchProductionReadingRowsForReport($reportId)
+	private function fetchProductionReadingRowsForReport(PowerPlantPVReport $report)
 	{
-		$sql = "SELECT f.rowid, f.fk_report_section, f.fk_report_powerplant, f.fk_report_equipment, f.field_code, f.value_text, f.value_number, f.unit";
-		$sql .= ", s.fk_report_powerplant as section_report_powerplant, rp.fk_powerplant";
-		$sql .= " FROM ".$this->db->prefix()."powerplantpv_report_field as f";
-		$sql .= " INNER JOIN ".$this->db->prefix()."powerplantpv_report_section as s ON s.rowid = f.fk_report_section";
-		$sql .= " LEFT JOIN ".$this->db->prefix()."powerplantpv_report_powerplant as rp ON rp.rowid = COALESCE(NULLIF(f.fk_report_powerplant, 0), s.fk_report_powerplant)";
-		$sql .= " WHERE f.fk_report = ".((int) $reportId);
+		$prefix = $this->db->prefix();
+		$plantSnapshot = "COALESCE(NULLIF(f.fk_report_powerplant, 0), NULLIF(s.fk_report_powerplant, 0))";
+		$equipmentSnapshot = "COALESCE(NULLIF(f.fk_report_equipment, 0), NULLIF(s.fk_report_equipment, 0))";
+		$sql = "SELECT f.rowid, f.fk_report_section, f.field_code, f.value_text, f.value_number, f.unit";
+		$sql .= ", COALESCE(rp.rowid, singleplant.rowid) as fk_report_powerplant";
+		$sql .= ", COALESCE(rp.fk_powerplant, singleplant.fk_powerplant) as fk_powerplant";
+		$sql .= ", e.rowid as fk_report_equipment, (rp.rowid IS NULL) as legacy_unassigned";
+		$sql .= " FROM ".$prefix."powerplantpv_report_field as f";
+		$sql .= " INNER JOIN ".$prefix."powerplantpv_report_section as s ON s.rowid = f.fk_report_section";
+		$sql .= " AND s.entity = f.entity AND s.fk_report = f.fk_report";
+		$sql .= " LEFT JOIN ".$prefix."powerplantpv_report_equipment as e ON e.rowid = ".$equipmentSnapshot;
+		$sql .= " AND e.entity = f.entity AND e.fk_report = f.fk_report";
+		$sql .= " LEFT JOIN ".$prefix."powerplantpv_report_powerplant as rp";
+		$sql .= " ON rp.rowid = COALESCE(".$plantSnapshot.", e.fk_report_powerplant)";
+		$sql .= " AND rp.entity = f.entity AND rp.fk_report = f.fk_report";
+		// Legacy global meters belong to the only plant attached to the report, when that plant is unambiguous.
+		$sql .= " LEFT JOIN ".$prefix."powerplantpv_report_powerplant as singleplant";
+		$sql .= " ON singleplant.entity = f.entity AND singleplant.fk_report = f.fk_report";
+		$sql .= " AND ".$plantSnapshot." IS NULL AND ".$equipmentSnapshot." IS NULL";
+		$sql .= " AND NOT EXISTS (SELECT other.rowid FROM ".$prefix."powerplantpv_report_powerplant as other";
+		$sql .= " WHERE other.entity = singleplant.entity AND other.fk_report = singleplant.fk_report";
+		$sql .= " AND other.rowid <> singleplant.rowid)";
+		$sql .= " WHERE f.fk_report = ".((int) $report->id)." AND f.entity = ".((int) $report->entity);
+		$sql .= " AND (".$equipmentSnapshot." IS NULL OR (e.rowid IS NOT NULL AND e.fk_report_powerplant = rp.rowid))";
 		$sql .= " AND s.section_code = 'PRODUCTION_READING'";
 		$sql .= " ORDER BY s.position ASC, f.position ASC, f.rowid ASC";
 
@@ -2854,9 +2896,10 @@ class PowerPlantPVReportBuilder
 			$rows[] = array(
 				'rowid' => (int) $obj->rowid,
 				'fk_report_section' => (int) $obj->fk_report_section,
-				'fk_report_powerplant' => !empty($obj->fk_report_powerplant) ? (int) $obj->fk_report_powerplant : (int) $obj->section_report_powerplant,
+				'fk_report_powerplant' => (int) $obj->fk_report_powerplant,
 				'fk_report_equipment' => !empty($obj->fk_report_equipment) ? (int) $obj->fk_report_equipment : 0,
 				'fk_powerplant' => !empty($obj->fk_powerplant) ? (int) $obj->fk_powerplant : 0,
+				'legacy_unassigned' => (bool) $obj->legacy_unassigned,
 				'field_code' => (string) $obj->field_code,
 				'value_text' => isset($obj->value_text) ? (string) $obj->value_text : '',
 				'value_number' => isset($obj->value_number) ? $obj->value_number : null,

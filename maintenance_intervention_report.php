@@ -78,10 +78,15 @@ $fieldId = GETPOSTINT('field_id');
 $fileId = GETPOSTINT('file_id');
 $dcSectionId = GETPOSTINT('add_dc_section_id');
 $reportRestoreScrollY = GETPOSTINT('report_scroll_y');
+$legacyVoltageCards = GETPOST('adopt_legacy_voltage_submit', 'array', 2);
+$legacyVoltageCard = is_array($legacyVoltageCards) && count($legacyVoltageCards) === 1 ? (string) key($legacyVoltageCards) : '';
+if (!preg_match('/^[a-f0-9]{32}$/D', $legacyVoltageCard)) {
+	$legacyVoltageCard = '';
+}
 $manualServiceIds = powerplantpvSanitizeIdArray(GETPOST('manual_services', 'array:int'));
 
 if ($action === '') {
-	if (GETPOSTISSET('save_draft_submit')) {
+	if (GETPOSTISSET('save_draft_submit') || $legacyVoltageCard !== '') {
 		$action = 'save_draft';
 	} elseif (GETPOSTISSET('save_report_submit')) {
 		$action = 'save';
@@ -233,7 +238,7 @@ if (($action === 'save_draft' || $action === 'save') && $caneditreport) {
 		$dcValues = powerplantpvReportGetSubmittedDcMeasures();
 		$result = $builder->saveValues((int) $report->id, $values, $dateValues, $user, $persistStatus);
 		if ($result >= 0) {
-			$result = $builder->saveDcMeasureValues((int) $report->id, $dcValues, $user);
+			$result = $builder->saveDcMeasureValues((int) $report->id, $dcValues, $user, $legacyVoltageCard);
 		}
 		$interventionValidationResult = 0;
 		$requiredValidationFailed = 0;
@@ -256,11 +261,23 @@ if (($action === 'save_draft' || $action === 'save') && $caneditreport) {
 				$requiredValidationFailed = 1;
 				powerplantpvReportSetMissingRequiredFieldsError($missingRequiredFields);
 			} else {
-				$result = $builder->saveValues((int) $report->id, $values, $dateValues, $user, PowerPlantPVReport::STATUS_SAVED);
-				if ($result >= 0) {
-					$interventionValidationResult = powerplantpvReportValidateInterventionIfNeeded($intervention, $user);
-					if ($interventionValidationResult < 0) {
+				if ($db->begin() <= 0) {
+					$result = -1;
+					$builder->error = $db->lasterror();
+				} else {
+					$result = $builder->saveValues((int) $report->id, $values, $dateValues, $user, PowerPlantPVReport::STATUS_SAVED);
+					if ($result >= 0) {
+						$interventionValidationResult = powerplantpvReportValidateInterventionIfNeeded($intervention, $user);
+						if ($interventionValidationResult < 0) {
+							$result = -1;
+						}
+					}
+					if ($result >= 0 && $db->commit() <= 0) {
 						$result = -1;
+						$builder->error = $db->lasterror();
+					}
+					if ($result < 0) {
+						$db->rollback();
 					}
 				}
 			}
@@ -1062,6 +1079,8 @@ function powerplantpvReportRenderSections($sections, $editable, $form, $powerpla
 		$groups[$key]['sections'][] = $row;
 	}
 
+	$dcMeasuresAnchors = array();
+	$singlePlant = count($powerplants) === 1 ? powerplantpvReportPowerplantSourceId(reset($powerplants)) : 0;
 	foreach ($groups as $group) {
 		if (!empty($group['powerplant'])) {
 			print load_fiche_titre(dol_escape_htmltag(powerplantpvReportPowerplantLabel($group['powerplant'])), '', 'fa-industry');
@@ -1079,7 +1098,15 @@ function powerplantpvReportRenderSections($sections, $editable, $form, $powerpla
 			$label = powerplantpvReportLocalizedObjectLabel($section, 'section_label');
 			$identity = !empty($row['equipment']) ? (object) $row['equipment'] : null;
 			$identity = $identity && (string) $identity->equipment_type === 'INVERTER' ? $identity : null;
-			print '<details class="powerplantpv-report-section" data-state-key="section:'.hash('sha256', (string) ($section->fk_powerplant ?? '').':'.(string) $section->section_code.':'.(string) ($section->occurrence_key ?? '')).'" open>';
+			$anchor = '';
+			if ((string) $section->section_code === 'DC_ELECTRICAL_MEASURE') {
+				$plantId = empty($group['powerplant']) ? $singlePlant : powerplantpvReportPowerplantSourceId($group['powerplant']);
+				if ($plantId > 0 && !isset($dcMeasuresAnchors[$plantId])) {
+					$anchor = ' id="powerplantpv-dc-measures-'.$plantId.'"';
+					$dcMeasuresAnchors[$plantId] = true;
+				}
+			}
+			print '<details'.$anchor.' class="powerplantpv-report-section" data-state-key="section:'.hash('sha256', (string) ($section->fk_powerplant ?? '').':'.(string) $section->section_code.':'.(string) ($section->occurrence_key ?? '')).'" open>';
 			print '<summary class="liste_titre"><span>'.dol_escape_htmltag($label).'</span><span class="powerplantpv-report-progress opacitymedium" data-progress-label="'.dol_escape_htmltag($langs->transnoentities('PowerPlantPVReportProgress')).'"></span>';
 			if ($identity) {
 				print ' <span class="powerplantpv-identity-mobile">'.dol_escape_htmltag(PowerPlantPVReportPresentation::identity($identity, false)).'</span>';
@@ -1661,6 +1688,14 @@ function powerplantpvReportRenderDcMeasureCard($measure, $editable, $form)
 		return;
 	}
 
+	if ($measure instanceof PowerPlantPVReportDcMeasure && $measure->hasLegacyPoleVoltages()) {
+		print '<div class="powerplantpv-dc-observation">';
+		print $form->buttonsSaveCancel('', '', array(
+			'name' => 'adopt_legacy_voltage_submit['.$key.']',
+			'label_key' => 'PowerPlantPVAdoptLegacyVoltages',
+		), true);
+		print '<div class="opacitymedium">'.dol_escape_htmltag($langs->trans('PowerPlantPVAdoptLegacyVoltagesHelp')).'</div></div>';
+	}
 	print '<input type="hidden" name="'.$name.'[id]" value="'.((int) $measure->id).'">';
 	print '<input type="hidden" name="'.$name.'[stable_key]" value="'.dol_escape_htmltag((string) $measure->stable_key).'">';
 	if ($isManual) {
