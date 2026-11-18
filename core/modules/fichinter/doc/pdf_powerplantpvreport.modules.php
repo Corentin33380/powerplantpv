@@ -171,7 +171,7 @@ class pdf_powerplantpvreport extends ModelePDFFicheinter
 		if (getDolGlobalInt('MAIN_USE_FPDF')) {
 			$outputlangs->charset_output = 'ISO-8859-1';
 		}
-		$outputlangs->loadLangs(array('main', 'companies', 'interventions', 'products', 'dict', 'powerplantpv@powerplantpv'));
+		$outputlangs->loadLangs(array('main', 'companies', 'contracts', 'interventions', 'products', 'dict', 'powerplantpv@powerplantpv'));
 
 		if (empty($object->ref)) {
 			$this->error = $outputlangs->transnoentities('ErrorUnknown');
@@ -1148,25 +1148,77 @@ class pdf_powerplantpvreport extends ModelePDFFicheinter
 	 */
 	protected function renderSourceServices(&$pdf, $sourceServices, $outputlangs)
 	{
-
+		$width = $this->page_largeur - $this->marge_gauche - $this->marge_droite;
+		$innerWidth = $width - 8;
+		$gap = 1.6;
 		$labels = array();
 		foreach ($sourceServices as $sourceService) {
 			if (!is_object($sourceService)) { continue; }
 			$service = PowerPlantPVReportPdfDataset::localizedProperty($sourceService, 'maintenance_service_label', $outputlangs);
 			if ($service === '') { $service = trim((string) $sourceService->product_ref.' '.(string) $sourceService->product_label); }
-			$contract = trim((string) $sourceService->contract_ref);
-			$labels[] = ($contract !== '' ? $contract.' - ' : '').$service;
+			if ($service !== '') { $labels[] = $outputlangs->convToOutputCharset($service); }
 		}
 		if (!$labels) { return; }
-		$this->renderSectionTitle($pdf, $outputlangs->transnoentities('PowerPlantPVReportSourceServices'), 3);
-		$html = '<table width="100%" cellpadding="4" cellspacing="2">';
-		foreach (array_chunk($labels, 2) as $pair) {
-			$html .= '<tr nobr="true">';
-			foreach ($pair as $label) { $html .= '<td width="50%" style="background-color:#e9f3ff;">'.dol_escape_htmltag($label).'</td>'; }
-			$html .= '</tr>';
+
+		$pdf->SetFont('', '', 9);
+		$lines = array();
+		$line = array();
+		$usedWidth = 0;
+		$lineHeight = 0;
+		foreach (array_unique($labels) as $label) {
+			$textWidth = $pdf->GetStringWidth($label);
+			$chipWidth = min($innerWidth, $textWidth + 5.5);
+			$wrap = $textWidth + 5.5 > $innerWidth;
+			$chipHeight = $wrap ? max(5.8, $pdf->getStringHeight($chipWidth - 4, $label) + 1) : 5.8;
+			if ($line && $usedWidth + $chipWidth > $innerWidth) {
+				$lines[] = array($lineHeight, $line);
+				$line = array();
+				$usedWidth = 0;
+				$lineHeight = 0;
+			}
+			$line[] = array($label, $usedWidth, $chipWidth, $wrap);
+			$usedWidth += $chipWidth + $gap;
+			$lineHeight = max($lineHeight, $chipHeight);
 		}
-		$this->writeHtml($pdf, $html.'</table>');
-		$pdf->Ln(2);
+		$lines[] = array($lineHeight, $line);
+		$title = $outputlangs->convToOutputCharset($outputlangs->transnoentities('PowerPlantPVVisualServicesPerformed'));
+		for ($i = 0, $count = count($lines); $i < $count;) {
+			$this->ensureSpace($pdf, 13.1 + $lines[$i][0]);
+			$x = $this->marge_gauche;
+			$y = $pdf->GetY();
+			$height = 11.5;
+			$start = $i;
+			do {
+				$height += $lines[$i][0] + $gap;
+				$i++;
+			} while ($i < $count && $y + $height + $lines[$i][0] + $gap < $this->getContentBottomY());
+			$pdf->SetDrawColor(228, 232, 239);
+			$pdf->SetFillColor(255, 255, 255);
+			$pdf->RoundedRect($x, $y, $width, $height, 2.65, '1111', 'DF');
+			$pdf->SetTextColor(23, 40, 74);
+			$pdf->SetFont('', 'B', 11);
+			$pdf->SetXY($x + 4, $y + 3);
+			$pdf->Cell($innerWidth, 6, $title);
+			$pdf->SetFont('', '', 9);
+			$chipY = $y + 10;
+			for ($j = $start; $j < $i; $j++) {
+				[$lineHeight, $chips] = $lines[$j];
+				foreach ($chips as [$label, $offset, $chipWidth, $wrap]) {
+					$chipX = $x + 4 + $offset;
+					$pdf->SetFillColor(232, 243, 253);
+					$pdf->RoundedRect($chipX, $chipY, $chipWidth, $lineHeight, 1.4, '1111', 'F');
+					if ($wrap) {
+						$pdf->MultiCell($chipWidth - 4, $lineHeight, $label, 0, 'L', false, 1, $chipX + 2, $chipY,
+							true, 0, false, true, $lineHeight, 'M');
+					} else {
+						$pdf->SetXY($chipX, $chipY);
+						$pdf->Cell($chipWidth, $lineHeight, $label, 0, 0, 'C');
+					}
+				}
+				$chipY += $lineHeight + $gap;
+			}
+			$pdf->SetY($y + $height + 3);
+		}
 	}
 
 	/**
