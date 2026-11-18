@@ -1,6 +1,6 @@
 # CHANGELOG MODULE POWERPLANTPV FOR [DOLIBARR ERP CRM](https://www.dolibarr.org)
 
-## À venir
+## 1.8.0 — 2026-11-18
 
 - Photos des index de production et d’injection, généraux ou par onduleur, avec obligation configurable par entité et affichage dans le PDF de maintenance pour les photos saisies dans le rapport.
 - Mise à jour du schéma des relevés pour lier les nouveaux index manuels à un onduleur. Les anciens relevés non attribués restent consultables.
@@ -9,8 +9,6 @@
 - En-tête du rapport compact, barre de progression continue et légende de la photo avec référence, nom et ville de la centrale.
 - Signature nominative du responsable hiérarchique direct sur les rapports finalisés, activable par entité et protégée par une permission dédiée.
 - Trois cadres de signature de même largeur sur une seule ligne, avec le tracé, le nom et la date de la signature en ligne dans le cadre client. Actualiser le module par l’action native de Dolibarr pour enregistrer le hook de signature.
-
-## 1.8.0 — 2026-11-18
 
 - Onduleurs installés : repère et identification individuels, repris dans les rapports, avec édition native et masques de numérotation par entité ; les chaînes sont numérotées par onduleur.
 - Configuration MPPT / chaînes : ajout et modification dans des modales natives, sélection des modules de la composition, puissance automatique de chaîne et suivi des modules raccordés / restants.

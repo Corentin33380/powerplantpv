@@ -88,6 +88,7 @@ $cleaning = (new ReflectionClass('PowerPlantPVReportField'))->newInstanceWithout
 $cleaning->field_type = 'yesno';
 $cleaning->field_code = 'BOX_JOINTS_HINGES_CLEANING';
 $assignField = new ReflectionMethod($builder, 'assignSubmittedValueToField');
+$assignField->setAccessible(true);
 nativeMaintenanceCheck($assignField->invoke($builder, $cleaning, 'not_applicable') && $cleaning->value_text === 'not_applicable', 'Save retains the third cabinet cleaning answer');
 nativeMaintenanceCheck(!$assignField->invoke($builder, $cleaning, null) && !$assignField->invoke($builder, $cleaning, array('0')) && $cleaning->value_text === 'not_applicable', 'Missing or invalid input preserves the existing third answer');
 nativeMaintenanceCheck($assignField->invoke($builder, $cleaning, '0') && $cleaning->value_text === '0', 'Explicit No remains distinct from not applicable');

@@ -33,7 +33,7 @@ Desktop section titles include marker, identification and serial; mobile titles 
 Panel serials are available in a separate CSV attachment generated from the report snapshot.
 See [the implementation and validation notes](docs/release/v1.8-maintenance-development.md)
 for activation, historic reports, naming existing equipment and validation limits.
-The descriptor identifies version 1.8.0, currently under acceptance testing. No stable 1.8.0 release has been published.
+Version 1.8.0 includes the maintenance report and equipment improvements listed in [ChangeLog.md](ChangeLog.md#180--2026-11-18).
 
 ## Translations
 
