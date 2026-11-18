@@ -50,9 +50,28 @@ class PowerPlantPVReportPresentation
 			|| $previousDates[0] !== $previousDates[1] || $previousDates[0] >= $endDate) {
 			return null;
 		}
-		$production = $values['PRODUCTION_INDEX'] - $values['PRODUCTION_INDEX_N_MINUS_1'];
-		$injection = $values['INJECTION_INDEX'] - $values['INJECTION_INDEX_N_MINUS_1'];
-		return $injection >= 0 && $production >= $injection ? $production - $injection : null;
+		$result = self::calculateSelfConsumption($values['PRODUCTION_INDEX_N_MINUS_1'], $values['PRODUCTION_INDEX'], $values['INJECTION_INDEX_N_MINUS_1'], $values['INJECTION_INDEX']);
+		return $result['energy'] ?? null;
+	}
+
+	/**
+	 * Calculate self-consumption from cumulative kWh readings covering the same period.
+	 * @return array{energy:float,rate:float|null}|null Rate is undefined when production is zero.
+	 */
+	public static function calculateSelfConsumption(float $previousProduction, float $currentProduction, float $previousInjection, float $currentInjection): ?array
+	{
+		foreach (array($previousProduction, $currentProduction, $previousInjection, $currentInjection) as $index) {
+			if (!is_finite($index) || $index < 0) {
+				return null;
+			}
+		}
+		$production = $currentProduction - $previousProduction;
+		$injection = $currentInjection - $previousInjection;
+		if ($injection < 0 || $production < $injection) {
+			return null;
+		}
+		$energy = $production - $injection;
+		return array('energy' => $energy, 'rate' => $production > 0 ? ($energy / $production) * 100 : null);
 	}
 
 	/**

@@ -44,6 +44,9 @@ $meterFields = array(
 	(object) array('field_code' => 'INJECTION_INDEX_N_MINUS_1', 'value_number' => 800, 'unit' => 'kWh', 'value_date' => $previousDate),
 );
 checkMaintenance(PowerPlantPVReportPresentation::selfConsumptionBetweenReadings($meterFields, $endDate) === 400.0, 'Self-consumption is calculated over the actual period without annualization');
+checkMaintenance(PowerPlantPVReportPresentation::calculateSelfConsumption(500, 1500, 100, 500) === array('energy' => 600.0, 'rate' => 60.0), 'Self-consumption rate uses the energy produced over the period');
+checkMaintenance(PowerPlantPVReportPresentation::calculateSelfConsumption(500, 500, 100, 100) === array('energy' => 0.0, 'rate' => null), 'Zero production has no rate');
+checkMaintenance(PowerPlantPVReportPresentation::calculateSelfConsumption(500, 600, 100, 201) === null, 'Injected energy cannot exceed produced energy');
 $meterFields[2]->value_number = 1700;
 checkMaintenance(PowerPlantPVReportPresentation::selfConsumptionBetweenReadings($meterFields, $endDate) === 0.0, 'A valid zero self-consumption is retained');
 $meterFields[2]->value_number = 700;

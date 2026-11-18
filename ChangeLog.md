@@ -1,6 +1,6 @@
 # CHANGELOG MODULE POWERPLANTPV FOR [DOLIBARR ERP CRM](https://www.dolibarr.org)
 
-## 1.8.0 — en préparation
+## 1.8.0 — 2026-11-18
 
 - Onduleurs installés : repère et identification individuels, repris dans les rapports, avec édition native et masques de numérotation par entité ; les chaînes sont numérotées par onduleur.
 - Configuration MPPT / chaînes : ajout et modification dans des modales natives, sélection des modules de la composition, puissance automatique de chaîne et suivi des modules raccordés / restants.
@@ -10,6 +10,7 @@
 - PDF : synthèse illustrée, cartes de contrôle avec états, relevés et graphiques DC par onduleur ; illustration JPEG/PNG choisie dans les pièces jointes de la centrale. Matériel et lien de traçabilité placés en annexe, sans colonne de séries. Le nombre de centrales, onduleurs, chaînes et pages reste dynamique.
 - PDF généraliste : la synthèse liste aussi les réponses « Non » ; encadré vert lorsque tout est conforme ; production des onduleurs en indicateur à défaut d’index. Relevés avec écart depuis N−1, sans carte vide, observation courte imprimée. Encadré « Aucune observation » sous chaque section, paragraphe « Conclusion : » mis en valeur. Graphique DC : isolement à 0 affiché séparément du statut de contrôle, note des mesures absentes seulement si une mesure manque. Bloc final de signatures (technicien, client et service technique en option) aligné sur la zone de la signature en ligne native.
 - Relevés : index cumulés par onduleur, retrait de la production annuelle et de l’autoconsommation saisies manuellement des rapports. Autoconsommation calculée entre deux relevés comparables ; les anciennes valeurs restent stockées.
+- Centrale, onglet Production / Consommation : saisie réservée aux index cumulés. L’autoconsommation s’affiche en kWh et en pourcentage de l’énergie produite lorsque les index de production et d’injection couvrent la même période. Les anciennes valeurs restent consultables dans l’historique.
 - Réglages PDF par entité : masquer le matériel (annexe, références et séries des onduleurs), raccordement réduit (PRM, type, puissance) et cadre « Signature du service technique ». Désactivés par défaut : le rendu actuel reste inchangé.
 - Saisie DC : retrait de l’ajout manuel et des lignes manuelles vides ; option de masquage des MPPT / entrées non exploités uniquement dans la saisie. Le PDF les conserve avec leur mention explicite ; les anciennes mesures manuelles renseignées sont préservées.
 - Mobile : enregistrement par pictogramme, réduction et passage à la section suivante, conservation des sections ouvertes et du défilement après rechargement.
