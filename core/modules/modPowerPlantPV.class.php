@@ -144,6 +144,7 @@ class modPowerPlantPV extends DolibarrModules
 					'contractcard',
 					'interventioncard',
 					'fichintercard',
+					'ajaxonlinesign',
 					'ticketcard',
 					'publicnewticketcard',
 					'category',

@@ -8,6 +8,7 @@
 - En-têtes de l’annexe DC alignés sur les cellules, couleur de pied de page native et noms traduits des modèles PDF.
 - En-tête du rapport compact, barre de progression continue et légende de la photo avec référence, nom et ville de la centrale.
 - Signature nominative du responsable hiérarchique direct sur les rapports finalisés, activable par entité et protégée par une permission dédiée.
+- Trois cadres de signature de même largeur sur une seule ligne, avec la signature en ligne dans le cadre client. Actualiser le module par l’action native de Dolibarr pour enregistrer le hook de signature.
 
 ## 1.8.0 — 2026-11-18
 

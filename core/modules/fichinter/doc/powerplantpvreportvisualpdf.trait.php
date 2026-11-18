@@ -1018,21 +1018,17 @@ trait PowerPlantPVReportVisualPdf
 		}
 		$cards[] = array($langs->transnoentities('PowerPlantPVVisualCustomerSignature'), $customerName, $customerImage !== '' ? $date : '', $customerImage);
 
-		// Native online signing stamps the last page at 53% of its width and 60 mm from the bottom.
-		// Keep the client in the lower-right half even when a technical signature adds a third card.
 		$gap = 4;
 		$height = 58;
-		$twoRows = count($cards) === 3;
-		$blockHeight = $twoRows ? 2 * $height + $gap : $height;
-		$top = $this->getContentBottomY() - $blockHeight - 2;
-		$this->ensureSpace($pdf, $blockHeight + 16);
+		$columns = count($cards);
+		$top = $this->getContentBottomY() - $height - 2;
+		$this->ensureSpace($pdf, $height + 16);
 		$pdf->SetY(max($pdf->GetY(), $top - 11));
 		$this->renderSectionTitle($pdf, $langs->transnoentities('PowerPlantPVReportSignatures'), 2);
-		$top = max($pdf->GetY(), $top);
-		$width = ($this->page_largeur - $this->marge_droite - $this->marge_gauche - $gap) / 2;
+		$y = max($pdf->GetY(), $top);
+		$width = ($this->page_largeur - $this->marge_droite - $this->marge_gauche - ($columns - 1) * $gap) / $columns;
 		foreach ($cards as $i => $card) {
-			$x = $this->marge_gauche + ($i === 0 ? 0 : $width + $gap);
-			$y = $top + ($i === 2 ? $height + $gap : 0);
+			$x = $this->marge_gauche + $i * ($width + $gap);
 			$pdf->SetDrawColor(218, 228, 240); $pdf->SetFillColor(255, 255, 255); $pdf->RoundedRect($x, $y, $width, $height, 2.65, '1111', 'DF');
 			$pdf->SetTextColor(24, 47, 79); $pdf->SetFont('', 'B', 9); $pdf->SetXY($x + 4, $y + 3); $pdf->MultiCell($width - 8, 4, $langs->convToOutputCharset($card[0]), 0, 'L');
 			foreach (array(array('Name', $card[1], 12), array('Date', $card[2], 17)) as $line) {
@@ -1043,6 +1039,16 @@ trait PowerPlantPVReportVisualPdf
 			$bx = $x + 4; $by = $y + 24; $bw = $width - 8;
 			$bh = $height - ($i === count($cards) - 1 ? 25 : 28);
 			$pdf->SetDrawColor(207, 213, 223); $pdf->SetLineStyle(array('width' => 0.2, 'dash' => '1,1')); $pdf->RoundedRect($bx, $by, $bw, $bh, 1.5, '1111', 'D'); $pdf->SetLineStyle(array('width' => 0.2, 'dash' => 0));
+			if ($columns === 3 && $i === $columns - 1) {
+				// Record the placement on the actual PDF being signed, even if the settings later change.
+				$pdf->setExtraXMPRDF(sprintf(
+					'<rdf:Description rdf:about="" xmlns:ppv="urn:powerplantpv:report" ppv:clientSignature="%d %.3F %.3F %.3F"/>',
+					$pdf->getPage(),
+					$bx + 2,
+					$by + 2,
+					$bw - 4
+				));
+			}
 			$size = $card[3] !== '' ? @getimagesize($card[3]) : false;
 			if (!empty($size[0]) && !empty($size[1])) { $ratio = min(($bw - 6) / $size[0], ($bh - 4) / $size[1]); $pdf->Image($card[3], $bx + ($bw - $size[0] * $ratio) / 2, $by + ($bh - $size[1] * $ratio) / 2, $size[0] * $ratio, $size[1] * $ratio); }
 			if (!empty($card[4])) {

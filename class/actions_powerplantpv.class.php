@@ -378,6 +378,119 @@ class ActionsPowerplantpv
 	}
 
 	/**
+	 * Stamp the native client signature at the coordinates stored in the source report PDF.
+	 * The AJAX endpoint owns authentication, signature image creation and the final status transition.
+	 *
+	 * @param array<string,mixed> $parameters Native source and destination PDF paths
+	 * @param CommonObject|null $object Document owner
+	 * @param string $action Native action
+	 * @param HookManager $hookmanager Native hook manager
+	 * @return int 1 when the signed copy has been indexed, otherwise 0 for the native stamp
+	 */
+	public function AddSignature($parameters, &$object, &$action, $hookmanager)
+	{
+		global $conf, $langs, $online_sign_name;
+
+		if ($action !== 'importSignature' || !$object instanceof Fichinter || !isModEnabled('powerplantpv')
+			|| !in_array('ajaxonlinesign', $this->getContexts($parameters, $hookmanager), true)
+			|| !function_exists('dolPrintSignatureImage')) {
+			return 0;
+		}
+
+		$entity = (int) $object->entity;
+		$ownerRoot = $conf->ficheinter->multidir_output[$entity] ?? '';
+		if ($entity <= 0 || $entity !== (int) $conf->entity || $ownerRoot === '') {
+			return 0;
+		}
+
+		$ref = dol_sanitizeFileName($object->ref);
+		$directory = realpath($ownerRoot.'/'.$ref);
+		$source = $parameters['sourcefile'] ?? '';
+		$target = $parameters['newpdffilename'] ?? '';
+		if ($directory === false || dirname($directory) !== realpath($ownerRoot)
+			|| !is_string($source) || !is_string($target) || realpath($source) !== $directory.DIRECTORY_SEPARATOR.$ref.'.pdf'
+			|| is_link($source) || realpath(dirname($target)) !== $directory
+			|| !preg_match('/^'.preg_quote($ref, '/').'_signed-([0-9]{14})\.pdf$/D', basename($target), $stamp)) {
+			return 0;
+		}
+
+		$pdf = pdf_getInstance();
+		if (!$pdf instanceof TCPDI) {
+			return 0;
+		}
+		$pages = $pdf->setSourceFile($source);
+		$parser = $pdf->current_parser;
+		$catalog = $parser->getObjectVal($parser->getParsedData()[0]['trailer'][1]['/Root']);
+		if (!isset($catalog[1][1]['/Metadata'])) {
+			return 0;
+		}
+		$metadata = $parser->getObjectVal($catalog[1][1]['/Metadata']);
+		$xmp = $metadata[2][1] ?? '';
+		if (!is_string($xmp) || !preg_match(
+			'/xmlns:ppv="urn:powerplantpv:report" ppv:clientSignature="([0-9]+) ([0-9.]+) ([0-9.]+) ([0-9.]+)"/',
+			$xmp,
+			$placement
+		)) {
+			return 0;
+		}
+
+		$image = $directory.DIRECTORY_SEPARATOR.'signatures'.DIRECTORY_SEPARATOR.$stamp[1].'_signature.png';
+		$x = (float) $placement[2];
+		$y = (float) $placement[3];
+		$width = (float) $placement[4];
+		if ((int) $placement[1] !== $pages || $x < 0 || $y < 0 || $width <= 0
+			|| realpath($image) !== $image || (getimagesize($image)[2] ?? 0) !== IMAGETYPE_PNG
+			|| is_link($target) || file_exists($target)) {
+			// In this core hook, a negative return still advances the intervention's signed status.
+			throw new RuntimeException('Unable to place the client signature in the maintenance report.');
+		}
+
+		$pdf->setPrintHeader(false);
+		$pdf->setPrintFooter(false);
+		$pdf->SetAutoPageBreak(false);
+		$pdf->SetFont(pdf_getPDFFont($langs));
+		$pdf->SetCompression(!getDolGlobalString('MAIN_DISABLE_PDF_COMPRESSION'));
+		for ($page = 1; $page <= $pages; $page++) {
+			$template = $pdf->importPage($page);
+			$size = $pdf->getTemplateSize($template);
+			$pdf->AddPage($size['h'] > $size['w'] ? 'P' : 'L', array($size['w'], $size['h']));
+			$pdf->useTemplate($template);
+		}
+		if ($x + $width > $pdf->getPageWidth() || $y + $width / 4 + 12 > $pdf->getPageHeight()) {
+			throw new RuntimeException('Invalid client signature placement in the maintenance report.');
+		}
+
+		dolPrintSignatureImage($pdf, $langs, array(
+			'online_sign_name' => dol_trunc((string) $online_sign_name, 60, 'right', 'UTF-8', 1),
+			'pathtoimage' => $image,
+			'xforimgstart' => $x,
+			'yforimgstart' => $y,
+			'wforimg' => $width,
+		));
+		$temporaryFile = tempnam($directory, '.ppv-signed-');
+		if ($temporaryFile === false) {
+			throw new RuntimeException('Unable to stage the signed maintenance report.');
+		}
+		try {
+			$pdf->Output($temporaryFile, 'F');
+			clearstatcache(true, $temporaryFile);
+			if (!filesize($temporaryFile) || !rename($temporaryFile, $target)) {
+				throw new RuntimeException('Unable to publish the signed maintenance report.');
+			}
+			if ($object->indexFile($target, 1) < 0) {
+				dol_delete_file($target, 1, 1, 1, null, false, 0);
+				throw new RuntimeException('Unable to index the signed maintenance report.');
+			}
+		} finally {
+			if (is_file($temporaryFile)) {
+				dol_delete_file($temporaryFile, 1, 1, 1, null, false, 0);
+			}
+		}
+
+		return 1;
+	}
+
+	/**
 	 * Handle PowerPlantPV quick links on native cards.
 	 *
 	 * @param	array<string,mixed>	$parameters		Hook parameters
