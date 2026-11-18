@@ -220,7 +220,7 @@ class pdf_powerplantpvreport extends ModelePDFFicheinter
 		$pdf = pdf_getInstance($this->format);
 		'@phan-var-force TCPDI|TCPDF $pdf';
 		$defaultFontSize = pdf_getPDFFontSize($outputlangs);
-		$this->defaultFontSize = max(8, $defaultFontSize - 1);
+		$this->defaultFontSize = max(10.5, $defaultFontSize - 1);
 		if (class_exists('TCPDF')) {
 			$pdf->setPrintHeader(false);
 			$pdf->setPrintFooter(false);
@@ -328,20 +328,32 @@ class pdf_powerplantpvreport extends ModelePDFFicheinter
 		}
 
 		$title = $this->visualReportTitle !== '' ? $this->visualReportTitle : $outputlangs->transnoentities('PowerPlantPVReportPdfTitle');
-		$pdf->SetTextColor(0, 0, 60);
-		$pdf->SetFont('', 'B', $this->defaultFontSize + 5);
+		$pdf->SetTextColor(23, 40, 74);
+		$pdf->SetFont('', 'B', 19);
 		$pdf->SetXY($this->marge_gauche + 55, $posy);
 		$pdf->MultiCell(0, 7, $outputlangs->convToOutputCharset($title), 0, 'R');
-		$pdf->SetFont('', '', $this->defaultFontSize);
-		$pdf->SetX($this->marge_gauche + 55);
-		$pdf->MultiCell(0, 5, $outputlangs->convToOutputCharset($outputlangs->transnoentities('Intervention').' '.$object->ref), 0, 'R');
+		$pdf->SetFont('', '', 10);
 		$dateIntervention = $this->getInterventionDate($object);
 		if (!empty($dateIntervention)) {
+			$pdf->SetTextColor(102, 112, 133);
 			$pdf->SetX($this->marge_gauche + 55);
 			$pdf->MultiCell(0, 5, $outputlangs->convToOutputCharset(dol_print_date($dateIntervention, 'day', 'tzuser', $outputlangs)), 0, 'R');
 		}
-
-		$pdf->SetY(max(34, $logoBottom + 4, $pdf->GetY() + 4));
+		$ref = $outputlangs->convToOutputCharset($outputlangs->transnoentities('Intervention').' '.$object->ref);
+		$pdf->SetFont('', 'B', 10);
+		$right = $this->page_largeur - $this->marge_droite;
+		$badgeWidth = min($right - $this->marge_gauche, $pdf->GetStringWidth($ref) + 7);
+		$badgeY = $pdf->GetY() + 1;
+		$pdf->SetFillColor(23, 40, 74);
+		$pdf->RoundedRect($right - $badgeWidth, $badgeY, $badgeWidth, 6, 1.6, '1111', 'F');
+		$pdf->SetTextColor(255, 255, 255);
+		$pdf->SetXY($right - $badgeWidth, $badgeY);
+		$pdf->Cell($badgeWidth, 6, $ref, 0, 0, 'C', false, '', 1);
+		$ruleY = max($logoBottom, $badgeY + 6) + 2.5;
+		$pdf->SetFillColor(22, 136, 224);
+		$pdf->Rect($this->marge_gauche, $ruleY, $right - $this->marge_gauche, 0.8, 'F');
+		$pdf->SetY(max(34, $ruleY + 4));
+		$pdf->SetTextColor(29, 36, 51);
 		$this->visualHeaders[(int) $pdf->getPage()] = true;
 		$pdf->SetFont('', '', $this->defaultFontSize);
 	}
@@ -525,7 +537,7 @@ class pdf_powerplantpvreport extends ModelePDFFicheinter
 			return;
 		}
 		$html = '<table border="0" cellpadding="4" cellspacing="0" width="100%">';
-		$html .= '<tr style="background-color:#e9f3ff;font-weight:bold;">';
+		$html .= '<thead><tr style="background-color:#e9f3ff;font-weight:bold;">';
 		foreach ($columns as $column) {
 			if (empty($column['key'])) {
 				continue;
@@ -533,23 +545,26 @@ class pdf_powerplantpvreport extends ModelePDFFicheinter
 			$labelKey = !empty($column['label_key']) ? (string) $column['label_key'] : (string) $column['key'];
 			$html .= '<td>'.dol_escape_htmltag($outputlangs->transnoentities($labelKey)).'</td>';
 		}
-		$html .= '</tr>';
+		$html .= '</tr></thead><tbody>';
 		foreach ($rows as $row) {
 			if (!is_array($row)) {
 				continue;
 			}
-			$html .= '<tr>';
+			$html .= '<tr nobr="true">';
 			foreach ($columns as $column) {
 				if (empty($column['key'])) {
 					continue;
 				}
 				$key = (string) $column['key'];
 				$value = isset($row[$key]) ? (string) $row[$key] : '';
+				if ($key === 'power') {
+					$value = $this->visualMaterialPower($value, $outputlangs);
+				}
 				$html .= '<td>'.dol_htmlentitiesbr($value).'</td>';
 			}
 			$html .= '</tr>';
 		}
-		$html .= '</table>';
+		$html .= '</tbody></table>';
 		$this->writeHtml($pdf, $html);
 		$pdf->Ln(2);
 	}
@@ -1117,14 +1132,19 @@ class pdf_powerplantpvreport extends ModelePDFFicheinter
 		if ($title === '') {
 			return;
 		}
-		$this->ensureSpace($pdf, 10);
-		$size = $level === 1 ? $this->defaultFontSize + 3 : ($level === 2 ? $this->defaultFontSize + 1 : $this->defaultFontSize);
-		$pdf->SetTextColor($level === 1 ? 0 : 45, $level === 1 ? 0 : 45, $level === 1 ? 80 : 45);
+		$size = $level === 1 ? 19 : ($level === 2 ? 13 : 11);
 		$pdf->SetFont('', 'B', $size);
-		$pdf->SetFillColor(0, 142, 220);
-		$pdf->Rect($this->marge_gauche, $pdf->GetY() + 1, 1.2, 4, 'F');
-		$pdf->SetX($this->marge_gauche + 3);
-		$pdf->MultiCell(0, 6, $this->currentOutputLangs->convToOutputCharset($title), 0, 'L');
+		$width = $this->page_largeur - $this->marge_gauche - $this->marge_droite - 4;
+		$title = $this->currentOutputLangs->convToOutputCharset($title);
+		$height = max(6, $pdf->getStringHeight($width, $title));
+		$this->ensureSpace($pdf, $height + ($level <= 2 ? 24 : 15));
+		$pdf->SetFont('', 'B', $size);
+		$pdf->SetTextColor(23, 40, 74);
+		$y = $pdf->GetY();
+		$pdf->SetFillColor(22, 136, 224);
+		$pdf->RoundedRect($this->marge_gauche, $y + 0.6, 1.6, 4.8, 0.8, '1111', 'F');
+		$pdf->MultiCell($width, $height, $title, 0, 'L', false, 1, $this->marge_gauche + 4, $y);
+		$pdf->Ln(1.5);
 		$pdf->SetFont('', '', $this->defaultFontSize);
 		$pdf->SetTextColor(0, 0, 0);
 	}

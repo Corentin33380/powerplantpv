@@ -148,6 +148,18 @@ $render = new ReflectionMethod($pdfModel, 'renderPowerplantSummaryTable'); $rend
 $render->invokeArgs($pdfModel, array(&$capture, array(array('key'=>'qty','label_key'=>'Qty'), array('key'=>'serial','label_key'=>'SerialNumber')), $rows, $langs));
 nativeMaintenanceCheck(strpos($capture->html, '<table') !== false && strpos($capture->html, 'href=') === false && strpos($capture->html, 'SerialNumber') === false && strpos($capture->html, 'SECRET-SERIES') === false, 'PDF material table omits the serial column and its link reserved for the appendix');
 $capture->html = '';
+$render->invokeArgs($pdfModel, array(&$capture, array(array('key'=>'power','label_key'=>'PowerPlantInstalledPower')), array(
+	array('power' => 'AC nom. 100 000,00 / AC max. 110 000,00 W'),
+	array('power' => 'AC nom. 900.00 / AC max. 1,250.00 W'),
+	array('power' => '450 W'),
+	array('power' => '1 000 W'),
+), $langs));
+$powerText = strip_tags($capture->html);
+nativeMaintenanceCheck(strpos($powerText, '100 kW / AC max. 110 kW') !== false
+	&& strpos($powerText, '900 W / AC max. 1,25 kW') !== false
+	&& strpos($powerText, '450 W') !== false
+	&& strpos($powerText, '1 000 W') !== false, 'PDF material powers scale per value across snapshot locales while preserving 1000 W and lower');
+$capture->html = '';
 $render = new ReflectionMethod($pdfModel, 'renderEquipmentSummary'); $render->setAccessible(true);
 $panel = (object) array('equipment_type'=>'PANEL','equipment_brand'=>'Brand','equipment_model'=>'450 W','product_label'=>'Panel','product_ref'=>'PV-450','equipment_ref'=>'PV-450','serial_number'=>'SECRET-PANEL-SERIAL','equipment_position'=>'');
 $render->invokeArgs($pdfModel, array(&$capture, $panel, $langs));
