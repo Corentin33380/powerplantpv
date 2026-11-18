@@ -856,6 +856,8 @@ CREATE TABLE IF NOT EXISTS llx_powerplantpv_report_dc_measure(
 	insulation_status varchar(32),
 	insulation_positive_to_ground double(24,8),
 	insulation_negative_to_ground double(24,8),
+	positive_to_ground_voltage double(24,8),
+	negative_to_ground_voltage double(24,8),
 	observation text,
 	stable_key varchar(255) NOT NULL,
 	position integer DEFAULT 0 NOT NULL,
@@ -865,6 +867,8 @@ CREATE TABLE IF NOT EXISTS llx_powerplantpv_report_dc_measure(
 	fk_user_modif integer,
 	import_key varchar(14)
 ) ENGINE=innodb;
+ALTER TABLE llx_powerplantpv_report_dc_measure ADD COLUMN IF NOT EXISTS positive_to_ground_voltage double(24,8);
+ALTER TABLE llx_powerplantpv_report_dc_measure ADD COLUMN IF NOT EXISTS negative_to_ground_voltage double(24,8);
 ALTER TABLE llx_powerplantpv_report_dc_measure ADD UNIQUE INDEX IF NOT EXISTS uk_powerplantpv_report_dc_measure_stable (entity, fk_report, stable_key);
 ALTER TABLE llx_powerplantpv_report_dc_measure ADD INDEX IF NOT EXISTS idx_powerplantpv_report_dc_measure_entity (entity);
 ALTER TABLE llx_powerplantpv_report_dc_measure ADD INDEX IF NOT EXISTS idx_powerplantpv_report_dc_measure_report (fk_report);

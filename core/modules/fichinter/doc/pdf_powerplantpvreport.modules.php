@@ -123,6 +123,7 @@ class pdf_powerplantpvreport extends ModelePDFFicheinter
 
 		$this->db = $db;
 		$langs->loadLangs(array('main', 'companies', 'interventions', 'powerplantpv@powerplantpv'));
+		$this->name = $langs->trans('PowerPlantPVInterventionReportPdfName');
 		$this->description = $langs->trans('PowerPlantPVInterventionReportPdfModel');
 
 		$formatarray = pdf_getFormat();
@@ -709,12 +710,17 @@ class pdf_powerplantpvreport extends ModelePDFFicheinter
 		foreach (PowerPlantPVReportPresentation::groupMeasures($measures) as $group) {
 			$this->ensureSpace($pdf, 45);
 			$inverter = PowerPlantPVReportPresentation::identity($group['identity'], true, $outputlangs->transnoentities('PowerPlantPVManualDcLine'));
+			$poleColumns = $this->dcPoleColumns($group);
 			$html = '<table border="1" cellpadding="3" cellspacing="0" width="100%"><thead>';
-			$html .= '<tr style="background-color:#e9f3ff;font-weight:bold;"><td colspan="9">'.dol_escape_htmltag($inverter).'</td></tr>';
+			$html .= '<tr style="background-color:#e9f3ff;font-weight:bold;"><td colspan="'.(7 + count($poleColumns)).'">'.dol_escape_htmltag($inverter).'</td></tr>';
 			$html .= '<tr style="background-color:#e9f3ff;font-weight:bold;">';
-			foreach (array('PowerPlantPVMPPT', 'PowerPlantPVPVInput', 'PowerPlantPVStringRef', 'PowerPlantPVOpenCircuitVoltage', 'PowerPlantPVPolarityChecked', 'PowerPlantPVInsulationStatus', 'PowerPlantPVInsulationPositiveToGround', 'PowerPlantPVInsulationNegativeToGround', 'Observation') as $key) {
+			foreach (array('PowerPlantPVMPPT', 'PowerPlantPVPVInput', 'PowerPlantPVStringRef', 'PowerPlantPVOpenCircuitVoltage', 'PowerPlantPVPolarityChecked', 'PowerPlantPVInsulationStatus') as $key) {
 				$html .= '<td>'.dol_escape_htmltag($outputlangs->transnoentities($key)).'</td>';
 			}
+			foreach ($poleColumns as $column) {
+				$html .= '<td>'.dol_escape_htmltag($outputlangs->transnoentities($column[0]).' ('.$column[1].')').'</td>';
+			}
+			$html .= '<td>'.dol_escape_htmltag($outputlangs->transnoentities('Observation')).'</td>';
 			$html .= '</tr></thead><tbody>';
 			foreach ($group['mppts'] as $rows) {
 				foreach ($rows as $measure) {
@@ -723,14 +729,15 @@ class pdf_powerplantpvreport extends ModelePDFFicheinter
 					$html .= '<td>'.dol_escape_htmltag($this->formatDcMeasureIndex($measure->pv_input_number, $outputlangs)).'</td>';
 					$html .= '<td>'.dol_escape_htmltag((string) $measure->string_ref).'</td>';
 					if (!$this->isDcMeasureUsed($measure)) {
-						$html .= '<td colspan="6">'.dol_escape_htmltag($outputlangs->transnoentities('PowerPlantPVNotUsedByPowerPlant')).'</td></tr>';
+						$html .= '<td colspan="'.(4 + count($poleColumns)).'">'.dol_escape_htmltag($outputlangs->transnoentities('PowerPlantPVNotUsedByPowerPlant')).'</td></tr>';
 						continue;
 					}
 					$html .= '<td>'.dol_escape_htmltag($this->formatDcMeasureNumber($measure, $measure->open_circuit_voltage, 'V', $outputlangs)).'</td>';
 					$html .= '<td>'.dol_escape_htmltag($this->formatDcMeasureBoolean($measure, $measure->polarity_checked, $outputlangs)).'</td>';
 					$html .= '<td>'.dol_escape_htmltag($this->formatDcMeasureInsulationStatus($measure, $outputlangs)).'</td>';
-					$html .= '<td>'.dol_escape_htmltag($this->formatDcMeasureNumber($measure, $measure->insulation_positive_to_ground, 'MOhm', $outputlangs)).'</td>';
-					$html .= '<td>'.dol_escape_htmltag($this->formatDcMeasureNumber($measure, $measure->insulation_negative_to_ground, 'MOhm', $outputlangs)).'</td>';
+					foreach ($poleColumns as $key => $column) {
+						$html .= '<td>'.dol_escape_htmltag($this->formatDcMeasureNumber($measure, $measure->{$key} ?? null, $column[1], $outputlangs)).'</td>';
+					}
 					$html .= '<td>'.dol_htmlentitiesbr($this->formatDcMeasureText($measure, $measure->observation, $outputlangs, false)).'</td>';
 					$html .= '</tr>';
 				}
@@ -738,6 +745,35 @@ class pdf_powerplantpvreport extends ModelePDFFicheinter
 			$html .= '</tbody></table>';
 			$this->writeHtml($pdf, $html);
 		}
+	}
+
+	/**
+	 * Select pole-to-ground columns without displaying blank legacy columns on new reports.
+	 * @param array{mppts:array<int,array<int,object>>} $group Installed inverter measurements
+	 * @return array<string,array{string,string}> Label and unit by property
+	 */
+	protected function dcPoleColumns(array $group): array
+	{
+		$voltage = array(
+			'positive_to_ground_voltage' => array('PowerPlantPVPositiveToGroundVoltage', 'V'),
+			'negative_to_ground_voltage' => array('PowerPlantPVNegativeToGroundVoltage', 'V'),
+		);
+		$resistance = array(
+			'insulation_positive_to_ground' => array('PowerPlantPVInsulationPositiveToGround', 'MOhm'),
+			'insulation_negative_to_ground' => array('PowerPlantPVInsulationNegativeToGround', 'MOhm'),
+		);
+		$hasVoltages = $hasResistances = false;
+		foreach ($group['mppts'] as $measures) {
+			foreach ($measures as $measure) {
+				if (!(int) $measure->is_connected) {
+					continue;
+				}
+				$hasVoltages = $hasVoltages || is_numeric($measure->positive_to_ground_voltage ?? null) || is_numeric($measure->negative_to_ground_voltage ?? null);
+				$hasResistances = $hasResistances || is_numeric($measure->insulation_positive_to_ground ?? null) || is_numeric($measure->insulation_negative_to_ground ?? null);
+			}
+		}
+
+		return ($hasVoltages || !$hasResistances ? $voltage : array()) + ($hasResistances ? $resistance : array());
 	}
 
 	/**
@@ -1334,6 +1370,7 @@ class pdf_powerplantpvreport extends ModelePDFFicheinter
 		if (isset($this->completedPageFooters[$page])) { return; }
 		$font = array($pdf->getFontFamily(), $pdf->getFontStyle(), $pdf->getFontSizePt());
 		$pdf->SetAutoPageBreak(false, 0);
+		$pdf->SetTextColor(0, 0, 0);
 		$this->_pagefoot($pdf, $this->currentObject, $this->currentOutputLangs, $hidefreetext);
 		$this->completedPageFooters[$page] = true;
 		$pdf->SetFont($font[0], $font[1], $font[2]);

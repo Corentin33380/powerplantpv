@@ -603,46 +603,98 @@ trait PowerPlantPVReportVisualPdf
 		$rows=array(); foreach ($group['mppts'] as $inputs) { foreach ($inputs as $row) { if ((int)$row->is_connected===1) { $rows[]=$row; } } }
 		foreach (array_chunk($rows,24) as $chunkIndex=>$chunk) {
 			$volts=array(); $insulation=array(); $valid=0;
-			foreach ($chunk as $row) { if ($row->open_circuit_voltage!==null && $row->open_circuit_voltage!=='' && is_numeric($row->open_circuit_voltage)) { $volts[]=(float)$row->open_circuit_voltage; } foreach (array('insulation_positive_to_ground','insulation_negative_to_ground') as $key) { if ($row->{$key}!==null && $row->{$key}!=='' && is_numeric($row->{$key})) { $insulation[]=(float)$row->{$key}; } } if ((string)$row->insulation_status==='valid' && (int)$row->polarity_checked===1) { $valid++; } }
+			$groundVoltage = false;
+			foreach ($chunk as $row) {
+				if (is_numeric($row->positive_to_ground_voltage ?? null) || is_numeric($row->negative_to_ground_voltage ?? null)) {
+					$groundVoltage = true;
+					break;
+				}
+			}
+			$poleSeries = $groundVoltage
+				? array('positive_to_ground_voltage', 'negative_to_ground_voltage')
+				: array('insulation_positive_to_ground', 'insulation_negative_to_ground');
+			$poleUnit = $groundVoltage ? ' V' : ' MOhm';
+			foreach ($chunk as $row) { if ($row->open_circuit_voltage!==null && $row->open_circuit_voltage!=='' && is_numeric($row->open_circuit_voltage)) { $volts[]=(float)$row->open_circuit_voltage; } foreach ($poleSeries as $key) { if (is_numeric($row->{$key} ?? null)) { $insulation[]=(float)$row->{$key}; } } if ((string)$row->insulation_status==='valid' && (int)$row->polarity_checked===1) { $valid++; } }
 			$incomplete = count($volts) < count($chunk) || count($insulation) < 2 * count($chunk);
-			$zeroIso = count($insulation) === 2 * count($chunk) && min($insulation) === 0.0 && max($insulation) === 0.0;
+			$zeroIso = !$groundVoltage && count($insulation) === 2 * count($chunk) && min($insulation) === 0.0 && max($insulation) === 0.0;
 			$allIsoValid = count(array_filter($chunk, static function ($row) { return (string) $row->insulation_status === 'valid'; })) === count($chunk);
 			$numeric=(bool)($volts || $insulation); $height=$numeric?($incomplete?80:74):42; $this->ensureSpace($pdf, $height + ($heading !== '' ? 18 : 5));
 			if ($heading !== '') { $this->renderSectionTitle($pdf, $heading, 2); $heading = ''; }
 			$y=$pdf->GetY(); $x=$this->marge_gauche; $w=$this->page_largeur-$x-$this->marge_droite;
 			$pdf->SetDrawColor(218,228,240); $pdf->RoundedRect($x,$y,$w,$height,2.65,'1111','D'); $pdf->SetFont('', 'B',9); $pdf->SetTextColor(24,47,79); $pdf->SetXY($x+4,$y+3); $pdf->MultiCell($w-48,4,$langs->convToOutputCharset($this->visualIdentity($group['identity'], false).' - '.count($chunk).' '.$langs->transnoentities('PowerPlantPVVisualStrings')),0,'L');
 			$pdf->SetFont('', '',7.5); $pdf->SetXY($x+$w-40,$y+3); $pdf->Cell(36,4,$valid.' / '.count($chunk).' '.$langs->convToOutputCharset($langs->transnoentities('PowerPlantPVVisualConform')),0,0,'R');
-			$missing=$langs->transnoentities('PowerPlantPVDataNotFilled'); $stats=array(array($volts?price(min($volts),0,$langs,1,-1,0).' - '.price(max($volts),0,$langs,1,-1,0).' V':$missing,$langs->transnoentities('PowerPlantPVOpenCircuitVoltage')),array($insulation?price(min($insulation),0,$langs,1,-1,1).' MOhm':$missing,$langs->transnoentities('PowerPlantPVVisualInsulationMin')),array($insulation?price(max($insulation),0,$langs,1,-1,1).' MOhm':$missing,$langs->transnoentities('PowerPlantPVVisualInsulationMax')));
+			$missing=$langs->transnoentities('PowerPlantPVDataNotFilled'); $stats=array(array($volts?price(min($volts),0,$langs,1,-1,0).' - '.price(max($volts),0,$langs,1,-1,0).' V':$missing,$langs->transnoentities('PowerPlantPVOpenCircuitVoltage')),array($insulation?price(min($insulation),0,$langs,1,-1,1).$poleUnit:$missing,$langs->transnoentities($groundVoltage ? 'PowerPlantPVVisualGroundVoltageMin' : 'PowerPlantPVVisualInsulationMin')),array($insulation?price(max($insulation),0,$langs,1,-1,1).$poleUnit:$missing,$langs->transnoentities($groundVoltage ? 'PowerPlantPVVisualGroundVoltageMax' : 'PowerPlantPVVisualInsulationMax')));
 			if ($zeroIso) { $stats[1]=array($langs->transnoentities('PowerPlantPVVisualZeroInsulation'),$langs->transnoentities('PowerPlantPVVisualInsulationReadings')); $stats[2]=array($allIsoValid?$langs->transnoentities('PowerPlantPVVisualConformSingular'):$langs->transnoentities('PowerPlantPVVisualToCheck'),$langs->transnoentities('PowerPlantPVInsulationStatus')); }
 			$tile=($w-12)/3; foreach($stats as $i=>$stat){$tx=$x+4+$i*($tile+2);$pdf->SetFillColor(245,247,250);$pdf->RoundedRect($tx,$y+11,$tile-2,14,1,'1111','F');$pdf->SetFont('', '',7);$pdf->SetTextColor(100,116,139);$pdf->SetXY($tx+2,$y+12);$pdf->Cell($tile-6,4,$langs->convToOutputCharset($stat[1]));$pdf->SetFont('', 'B',9);$pdf->SetTextColor(24,47,79);$pdf->SetXY($tx+2,$y+17);$pdf->Cell($tile-6,5,$langs->convToOutputCharset($stat[0]));}
 			if(!$numeric){$pdf->SetXY($x+4,$y+31);$pdf->SetFont('', '',8);$pdf->MultiCell($w-8,4,$langs->convToOutputCharset($langs->transnoentities('PowerPlantPVReportChartMissing')),0,'L');$pdf->SetY($y+$height+5);continue;}
-			$gx=$x+12;$gy=$y+32;$gw=$w-25;$gh=25;$vmin=$volts?max(0,floor((min($volts)-10)/10)*10):0;$vmax=$volts?max($vmin+10,ceil((max($volts)+10)/10)*10):1;$imax=$insulation?max(1,ceil(max($insulation)/5)*5):1;
-			$pdf->SetFont('', '',6.5);foreach(array(0,0.5,1) as $fraction){$py=$gy+$gh-$fraction*$gh;$pdf->SetDrawColor(233,238,245);$pdf->Line($gx,$py,$gx+$gw,$py);$pdf->SetTextColor(100,116,139);$pdf->SetXY($x+1,$py-2);$pdf->Cell(10,4,price($vmin+($vmax-$vmin)*$fraction,0,$langs,1,-1,0),0,0,'R');if (!$zeroIso && $insulation) {$pdf->SetTextColor(218,128,22);$pdf->SetXY($gx+$gw+1,$py-2);$pdf->Cell(11,4,price($imax*$fraction,0,$langs,1,-1,0));}}
+			$gx=$x+12;$gy=$y+32;$gw=$w-25;$gh=25;$vmin=$volts?max(0,floor((min($volts)-10)/10)*10):0;$vmax=$volts?max($vmin+10,ceil((max($volts)+10)/10)*10):1;$imin=$groundVoltage && $insulation?min(0,floor(min($insulation)/5)*5):0;$imax=$insulation?max($imin+1,ceil(max($insulation)/5)*5):1;
+			$pdf->SetFont('', '',6.5);foreach(array(0,0.5,1) as $fraction){$py=$gy+$gh-$fraction*$gh;$pdf->SetDrawColor(233,238,245);$pdf->Line($gx,$py,$gx+$gw,$py);$pdf->SetTextColor(100,116,139);$pdf->SetXY($x+1,$py-2);$pdf->Cell(10,4,price($vmin+($vmax-$vmin)*$fraction,0,$langs,1,-1,0),0,0,'R');if (!$zeroIso && $insulation) {$pdf->SetTextColor(218,128,22);$pdf->SetXY($gx+$gw+1,$py-2);$pdf->Cell(11,4,price($imin+($imax-$imin)*$fraction,0,$langs,1,-1,0));}}
 			$step=$gw/count($chunk);foreach($chunk as $i=>$row){if($row->open_circuit_voltage===null || $row->open_circuit_voltage==='' || !is_numeric($row->open_circuit_voltage)){continue;}$bar=max(0.2,min($gh,((float)$row->open_circuit_voltage-$vmin)/($vmax-$vmin)*$gh));$pdf->SetFillColor(184,217,244);$pdf->Rect($gx+$i*$step+$step*0.14,$gy+$gh-$bar,$step*0.72,$bar,'F');
 				if (count($chunk) <= 12) {
 					$pdf->SetTextColor(23,40,74); $pdf->SetXY($gx+$i*$step,$gy+$gh-$bar-3.5);
 					$pdf->Cell($step,3,price($row->open_circuit_voltage,0,$langs,0,0),0,0,'C',false,'',1);
 				}
 			}
-			foreach($zeroIso ? array() : array('insulation_positive_to_ground','insulation_negative_to_ground') as $series=>$key){$previous=null;$color=$series===0?array(242,146,34):array(31,52,85);$pdf->SetDrawColor($color[0],$color[1],$color[2]);$pdf->SetLineStyle(array('width'=>0.3,'dash'=>$series===0?0:'1,1'));foreach($chunk as $i=>$row){$value=$row->{$key};if($value===null || $value==='' || !is_numeric($value)){$previous=null;continue;}$px=$gx+($i+0.5)*$step;$py=$gy+$gh-(float)$value/$imax*$gh;if(is_array($previous)){$pdf->Line($previous[0],$previous[1],$px,$py);}$pdf->SetFillColor($color[0],$color[1],$color[2]);$pdf->Circle($px,$py,0.65,0,360,'F');$previous=array($px,$py);}}
+			foreach($zeroIso ? array() : $poleSeries as $series=>$key){$previous=null;$color=$series===0?array(242,146,34):array(31,52,85);$pdf->SetDrawColor($color[0],$color[1],$color[2]);$pdf->SetLineStyle(array('width'=>0.3,'dash'=>$series===0?0:'1,1'));foreach($chunk as $i=>$row){$value=$row->{$key} ?? null;if($value===null || $value==='' || !is_numeric($value)){$previous=null;continue;}$px=$gx+($i+0.5)*$step;$py=$gy+$gh-((float)$value-$imin)/($imax-$imin)*$gh;if(is_array($previous)){$pdf->Line($previous[0],$previous[1],$px,$py);}$pdf->SetFillColor($color[0],$color[1],$color[2]);$pdf->Circle($px,$py,0.65,0,360,'F');$previous=array($px,$py);}}
 			$pdf->SetLineStyle(array('width'=>0.2,'dash'=>0));$pdf->SetFont('', '',6);$pdf->SetTextColor(100,116,139);foreach($chunk as $i=>$row){$label=trim((string)$row->string_ref);if(dol_strlen($label)>7 || $label===''){$label=(string)($chunkIndex*24+$i+1);}$pdf->SetXY($gx+$i*$step,$gy+$gh+1);$pdf->Cell($step,3,$langs->convToOutputCharset($label),0,0,'C');$pdf->SetXY($gx+$i*$step,$gy+$gh+4);$pdf->Cell($step,3,'M'.$row->mppt_number,0,0,'C');}
-			$pdf->SetXY($x+4,$y+67);$pdf->SetFont('', '',7);$pdf->SetTextColor(88,122,157);$pdf->Cell($w-8,4,$langs->convToOutputCharset($langs->transnoentities($zeroIso || !$insulation ? 'PowerPlantPVVisualChartLegendVoltage' : 'PowerPlantPVVisualChartLegend')),0,0,'C');if ($incomplete) {$pdf->SetXY($x+4,$y+73);$pdf->SetFont('', '',6.5);$pdf->SetTextColor(100,116,139);$pdf->Cell($w-8,3,$langs->convToOutputCharset($langs->transnoentities('PowerPlantPVReportChartMissing')),0,0,'C');}$pdf->SetY($y+$height+5);
+			$pdf->SetXY($x+4,$y+67);$pdf->SetFont('', '',7);$pdf->SetTextColor(88,122,157);$pdf->Cell($w-8,4,$langs->convToOutputCharset($langs->transnoentities($zeroIso || !$insulation ? 'PowerPlantPVVisualChartLegendVoltage' : ($groundVoltage ? 'PowerPlantPVVisualChartLegendGroundVoltage' : 'PowerPlantPVVisualChartLegend'))),0,0,'C');if ($incomplete) {$pdf->SetXY($x+4,$y+73);$pdf->SetFont('', '',6.5);$pdf->SetTextColor(100,116,139);$pdf->Cell($w-8,3,$langs->convToOutputCharset($langs->transnoentities('PowerPlantPVReportChartMissing')),0,0,'C');}$pdf->SetY($y+$height+5);
 		}
 	}
 
 	/** @param TCPDF|TCPDI $pdf @param array<string,mixed> $group @param Translate $langs @return void */
 	protected function visualDcAnnex(&$pdf, $group, $langs)
 	{
-		$this->renderSectionTitle($pdf,$this->visualIdentity($group['identity'],true),3);
-		$html='<table width="100%" cellpadding="3" cellspacing="0" style="font-size:8pt;"><thead><tr style="color:#64748b;">';
-		$columns=array(array('PowerPlantPVMPPT',7),array('PowerPlantPVPVInput',7),array('PowerPlantPVStringRef',13),array('PowerPlantPVOpenCircuitVoltage',11),array('PowerPlantPVPolarityChecked',12),array('PowerPlantPVInsulationStatus',18),array('PowerPlantPVInsulationPositiveToGround',16),array('PowerPlantPVInsulationNegativeToGround',16));
-		foreach($columns as $column){$html.='<td width="'.$column[1].'%">'.dol_escape_htmltag($langs->transnoentities($column[0]).(in_array($column[0], array('PowerPlantPVInsulationPositiveToGround', 'PowerPlantPVInsulationNegativeToGround'), true) ? ' (MOhm)' : ($column[0] === 'PowerPlantPVOpenCircuitVoltage' ? ' (V)' : ''))).'</td>';}$html.='</tr></thead><tbody>';$n=0;$notes=array();
-		foreach($group['mppts'] as $inputs){foreach($inputs as $row){$html.='<tr nobr="true" style="background-color:'.($n++%2?'#f6f8fc':'#ffffff').';"><td>'.dol_escape_htmltag((string)$row->mppt_number).'</td><td>'.dol_escape_htmltag((string)$row->pv_input_number).'</td><td>'.dol_escape_htmltag((string)$row->string_ref).'</td>';if(!(int)$row->is_connected){$html.='<td colspan="5" style="color:#64748b;">'.dol_escape_htmltag($langs->transnoentities('PowerPlantPVNotUsedByPowerPlant')).'</td></tr>';continue;}
-			$html.='<td>'.dol_escape_htmltag($row->open_circuit_voltage===null || $row->open_circuit_voltage===''?'—':price($row->open_circuit_voltage)).'</td>';
-			foreach(array('polarity_checked','insulation_status') as $key){$good=$key==='polarity_checked'?(string)$row->{$key}==='1':(string)$row->{$key}==='valid';$value=$key==='polarity_checked'?$this->formatDcMeasureBoolean($row,$row->{$key},$langs):$this->formatDcMeasureInsulationStatus($row,$langs);$html.='<td style="color:'.($good?'#008963':'#64748b').';">'.dol_escape_htmltag($value).'</td>';}
-			foreach(array('insulation_positive_to_ground','insulation_negative_to_ground') as $key){$html.='<td>'.dol_escape_htmltag($row->{$key}===null || $row->{$key}===''?'—':price($row->{$key})).'</td>';}$html.='</tr>';if(trim((string)$row->observation)!==''){$notes[]=$row->string_ref.' : '.$row->observation;}
-		}}
-		$this->writeHtml($pdf,$html.'</tbody></table>');$pdf->Ln(3);$this->visualNote($pdf,$langs->transnoentities('Observation'),implode("\n",$notes));
+		$this->renderSectionTitle($pdf, $this->visualIdentity($group['identity'], true), 3);
+		$electricalColumns = $this->dcPoleColumns($group);
+		$columns = array(
+			array('PowerPlantPVMPPT', 7), array('PowerPlantPVPVInput', 7),
+			array('PowerPlantPVStringRef', 13), array('PowerPlantPVOpenCircuitVoltage', 13, 'V'),
+			array('PowerPlantPVPolarityChecked', 12), array('PowerPlantPVInsulationStatus', 16),
+		);
+		foreach ($electricalColumns as $column) {
+			$columns[] = array($column[0], 32 / count($electricalColumns), $column[1]);
+		}
+		$html = '<table width="100%" cellpadding="3" cellspacing="0" style="font-size:8pt;"><thead><tr style="color:#64748b;">';
+		foreach ($columns as $column) {
+			$label = $langs->transnoentities($column[0]).(isset($column[2]) ? ' ('.$column[2].')' : '');
+			$html .= '<td width="'.$column[1].'%">'.dol_escape_htmltag($label).'</td>';
+		}
+		$html .= '</tr></thead><tbody>';
+		$notes = array();
+		$n = 0;
+		foreach ($group['mppts'] as $inputs) {
+			foreach ($inputs as $row) {
+				$html .= '<tr nobr="true" style="background-color:'.($n++ % 2 ? '#f6f8fc' : '#ffffff').';">';
+				$values = array($row->mppt_number, $row->pv_input_number, $row->string_ref);
+				if (!(int) $row->is_connected) {
+					foreach ($values as $index => $value) {
+						$html .= '<td width="'.$columns[$index][1].'%">'.dol_escape_htmltag((string) $value).'</td>';
+					}
+					$remaining = count($columns) - count($values);
+					$html .= '<td colspan="'.$remaining.'" width="73%" style="color:#64748b;">'.dol_escape_htmltag($langs->transnoentities('PowerPlantPVNotUsedByPowerPlant')).'</td></tr>';
+					continue;
+				}
+				$values[] = is_numeric($row->open_circuit_voltage) ? price($row->open_circuit_voltage) : '—';
+				$values[] = $this->formatDcMeasureBoolean($row, $row->polarity_checked, $langs);
+				$values[] = $this->formatDcMeasureInsulationStatus($row, $langs);
+				foreach ($electricalColumns as $key => $column) {
+					$value = $row->{$key} ?? null;
+					$values[] = is_numeric($value) ? price($value) : '—';
+				}
+				foreach ($values as $index => $value) {
+					$conform = ($index === 4 && (int) $row->polarity_checked === 1)
+						|| ($index === 5 && (string) $row->insulation_status === 'valid');
+					$html .= '<td width="'.$columns[$index][1].'%"'.($conform ? ' style="color:#008963"' : '').'>'.dol_escape_htmltag((string) $value).'</td>';
+				}
+				$html .= '</tr>';
+				if (trim((string) $row->observation) !== '') {
+					$notes[] = $row->string_ref.' : '.$row->observation;
+				}
+			}
+		}
+		$this->writeHtml($pdf, $html.'</tbody></table>');
+		$pdf->Ln(3);
+		$this->visualNote($pdf, $langs->transnoentities('Observation'), implode("\n", $notes));
 	}
 
 	/**

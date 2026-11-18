@@ -185,6 +185,8 @@ foreach ($runs as $name => $options) {
 	if ($name === 'mixed') {
 		$measures[0]->insulation_positive_to_ground = null;
 		$measures[8]->insulation_status = 'observation';
+		$measures[0]->positive_to_ground_voltage = 13;
+		$measures[0]->negative_to_ground_voltage = -18;
 		$dataset['sections_by_powerplant'][7][6]['fields'][] = visualField('PRODUCTION_INDEX', 'Index production N', 'double', 0, 'kWh');
 	}
 	foreach (array('HIDE_EQUIPMENT', 'SHORT_CONNECTION', 'TECHNICAL_SERVICE_SIGNATURE') as $option) { unset($conf->global->{'POWERPLANTPV_REPORT_PDF_'.$option}); }
@@ -222,6 +224,9 @@ $flat = static function ($text) { return preg_replace('/\s+/u', ' ', $text); };
 $mixed = $flat($contents['mixed']);
 visualPdfCheck(strpos($flat($default), $langs->transnoentities('PowerPlantPVVisualAnswerSummary', 19, 20)) !== false, 'Explicit No, not applicable and unanswered states use the same coverage count');
 visualPdfCheck(strpos($mixed, $langs->transnoentities('PowerPlantPVReportChartMissing')) !== false && strpos($mixed, $langs->transnoentities('PowerPlantPVVisualToCheck')) !== false, 'Incomplete insulation and an unconfirmed zero retain distinct messages');
+visualPdfCheck(strpos($mixed, $langs->transnoentities('PowerPlantPVPositiveToGroundVoltage')) !== false
+	&& strpos($mixed, $langs->transnoentities('PowerPlantPVInsulationNegativeToGround')) !== false
+	&& strpos($mixed, '-18') !== false, 'Signed ground voltages and historic insulation use distinct columns');
 visualPdfCheck(strpos($mixed, 'SDO-RP-2022-003925') === false && strpos($mixed, $langs->transnoentities('PowerPlantPVVisualMaterialAnnex')) !== false, 'Short connection is also applied when the material appendix is kept');
 visualPdfCheck(strpos($mixed, dol_strtoupper($langs->transnoentities('PowerPlantPVVisualProductionIndex'))) !== false, 'A valid zero production index takes precedence over the inverter sum');
 visualPdfCheck(strpos($default, 'Production annuelle historique') === false && strpos($default, 'Autoconsommation historique') === false, 'Historical annual and manual self-consumption entries stay out of the PDF');

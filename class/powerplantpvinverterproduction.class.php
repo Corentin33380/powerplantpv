@@ -13,6 +13,7 @@ class PowerPlantPVInverterProduction
 	public static function expand($tree)
 	{
 		if (empty($tree['report']) || (string) $tree['report']->status !== 'draft') { return $tree; }
+		$inverterCodes = array('INVERTER_PRODUCTION', 'INVERTER_PRODUCTION_N_MINUS_1', 'INVERTER_INJECTION', 'INVERTER_INJECTION_N_MINUS_1');
 		$existing = array();
 		foreach ($tree['sections'] as $row) { $existing[(string) $row['section']->occurrence_key] = true; }
 		$sections = array();
@@ -21,15 +22,27 @@ class PowerPlantPVInverterProduction
 			if ((string) $section->section_code !== 'PRODUCTION_READING' || (int) $section->fk_report_equipment > 0) { $sections[] = $row; continue; }
 			$templates = array();
 			foreach ($row['fields'] as $field) {
-				if (in_array((string) $field->field_code, array('INVERTER_PRODUCTION', 'INVERTER_PRODUCTION_N_MINUS_1'), true)) { $templates[] = $field; }
+				if (in_array((string) $field->field_code, $inverterCodes, true)) { $templates[] = $field; }
 			}
 			if (!$templates) { $sections[] = $row; continue; }
 			$inverters = array_filter($tree['equipment'], static function ($equipment) use ($section) {
 				return (string) $equipment->equipment_type === 'INVERTER' && (int) $equipment->fk_report_powerplant === (int) $section->fk_report_powerplant;
 			});
-			if (!$inverters) { $sections[] = $row; continue; }
+			if (!$inverters) {
+				foreach ($row['fields'] as $index => $field) {
+					if (!in_array((string) $field->field_code, array('INVERTER_INJECTION', 'INVERTER_INJECTION_N_MINUS_1'), true)) {
+						continue;
+					}
+					$hidden = clone $field;
+					$hidden->visible_form = $hidden->visible_pdf = 0;
+					$hidden->readonly = 1;
+					$row['fields'][$index] = $hidden;
+				}
+				$sections[] = $row;
+				continue;
+			}
 			foreach ($row['fields'] as $index => $field) {
-				if (!in_array((string) $field->field_code, array('INVERTER_PRODUCTION', 'INVERTER_PRODUCTION_N_MINUS_1'), true)) { continue; }
+				if (!in_array((string) $field->field_code, $inverterCodes, true)) { continue; }
 				$legacy = clone $field;
 				$legacy->readonly = 1; $legacy->is_required = 0;
 				$legacy->visible_form = $legacy->visible_pdf = ($field->value_number !== null && (string) $field->value_number !== '' ? 1 : 0);

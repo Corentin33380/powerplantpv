@@ -27,6 +27,32 @@
 class ActionsPowerplantpv
 {
 	/**
+	 * Translate the module's enabled PDFs in the native selector on Dolibarr 23+.
+	 * @param array{type?:string,list?:array<string,string>} $parameters Hook parameters
+	 * @return int
+	 */
+	public function getListOfModels($parameters)
+	{
+		global $langs;
+
+		if (!is_array($parameters['list'] ?? null)) {
+			return 0;
+		}
+		require_once __DIR__.'/../lib/powerplantpv_pdfmodels.lib.php';
+		$labels = powerplantpvPdfModelLabels()[$parameters['type'] ?? ''] ?? array();
+		if ($labels) {
+			$langs->load('powerplantpv@powerplantpv');
+			foreach ($labels as $id => $key) {
+				if (isset($parameters['list'][$id])) {
+					$parameters['list'][$id] = $langs->transnoentities($key);
+				}
+			}
+		}
+
+		return 0;
+	}
+
+	/**
 	 * Extend the native home dashboard (Dolibarr 20+).
 	 * @param array<string,mixed> $parameters Hook parameters
 	 * @param object $object Hook object

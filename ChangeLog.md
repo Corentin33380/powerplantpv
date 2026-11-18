@@ -4,6 +4,8 @@
 
 - Photos des index de production et d’injection, généraux ou par onduleur, avec obligation configurable par entité et affichage dans le PDF de maintenance pour les photos saisies dans le rapport.
 - Mise à jour du schéma des relevés pour lier les nouveaux index manuels à un onduleur. Les anciens relevés non attribués restent consultables.
+- Mesures DC en volts entre les pôles et la terre dans le modèle de rapport par défaut. Les résistances historiques conservent leur unité.
+- En-têtes de l’annexe DC alignés sur les cellules, couleur de pied de page native et noms traduits des modèles PDF.
 
 ## 1.8.0 — 2026-11-18
 

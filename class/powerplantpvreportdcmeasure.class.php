@@ -48,6 +48,8 @@ class PowerPlantPVReportDcMeasure extends PowerPlantPVReportGeneratedBase
 		'insulation_status' => array('type' => 'varchar(32)', 'label' => 'PowerPlantPVInsulationStatus', 'enabled' => 1, 'position' => 160, 'notnull' => 0, 'visible' => 1),
 		'insulation_positive_to_ground' => array('type' => 'double(24,8)', 'label' => 'PowerPlantPVInsulationPositiveToGround', 'enabled' => 1, 'position' => 170, 'notnull' => 0, 'visible' => 1),
 		'insulation_negative_to_ground' => array('type' => 'double(24,8)', 'label' => 'PowerPlantPVInsulationNegativeToGround', 'enabled' => 1, 'position' => 180, 'notnull' => 0, 'visible' => 1),
+		'positive_to_ground_voltage' => array('type' => 'double(24,8)', 'label' => 'PowerPlantPVPositiveToGroundVoltage', 'enabled' => 1, 'position' => 181, 'notnull' => 0, 'visible' => 1),
+		'negative_to_ground_voltage' => array('type' => 'double(24,8)', 'label' => 'PowerPlantPVNegativeToGroundVoltage', 'enabled' => 1, 'position' => 182, 'notnull' => 0, 'visible' => 1),
 		'observation' => array('type' => 'text', 'label' => 'Observation', 'enabled' => 1, 'position' => 190, 'notnull' => 0, 'visible' => 1),
 		'stable_key' => array('type' => 'varchar(255)', 'label' => 'Code', 'enabled' => 1, 'position' => 200, 'notnull' => 1, 'visible' => 1),
 		'inverter_marker' => array('type' => 'varchar(32)', 'label' => 'PowerPlantPVEquipmentMarker', 'enabled' => 1, 'position' => 91, 'notnull' => 0, 'visible' => 1),
@@ -78,6 +80,8 @@ class PowerPlantPVReportDcMeasure extends PowerPlantPVReportGeneratedBase
 	public $insulation_status;
 	public $insulation_positive_to_ground;
 	public $insulation_negative_to_ground;
+	public $positive_to_ground_voltage;
+	public $negative_to_ground_voltage;
 	public $observation;
 	public $stable_key;
 	public $inverter_marker;
