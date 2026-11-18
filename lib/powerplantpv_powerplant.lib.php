@@ -1275,3 +1275,89 @@ function powerplantRecalculateInstalledPowerForProduct($productid)
 
 	return $nb;
 }
+
+if (!function_exists('powerplantCompositionLineLabel')) {
+	/**
+	 * Return a readable composition line label.
+	 *
+	 * @param	stdClass	$line	Composition line
+	 * @return	string			Label
+	 */
+	function powerplantCompositionLineLabel($line)
+	{
+		$label = '';
+		if (!empty($line->product_ref)) {
+			$label = $line->product_ref;
+		}
+		if (!empty($line->product_label)) {
+			$label .= ($label !== '' ? ' - ' : '').$line->product_label;
+		}
+		if (!empty($line->serial_number)) {
+			$label .= ($label !== '' ? ' / ' : '').$line->serial_number;
+		}
+
+		$identity = trim((string) ($line->equipment_marker ?? '').' | '.(string) ($line->equipment_identification ?? ''), ' |');
+		if ($identity !== '') { $label = $identity.($label !== '' ? ' — '.$label : ''); }
+		return ($label !== '' ? $label : '#'.((int) $line->rowid));
+	}
+}
+
+if (!function_exists('powerplantCompositionLineIsInverter')) {
+	/**
+	 * Return true if a composition line is an installed inverter.
+	 *
+	 * @param	stdClass	$line	Composition line
+	 * @return	bool			True if inverter
+	 */
+	function powerplantCompositionLineIsInverter($line)
+	{
+		if (!empty($line->inverter_catalog_id)) {
+			return true;
+		}
+		$text = strtoupper((string) $line->product_ref.' '.(string) $line->product_label);
+
+		return (strpos($text, 'ONDULEUR') !== false || strpos($text, 'INVERTER') !== false);
+	}
+}
+
+if (!function_exists('powerplantCompositionFetchInverterLines')) {
+	/**
+	 * Fetch all installed inverter lines for a power plant.
+	 *
+	 * @param	int	$powerplantid	Power plant id
+	 * @param	int	$entity			Power plant entity
+	 * @return	array<int,stdClass>	Installed inverter lines
+	 */
+	function powerplantCompositionFetchInverterLines($powerplantid, $entity)
+	{
+		global $db;
+
+		$rows = array();
+		if ($powerplantid <= 0 || $entity <= 0) {
+			return $rows;
+		}
+
+		$sql = "SELECT DISTINCT c.rowid, c.fk_product, c.fk_status, c.serial_number, c.equipment_marker, c.equipment_identification, c.qty, c.commissioning_date";
+		$sql .= ", p.ref as product_ref, p.label as product_label, inv.fk_product as inverter_catalog_id";
+		$sql .= " FROM ".$db->prefix()."powerplantpv_powerplantcomp as c";
+		$sql .= " INNER JOIN ".$db->prefix()."product as p ON p.rowid = c.fk_product";
+		$sql .= " LEFT JOIN ".$db->prefix()."powerplantpv_product_inverter as inv ON inv.fk_product = c.fk_product";
+		$sql .= " WHERE c.fk_powerplant = ".((int) $powerplantid);
+		$sql .= " AND c.entity = ".((int) $entity);
+		$sql .= " ORDER BY p.ref ASC, p.label ASC, c.rowid ASC";
+
+		$resql = $db->query($sql);
+		if (!$resql) {
+			dol_syslog(__METHOD__.' SQL error: '.$db->lasterror(), LOG_ERR);
+			return $rows;
+		}
+
+		while (is_object($obj = $db->fetch_object($resql))) {
+			if (powerplantCompositionLineIsInverter($obj)) {
+				$rows[(int) $obj->rowid] = $obj;
+			}
+		}
+
+		return array_values($rows);
+	}
+}

@@ -29,7 +29,12 @@ class PowerPlantPVIndexReading extends CommonObject
 	 */
 	public static function isCumulativeIndexType(string $code): bool
 	{
-		return in_array($code, array('INVERTER_PRODUCTION', 'PRODUCTION_INDEX', 'INJECTION_INDEX', 'CONSUMPTION_INDEX'), true);
+		return self::isInverterIndexType($code) || in_array($code, array('PRODUCTION_INDEX', 'INJECTION_INDEX', 'CONSUMPTION_INDEX'), true);
+	}
+
+	public static function isInverterIndexType(string $code): bool
+	{
+		return in_array($code, array('INVERTER_PRODUCTION', 'INVERTER_INJECTION'), true);
 	}
 
 	/**
@@ -135,6 +140,7 @@ class PowerPlantPVIndexReading extends CommonObject
 		'fk_report' => array('type' => 'integer:PowerPlantPVReport:powerplantpv/class/powerplantpvreport.class.php', 'label' => 'PowerPlantPVReport', 'enabled' => 1, 'position' => 30, 'notnull' => 0, 'visible' => 1),
 		'fk_report_powerplant' => array('type' => 'integer:PowerPlantPVReportPowerPlant:powerplantpv/class/powerplantpvreportpowerplant.class.php', 'label' => 'PowerPlant', 'enabled' => 1, 'position' => 40, 'notnull' => 1, 'visible' => 1, 'default' => 0),
 		'fk_report_equipment' => array('type' => 'integer:PowerPlantPVReportEquipment:powerplantpv/class/powerplantpvreportequipment.class.php', 'label' => 'PowerPlantPVEquipment', 'enabled' => 1, 'position' => 50, 'notnull' => 1, 'visible' => 1, 'default' => 0),
+		'fk_powerplant_line' => array('type' => 'integer', 'label' => 'PowerPlantPVEquipment', 'enabled' => 1, 'position' => 55, 'notnull' => 0, 'visible' => 0),
 		'fk_index_type' => array('type' => 'integer', 'label' => 'PowerPlantPVReadingType', 'enabled' => 1, 'position' => 60, 'notnull' => 0, 'visible' => 1),
 		'reading_type_code' => array('type' => 'varchar(64)', 'label' => 'PowerPlantPVReadingType', 'enabled' => 1, 'position' => 70, 'notnull' => 1, 'visible' => 1),
 		'reading_date' => array('type' => 'datetime', 'label' => 'PowerPlantPVReadingDate', 'enabled' => 1, 'position' => 80, 'notnull' => 1, 'visible' => 1),
@@ -157,6 +163,7 @@ class PowerPlantPVIndexReading extends CommonObject
 	public $fk_report;
 	public $fk_report_powerplant;
 	public $fk_report_equipment;
+	public $fk_powerplant_line;
 	public $fk_index_type;
 	public $reading_type_code;
 	public $reading_date;
@@ -319,13 +326,13 @@ class PowerPlantPVIndexReading extends CommonObject
 		if (trim((string) $meterRef) !== '') {
 			$sql .= " AND meter_ref = '".$this->db->escape(trim((string) $meterRef))."'";
 		}
-		if (in_array($readingTypeCode, array('INVERTER_PRODUCTION', 'INVERTER_INJECTION'), true)) {
+		if (self::isInverterIndexType($readingTypeCode)) {
 			if ((int) $inverterLineId > 0) {
-				$sql .= " AND EXISTS (SELECT e.rowid FROM ".$this->db->prefix()."powerplantpv_report_equipment as e";
+				$sql .= " AND (fk_powerplant_line = ".((int) $inverterLineId)." OR EXISTS (SELECT e.rowid FROM ".$this->db->prefix()."powerplantpv_report_equipment as e";
 				$sql .= " WHERE e.rowid = ".$this->db->prefix().$this->table_element.".fk_report_equipment AND e.entity = ".$this->db->prefix().$this->table_element.".entity";
-				$sql .= " AND COALESCE(NULLIF(e.fk_powerplant_line, 0), e.fk_source_equipment) = ".((int) $inverterLineId).")";
+				$sql .= " AND COALESCE(NULLIF(e.fk_powerplant_line, 0), e.fk_source_equipment) = ".((int) $inverterLineId)."))";
 			} else {
-				$sql .= " AND COALESCE(fk_report_equipment, 0) = 0";
+				$sql .= " AND COALESCE(fk_report_equipment, 0) = 0 AND fk_powerplant_line IS NULL";
 			}
 		}
 
@@ -360,10 +367,10 @@ class PowerPlantPVIndexReading extends CommonObject
 	 * @param	string	$readingTypeCode	Reading type code
 	 * @param	string	$readingDate		Current reading SQL date
 	 * @param	int		$rowid				Current row id
-	 * @param	int		$reportEquipmentId	Current report equipment ID, zero for a plant meter
+	 * @param	int		$inverterLineId		Current inverter composition line, zero for a plant meter
 	 * @return	array{rowid:int,value:float,reading_date:string}|null	Previous reading
 	 */
-	public function fetchPreviousValue($fkPowerplant, $readingTypeCode, $readingDate, $rowid, $reportEquipmentId = 0)
+	public function fetchPreviousValue($fkPowerplant, $readingTypeCode, $readingDate, $rowid, $inverterLineId = 0)
 	{
 		$fkPowerplant = (int) $fkPowerplant;
 		$readingTypeCode = trim((string) $readingTypeCode);
@@ -375,19 +382,15 @@ class PowerPlantPVIndexReading extends CommonObject
 
 		$sql = "SELECT t.rowid, t.value, t.reading_date";
 		$sql .= " FROM ".$this->db->prefix().$this->table_element." as t";
-		if ($reportEquipmentId > 0) {
-			$equipmentTable = $this->db->prefix()."powerplantpv_report_equipment";
-			$sql .= " INNER JOIN ".$equipmentTable." as e ON e.rowid = t.fk_report_equipment AND e.entity = t.entity";
-			$sql .= " INNER JOIN ".$equipmentTable." as current_equipment ON current_equipment.rowid = ".((int) $reportEquipmentId);
-			$sql .= " AND current_equipment.entity = e.entity AND current_equipment.fk_powerplant = e.fk_powerplant";
-			$sql .= " AND COALESCE(NULLIF(current_equipment.fk_powerplant_line, 0), current_equipment.fk_source_equipment) > 0";
-			$sql .= " AND COALESCE(NULLIF(current_equipment.fk_powerplant_line, 0), current_equipment.fk_source_equipment)";
-			$sql .= " = COALESCE(NULLIF(e.fk_powerplant_line, 0), e.fk_source_equipment)";
+		if ($inverterLineId > 0) {
+			$sql .= " LEFT JOIN ".$this->db->prefix()."powerplantpv_report_equipment as e ON e.rowid = t.fk_report_equipment AND e.entity = t.entity";
 		}
 		$sql .= " WHERE t.fk_powerplant = ".$fkPowerplant;
 		$sql .= " AND t.active = 1";
-		if ($reportEquipmentId <= 0) {
-			$sql .= " AND t.fk_report_equipment = 0";
+		if ($inverterLineId > 0) {
+			$sql .= " AND COALESCE(t.fk_powerplant_line, NULLIF(e.fk_powerplant_line, 0), e.fk_source_equipment) = ".((int) $inverterLineId);
+		} else {
+			$sql .= " AND t.fk_report_equipment = 0 AND t.fk_powerplant_line IS NULL";
 		}
 		$sql .= " AND t.reading_type_code = '".$this->db->escape($readingTypeCode)."'";
 		$sql .= " AND t.entity IN (".$this->db->sanitize(getEntity('powerplant')).")";
@@ -448,6 +451,7 @@ class PowerPlantPVIndexReading extends CommonObject
 	{
 		$this->fk_report_powerplant = !empty($this->fk_report_powerplant) ? (int) $this->fk_report_powerplant : 0;
 		$this->fk_report_equipment = !empty($this->fk_report_equipment) ? (int) $this->fk_report_equipment : 0;
+		$this->fk_powerplant_line = !empty($this->fk_powerplant_line) ? (int) $this->fk_powerplant_line : null;
 		$this->meter_ref = trim((string) $this->meter_ref);
 		$this->unit = trim((string) $this->unit) !== '' ? trim((string) $this->unit) : 'kWh';
 		$this->source_type = trim((string) $this->source_type) !== '' ? trim((string) $this->source_type) : self::SOURCE_MANUAL;

@@ -475,6 +475,7 @@ CREATE TABLE IF NOT EXISTS llx_powerplantpv_index_reading(
 	fk_report integer,
 	fk_report_powerplant integer DEFAULT 0 NOT NULL,
 	fk_report_equipment integer DEFAULT 0 NOT NULL,
+	fk_powerplant_line integer,
 	fk_index_type integer,
 	reading_type_code varchar(64) NOT NULL,
 	reading_date datetime NOT NULL,
@@ -495,6 +496,7 @@ ALTER TABLE llx_powerplantpv_index_reading ADD COLUMN IF NOT EXISTS fk_fichinter
 ALTER TABLE llx_powerplantpv_index_reading ADD COLUMN IF NOT EXISTS fk_report integer;
 ALTER TABLE llx_powerplantpv_index_reading ADD COLUMN IF NOT EXISTS fk_report_powerplant integer DEFAULT 0 NOT NULL;
 ALTER TABLE llx_powerplantpv_index_reading ADD COLUMN IF NOT EXISTS fk_report_equipment integer DEFAULT 0 NOT NULL;
+ALTER TABLE llx_powerplantpv_index_reading ADD COLUMN IF NOT EXISTS fk_powerplant_line integer;
 ALTER TABLE llx_powerplantpv_index_reading ADD COLUMN IF NOT EXISTS fk_index_type integer;
 ALTER TABLE llx_powerplantpv_index_reading ADD COLUMN IF NOT EXISTS reading_type_code varchar(64) NOT NULL;
 ALTER TABLE llx_powerplantpv_index_reading ADD COLUMN IF NOT EXISTS reading_date datetime NOT NULL;
@@ -515,6 +517,7 @@ ALTER TABLE llx_powerplantpv_index_reading ADD INDEX IF NOT EXISTS idx_powerplan
 ALTER TABLE llx_powerplantpv_index_reading ADD INDEX IF NOT EXISTS idx_powerplantpv_index_reading_report (fk_report);
 ALTER TABLE llx_powerplantpv_index_reading ADD INDEX IF NOT EXISTS idx_powerplantpv_index_reading_report_powerplant (fk_report_powerplant);
 ALTER TABLE llx_powerplantpv_index_reading ADD INDEX IF NOT EXISTS idx_powerplantpv_index_reading_report_equipment (fk_report_equipment);
+ALTER TABLE llx_powerplantpv_index_reading ADD INDEX IF NOT EXISTS idx_ppv_reading_inverter (fk_powerplant_line);
 ALTER TABLE llx_powerplantpv_index_reading ADD INDEX IF NOT EXISTS idx_powerplantpv_index_reading_index_type (fk_index_type);
 ALTER TABLE llx_powerplantpv_index_reading ADD INDEX IF NOT EXISTS idx_powerplantpv_index_reading_type_date (reading_type_code, reading_date);
 ALTER TABLE llx_powerplantpv_index_reading ADD INDEX IF NOT EXISTS idx_powerplantpv_index_reading_source (source_type);

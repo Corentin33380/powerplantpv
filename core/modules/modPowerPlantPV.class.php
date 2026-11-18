@@ -2114,6 +2114,7 @@ class modPowerPlantPV extends DolibarrModules
 			fk_report integer,
 			fk_report_powerplant integer DEFAULT 0 NOT NULL,
 			fk_report_equipment integer DEFAULT 0 NOT NULL,
+			fk_powerplant_line integer,
 			fk_index_type integer,
 			reading_type_code varchar(64) NOT NULL,
 			reading_date datetime NOT NULL,
@@ -2140,6 +2141,7 @@ class modPowerPlantPV extends DolibarrModules
 			'fk_report' => array('type' => 'integer', 'value' => '', 'null' => ''),
 			'fk_report_powerplant' => array('type' => 'integer', 'value' => '', 'null' => 'DEFAULT 0 NOT NULL'),
 			'fk_report_equipment' => array('type' => 'integer', 'value' => '', 'null' => 'DEFAULT 0 NOT NULL'),
+			'fk_powerplant_line' => array('type' => 'integer', 'value' => '', 'null' => ''),
 			'fk_index_type' => array('type' => 'integer', 'value' => '', 'null' => ''),
 			'reading_type_code' => array('type' => 'varchar', 'value' => '64', 'null' => 'NOT NULL'),
 			'reading_date' => array('type' => 'datetime', 'value' => '', 'null' => 'NOT NULL'),
@@ -2173,6 +2175,7 @@ class modPowerPlantPV extends DolibarrModules
 			'idx_powerplantpv_index_reading_report' => 'fk_report',
 			'idx_powerplantpv_index_reading_report_powerplant' => 'fk_report_powerplant',
 			'idx_powerplantpv_index_reading_report_equipment' => 'fk_report_equipment',
+			'idx_ppv_reading_inverter' => 'fk_powerplant_line',
 			'idx_powerplantpv_index_reading_index_type' => 'fk_index_type',
 			'idx_powerplantpv_index_reading_source' => 'source_type',
 			'idx_powerplantpv_index_reading_active' => 'active',
@@ -3027,6 +3030,7 @@ class modPowerPlantPV extends DolibarrModules
 
 		$indexRows = array(
 			array('code' => 'INVERTER_PRODUCTION', 'label' => 'Relevé production onduleur', 'label_en' => 'Inverter production reading', 'description' => 'Relevé de production directement lu sur l’onduleur.', 'description_en' => 'Production reading directly read from the inverter.', 'default_unit' => 'kWh', 'active' => 1, 'position' => 10),
+			array('code' => 'INVERTER_INJECTION', 'label' => 'Index d’injection onduleur', 'label_en' => 'Inverter export meter index', 'description' => 'Index d’injection mesuré pour un onduleur.', 'description_en' => 'Export meter index measured for one inverter.', 'default_unit' => 'kWh', 'active' => 1, 'position' => 15),
 			array('code' => 'PRODUCTION_INDEX', 'label' => 'Index production', 'label_en' => 'Production index', 'description' => 'Index de production.', 'description_en' => 'Production index.', 'default_unit' => 'kWh', 'active' => 1, 'position' => 20),
 			array('code' => 'INJECTION_INDEX', 'label' => 'Index injection', 'label_en' => 'Injection index', 'description' => 'Index d’injection réseau.', 'description_en' => 'Grid injection index.', 'default_unit' => 'kWh', 'active' => 1, 'position' => 30),
 			array('code' => 'CONSUMPTION_INDEX', 'label' => 'Index consommation', 'label_en' => 'Consumption index', 'description' => 'Index de consommation.', 'description_en' => 'Consumption index.', 'default_unit' => 'kWh', 'active' => 1, 'position' => 40),

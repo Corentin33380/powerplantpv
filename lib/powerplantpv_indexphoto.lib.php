@@ -14,6 +14,17 @@ function powerplantpvIndexPhotoApplies(string $code): bool
 	return in_array($code, array('PRODUCTION_INDEX', 'INJECTION_INDEX', 'INVERTER_PRODUCTION', 'INVERTER_INJECTION'), true);
 }
 
+/** Keep evidence tied to its recorded index across snapshot rebuilds. */
+function powerplantpvReportIndexPhotoPath(PowerPlantPVReportField $field, bool $create = false): string
+{
+	if (!is_numeric($field->value_number) || !powerplantpvIndexPhotoApplies((string) $field->field_code)) {
+		return '';
+	}
+	$identity = $field->stable_key.':'.sprintf('%.8F', (float) $field->value_number);
+
+	return powerplantpvIndexPhotoPath((int) $field->entity, 'report', (int) $field->fk_report, $identity, $create);
+}
+
 function powerplantpvIndexPhotoRequired(int $entity): bool
 {
 	global $db, $conf;

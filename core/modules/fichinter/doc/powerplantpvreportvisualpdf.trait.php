@@ -593,6 +593,7 @@ trait PowerPlantPVReportVisualPdf
 		if ($cards) { $this->ensureSpace($pdf, 49); }
 		$this->renderSectionTitle($pdf, $title, 3);
 		if ($cards) { $this->visualKpis($pdf,$cards,3,34); }
+		$this->renderReadingPhotos($pdf, $fields, $langs);
 		$this->visualSectionExtras($pdf,$row,$dataset,$langs,true);
 	}
 

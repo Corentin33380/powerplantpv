@@ -631,6 +631,7 @@ class pdf_powerplantpvreport extends ModelePDFFicheinter
 		}
 		if ($sectionCode === 'PRODUCTION_READING') {
 			$this->renderProductionReadings($pdf, $visibleFields, $dataset, $outputlangs);
+			$this->renderReadingPhotos($pdf, $visibleFields, $outputlangs);
 			return;
 		}
 		if ($sectionCode === 'THERMOGRAPHY') {
@@ -800,6 +801,31 @@ class pdf_powerplantpvreport extends ModelePDFFicheinter
 			$value = PowerPlantPVReportPdfDataset::formatFieldValue($fieldsByCode['PRODUCTION_READING_OBSERVATION'], $outputlangs);
 			if ($value !== '') {
 				$this->renderKeyValueTable($pdf, array(array($outputlangs->transnoentities('Observation'), $value)), '');
+			}
+		}
+	}
+
+	/**
+	 * Render photos underneath the section that contains their indices.
+	 *
+	 * @param TCPDF|TCPDI $pdf PDF handler
+	 * @param array<int|string,PowerPlantPVReportField> $fields Visible fields
+	 * @param Translate $outputlangs Output language
+	 * @return void
+	 */
+	protected function renderReadingPhotos(&$pdf, array $fields, $outputlangs)
+	{
+		require_once __DIR__.'/../../../../lib/powerplantpv_indexphoto.lib.php';
+
+		foreach ($fields as $field) {
+			if (!$field instanceof PowerPlantPVReportField) {
+				continue;
+			}
+			$path = powerplantpvReportIndexPhotoPath($field);
+			if ($path !== '' && is_file($path) && is_readable($path)) {
+				$label = PowerPlantPVReportPresentation::inverterIndexLabel($field, $outputlangs)
+					?? PowerPlantPVReportPdfDataset::localizedProperty($field, 'field_label', $outputlangs);
+				$this->renderImage($pdf, $path, $label, $outputlangs, 60);
 			}
 		}
 	}

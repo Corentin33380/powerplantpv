@@ -227,10 +227,13 @@ $readingDb = new class {
 };
 $reading->db = $readingDb;
 $reading->fetchLatestValue(6, 'INVERTER_PRODUCTION', '', 14, 114);
-nativeMaintenanceCheck(strpos($readingDb->sql, 'e.fk_powerplant_line') !== false && strpos($readingDb->sql, '= 114)') !== false, 'Inverter previous reading uses the installed source identity across report snapshots');
+nativeMaintenanceCheck(strpos($readingDb->sql, 'e.fk_powerplant_line') !== false && strpos($readingDb->sql, '= 114)') !== false
+	&& strpos($readingDb->sql, 'fk_powerplant_line = 114 OR EXISTS') !== false, 'Inverter history includes manual and report readings of the same installed inverter');
 nativeMaintenanceCheck(strpos($readingDb->sql, 'e.entity = '.MAIN_DB_PREFIX.'powerplantpv_index_reading.entity') !== false && strpos($readingDb->sql, 'fk_report <> 14') !== false, 'Reading history keeps owner entity and excludes the current report');
 $reading->fetchLatestValue(6, 'INVERTER_PRODUCTION');
-nativeMaintenanceCheck(strpos($readingDb->sql, 'COALESCE(fk_report_equipment, 0) = 0') !== false, 'Legacy global history excludes readings attributed to an inverter');
+nativeMaintenanceCheck(strpos($readingDb->sql, 'COALESCE(fk_report_equipment, 0) = 0 AND fk_powerplant_line IS NULL') !== false, 'Legacy global history excludes manual and report readings attributed to an inverter');
+$reading->fetchPreviousValue(6, 'INVERTER_INJECTION', '2026-11-18 00:00:00', 20, 115);
+nativeMaintenanceCheck(strpos($readingDb->sql, 'COALESCE(t.fk_powerplant_line, NULLIF(e.fk_powerplant_line, 0), e.fk_source_equipment) = 115') !== false, 'Delta history follows the same inverter across manual and report sources');
 $reading->fetchLatestValue(6, 'PRODUCTION_INDEX');
 nativeMaintenanceCheck(strpos($readingDb->sql, 'e.fk_powerplant_line') === false, 'Common plant meter history is not filtered by inverter');
 nativeMaintenanceCheck(method_exists('CommonObject', 'setValueFrom'), 'Native single-field update API exists on the tested core');

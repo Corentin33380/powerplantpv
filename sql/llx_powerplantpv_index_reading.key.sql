@@ -21,6 +21,7 @@ ALTER TABLE llx_powerplantpv_index_reading ADD INDEX idx_powerplantpv_index_read
 ALTER TABLE llx_powerplantpv_index_reading ADD INDEX idx_powerplantpv_index_reading_report (fk_report);
 ALTER TABLE llx_powerplantpv_index_reading ADD INDEX idx_powerplantpv_index_reading_report_powerplant (fk_report_powerplant);
 ALTER TABLE llx_powerplantpv_index_reading ADD INDEX idx_powerplantpv_index_reading_report_equipment (fk_report_equipment);
+ALTER TABLE llx_powerplantpv_index_reading ADD INDEX idx_ppv_reading_inverter (fk_powerplant_line);
 ALTER TABLE llx_powerplantpv_index_reading ADD INDEX idx_powerplantpv_index_reading_index_type (fk_index_type);
 ALTER TABLE llx_powerplantpv_index_reading ADD INDEX idx_powerplantpv_index_reading_type_date (reading_type_code, reading_date);
 ALTER TABLE llx_powerplantpv_index_reading ADD INDEX idx_powerplantpv_index_reading_source (source_type);

@@ -102,6 +102,10 @@ if (!$permissiontoread || empty($object->id)) {
 }
 
 $photoRequired = powerplantpvIndexPhotoRequired((int) $object->entity);
+$inverterOptions = array();
+foreach (powerplantCompositionFetchInverterLines((int) $object->id, (int) $object->entity) as $inverter) {
+	$inverterOptions[(int) $inverter->rowid] = powerplantCompositionLineLabel($inverter);
+}
 if ($action === 'view_index_photo') {
 	$reading = new PowerPlantPVIndexReading($db);
 	if ($reading->fetch(GETPOSTINT('reading_id')) <= 0 || (int) $reading->fk_powerplant !== (int) $object->id
@@ -148,6 +152,7 @@ if (empty($reshook)) {
 
 		$typeId = GETPOSTINT('fk_index_type');
 		$typeRow = powerplantpvIndexReadingFetchTypeById($typeId);
+		$inverterLineId = GETPOSTINT('fk_powerplant_line');
 		$readingDate = powerplantpvIndexReadingGetSubmittedDate('reading_date');
 		$valueRaw = trim((string) GETPOST('reading_value', 'restricthtml'));
 		$normalizedValue = price2num($valueRaw);
@@ -159,6 +164,11 @@ if (empty($reshook)) {
 		$photoupload = $_FILES['index_photo'] ?? array();
 		$hasPhoto = is_array($photoupload) && ($photoupload['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_NO_FILE;
 		$acceptsPhoto = !empty($typeRow) && powerplantpvIndexPhotoApplies($typeRow['code']);
+		$isInverterIndex = !empty($typeRow) && PowerPlantPVIndexReading::isInverterIndexType($typeRow['code']);
+		if ($isInverterIndex && !isset($inverterOptions[$inverterLineId])) {
+			setEventMessages($langs->trans('PowerPlantPVIndexInverterRequired'), null, 'errors');
+			$error++;
+		}
 		if ($acceptsPhoto && $photoRequired && !$hasPhoto) {
 			setEventMessages($langs->trans('PowerPlantPVIndexPhotoRequired'), null, 'errors');
 			$error++;
@@ -185,6 +195,7 @@ if (empty($reshook)) {
 			$reading->fk_report = null;
 			$reading->fk_report_powerplant = 0;
 			$reading->fk_report_equipment = 0;
+			$reading->fk_powerplant_line = $isInverterIndex ? $inverterLineId : null;
 			$reading->fk_index_type = (int) $typeRow['rowid'];
 			$reading->reading_type_code = (string) $typeRow['code'];
 			$reading->reading_date = $db->idate($readingDate);
@@ -264,6 +275,7 @@ if ($resql) {
 
 $sql = "SELECT t.rowid, t.fk_powerplant, t.fk_fichinter_source, t.fk_report, t.fk_report_powerplant, t.fk_report_equipment, t.reading_type_code";
 $sql .= ", t.reading_date, t.value, t.unit, t.meter_ref, t.source_type, t.comment, t.fk_user_creat";
+$sql .= ", COALESCE(t.fk_powerplant_line, NULLIF(e.fk_powerplant_line, 0), e.fk_source_equipment) as inverter_line_id";
 $sql .= ", it.label as type_label, it.label_en as type_label_en";
 $sql .= ", u.login, u.lastname, u.firstname";
 $sql .= ", fi.ref as intervention_ref";
@@ -271,6 +283,7 @@ $sql .= " FROM ".$db->prefix()."powerplantpv_index_reading as t";
 $sql .= " LEFT JOIN ".$db->prefix()."c_powerplantpv_index_type as it ON it.rowid = t.fk_index_type";
 $sql .= " LEFT JOIN ".$db->prefix()."user as u ON u.rowid = t.fk_user_creat";
 $sql .= " LEFT JOIN ".$db->prefix()."fichinter as fi ON fi.rowid = t.fk_fichinter_source";
+$sql .= " LEFT JOIN ".$db->prefix()."powerplantpv_report_equipment as e ON e.rowid = t.fk_report_equipment AND e.entity = t.entity AND e.fk_powerplant = t.fk_powerplant";
 $sql .= $where;
 $sql .= " ORDER BY ".$allowedSorts[$sortfield]." ".strtoupper($sortorder).", t.rowid DESC";
 $sql .= $db->plimit($limit + 1, $offset);
@@ -284,7 +297,7 @@ $num = $resql ? $db->num_rows($resql) : 0;
 $form = new Form($db);
 $readingHelper = new PowerPlantPVIndexReading($db);
 $selfConsumption = $readingHelper->fetchLatestSelfConsumption((int) $object->id, (int) $object->entity);
-$typeOptions = powerplantpvIndexReadingFetchTypeOptions();
+$typeOptions = powerplantpvIndexReadingFetchTypeOptions(!empty($inverterOptions));
 $defaultTypeId = powerplantpvIndexReadingDefaultTypeId($typeOptions);
 $title = $langs->trans('PowerPlant').' - '.$langs->trans('PowerPlantPVProductionConsumption');
 
@@ -342,6 +355,11 @@ if ($action === 'create_reading' && $permissiontoadd) {
 	if (function_exists('ajax_combobox')) {
 		print ajax_combobox('fk_index_type');
 	}
+	if ($inverterOptions) {
+		print '<tr><td><label for="fk_powerplant_line">'.$langs->trans('PowerPlantPVIndexInverter').'</label></td><td>';
+		print $form->selectarray('fk_powerplant_line', $inverterOptions, GETPOSTINT('fk_powerplant_line'), 1);
+		print '</td></tr>';
+	}
 	print '<tr><td class="titlefieldcreate">'.$langs->trans('PowerPlantPVReadingValue').'</td><td><input type="text" class="flat maxwidth150 right" name="reading_value" value="'.dol_escape_htmltag(GETPOST('reading_value', 'restricthtml')).'"></td></tr>';
 	print '<tr><td>'.$langs->trans('PowerPlantPVReadingUnit').'</td><td><input type="text" class="flat maxwidth100" name="unit" value="'.dol_escape_htmltag($submittedUnit).'"></td></tr>';
 	print '<tr><td>'.$langs->trans('PowerPlantPVMeterRef').'</td><td><input type="text" class="flat minwidth200 maxwidth500" name="meter_ref" value="'.dol_escape_htmltag(GETPOST('meter_ref', 'alphanohtml')).'"></td></tr>';
@@ -389,12 +407,17 @@ if ($resql) {
 		$typeLabel = powerplantpvIndexReadingLocalizedTypeLabel($obj);
 		$userLabel = powerplantpvIndexReadingUserLabel($obj);
 		$sourceLabel = $langs->trans((string) $obj->source_type === PowerPlantPVIndexReading::SOURCE_REPORT ? 'PowerPlantPVSourceReport' : 'PowerPlantPVSourceManual');
-		$previous = $readingHelper->fetchPreviousValue((int) $obj->fk_powerplant, (string) $obj->reading_type_code, (string) $obj->reading_date, (int) $obj->rowid, (int) $obj->fk_report_equipment);
+		$inverterLineId = (int) $obj->inverter_line_id;
+		$previous = $readingHelper->fetchPreviousValue((int) $obj->fk_powerplant, (string) $obj->reading_type_code, (string) $obj->reading_date, (int) $obj->rowid, $inverterLineId);
 		$delta = is_array($previous) ? (float) $obj->value - (float) $previous['value'] : null;
 
 		print '<tr class="oddeven">';
 		print '<td class="nowrap">'.dol_print_date($db->jdate((string) $obj->reading_date), 'day').'</td>';
-		print '<td>'.dol_escape_htmltag($typeLabel).'</td>';
+		print '<td>'.dol_escape_htmltag($typeLabel);
+		if (isset($inverterOptions[$inverterLineId])) {
+			print '<br><span class="opacitymedium">'.dol_escape_htmltag($inverterOptions[$inverterLineId]).'</span>';
+		}
+		print '</td>';
 		print '<td class="right">'.price($obj->value).'</td>';
 		print '<td>'.dol_escape_htmltag((string) $obj->unit).'</td>';
 		print '<td class="right">'.($delta !== null ? price($delta) : '<span class="opacitymedium">-</span>').'</td>';
@@ -453,9 +476,10 @@ function powerplantpvIndexReadingSubmittedTokenValid($token)
 /**
  * Return active index type options.
  *
+ * @param	bool				$hasInverters	Whether the plant has selectable inverters
  * @return	array<int,string>	Options indexed by dictionary rowid
  */
-function powerplantpvIndexReadingFetchTypeOptions()
+function powerplantpvIndexReadingFetchTypeOptions(bool $hasInverters)
 {
 	global $db, $langs;
 
@@ -476,8 +500,13 @@ function powerplantpvIndexReadingFetchTypeOptions()
 		if (!PowerPlantPVIndexReading::isCumulativeIndexType((string) $obj->code)) {
 			continue;
 		}
+		if (PowerPlantPVIndexReading::isInverterIndexType((string) $obj->code) && !$hasInverters) {
+			continue;
+		}
 		if ($obj->code === 'INVERTER_PRODUCTION') {
 			$label = $langs->transnoentities('PowerPlantPVInverterProductionIndex');
+		} elseif ($obj->code === 'INVERTER_INJECTION') {
+			$label = $langs->transnoentities('PowerPlantPVInverterInjectionIndex');
 		}
 		$options[(int) $obj->rowid] = trim((string) $obj->code.' - '.$label, " -\t\n\r\0\x0B");
 	}

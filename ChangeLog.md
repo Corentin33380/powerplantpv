@@ -1,5 +1,10 @@
 # CHANGELOG MODULE POWERPLANTPV FOR [DOLIBARR ERP CRM](https://www.dolibarr.org)
 
+## À venir
+
+- Photos des index de production et d’injection, généraux ou par onduleur, avec obligation configurable par entité et affichage dans le PDF de maintenance pour les photos saisies dans le rapport.
+- Mise à jour du schéma des relevés pour lier les nouveaux index manuels à un onduleur. Les anciens relevés non attribués restent consultables.
+
 ## 1.8.0 — 2026-11-18
 
 - Onduleurs installés : repère et identification individuels, repris dans les rapports, avec édition native et masques de numérotation par entité ; les chaînes sont numérotées par onduleur.

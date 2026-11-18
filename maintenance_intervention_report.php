@@ -1743,16 +1743,6 @@ function powerplantpvReportIndexPhotoField(PowerPlantPVReportField $field): bool
 		&& powerplantpvReportIsNumericFieldType((string) $field->field_type);
 }
 
-function powerplantpvReportIndexPhotoPath(PowerPlantPVReportField $field, bool $create = false): string
-{
-	if ($field->value_number === null || !is_numeric($field->value_number)) {
-		return '';
-	}
-	// Bind evidence to the saved index, including zero, across snapshot rebuilds.
-	$identity = $field->stable_key.':'.sprintf('%.8F', (float) $field->value_number);
-	return powerplantpvIndexPhotoPath((int) $field->entity, 'report', (int) $field->fk_report, $identity, $create);
-}
-
 /** @return list<string> Labels of uploads or required photos that need attention. */
 function powerplantpvReportSaveIndexPhotos(PowerPlantPVReport $report, bool $finalize): array
 {
