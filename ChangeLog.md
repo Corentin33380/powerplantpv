@@ -1,15 +1,16 @@
 # CHANGELOG MODULE POWERPLANTPV FOR [DOLIBARR ERP CRM](https://www.dolibarr.org)
 
-## 1.8.1 — 2026-11-18
+## 1.8.0 — 2026-11-18
 
 - Mesures DC : détail des chaînes dans le rapport principal. Une action par chaîne permet de reprendre dans les champs de tension vides les anciennes valeurs dont la mesure en volts est confirmée.
-
-## 1.8.0 — 2026-11-18
+- Entrées PV : tri par onduleur, MPPT et numéro d’entrée, y compris pour les anciennes mesures saisies manuellement.
+- Index : transfert à la centrale lors de la finalisation du rapport, sans doublon en cas de nouvelle finalisation. Les anciens index généraux sont rattachés lorsque le rapport concerne une seule centrale.
+- Centrale : accès direct aux mesures DC des rapports finalisés depuis l’onglet Maintenance. Les champs vides sont libellés « Non renseigné ».
 
 - Photos des index de production et d’injection, généraux ou par onduleur, avec obligation configurable par entité et affichage dans le PDF de maintenance pour les photos saisies dans le rapport.
 - Mise à jour du schéma des relevés pour lier les nouveaux index manuels à un onduleur. Les anciens relevés non attribués restent consultables.
 - Mesures DC en volts entre les pôles et la terre dans le modèle de rapport par défaut. Les résistances historiques conservent leur unité.
-- En-têtes de l’annexe DC alignés sur les cellules, couleur de pied de page native et noms traduits des modèles PDF.
+- En-têtes des tableaux DC alignés sur les cellules, couleur de pied de page native et noms traduits des modèles PDF.
 - En-tête du rapport compact, barre de progression continue et légende de la photo avec référence, nom et ville de la centrale.
 - Signature nominative du responsable hiérarchique direct sur les rapports finalisés, activable par entité et protégée par une permission dédiée.
 - Trois cadres de signature de même largeur sur une seule ligne, avec le tracé, le nom et la date de la signature en ligne dans le cadre client. Actualiser le module par l’action native de Dolibarr pour enregistrer le hook de signature.
@@ -28,21 +29,11 @@
 - Mobile : enregistrement par pictogramme, réduction et passage à la section suivante, conservation des sections ouvertes et du défilement après rechargement.
 - Accès : filtrage des listes de centrales par affectation commerciale avant comptage et pagination. Actualiser le module par le parcours natif dans chaque entité pour appliquer les migrations conservatrices, sans perte des réglages ni des références existantes.
 
-## Correctif en attente — infobulles, version 1.7.0 conservée
-
-- Accueil : infobulles explicatives au survol des six badges, avec distinction entre statut des centrales, périodes contractuelles de maintenance et interventions réalisées.
-- Renouvellement du nom de la feuille de style des tuiles pour éviter de conserver les anciennes couleurs en cache lors d’une mise à jour restant en 1.7.0. Actualiser le module par son action native « Recharger » pour enregistrer ce nom.
-- Le tag et les fichiers de la release 1.7.0 restent inchangés.
-
-## Ajustements déployés sur develop — 2026-11-16, version 1.7.0 conservée
-
-- Accueil : retrait de la ligne « Brouillon » dans la tuile Centrales. Les lignes « Validé », « En service » et « Hors service » sont conservées ; aucune centrale ni donnée métier n’est supprimée.
-- Accueil : états « En service / Hors service » sur une même ligne, avec liens distincts et badges natifs verts/rouges. « Validé » et le total des maintenances restent gris ; « À prévoir » devient orange et « En retard » rouge, y compris lorsque le compteur vaut zéro.
-- PR #44 intégrée au commit `24ee4f2` et déployée sur develop. Le tag et le paquet de la release 1.7.0 déjà publiée restent inchangés.
-
 ## 1.7.0 — 2026-11-13
 
 - Accueil : deux tuiles natives pour les centrales (brouillons, validées, en service et hors service) et les maintenances (total des périodes requises, à prévoir et en retard), avec accès aux listes filtrées.
+- Après publication, sur develop le 16 novembre 2026 (PR #44, `24ee4f2`), retrait de la ligne « Brouillon » de la tuile Centrales et regroupement de « En service » et « Hors service » sur une ligne, avec des liens distincts et des badges vert et rouge. « Validé » et le total des maintenances restent gris. « À prévoir » apparaît en orange et « En retard » en rouge, y compris à zéro.
+- Correctif des tuiles après publication : infobulles sur les six badges pour distinguer les statuts des centrales, les périodes contractuelles et les interventions réalisées. Le rechargement du module actualise le nom de la feuille de style pour éviter l’utilisation de couleurs en cache.
 - Les compteurs respectent les droits de lecture et les entités partagées ; les échéances reprennent le planificateur de maintenance existant, sans écriture métier à l’affichage.
 - Cette release embarque également les évolutions intégrées depuis le tag 1.6.1 : dictionnaire natif partagé des types de raccordement et conservation des codes et choix historiques.
 - Documents commerciaux : libellé « Raccordement » et affichage des champs photovoltaïques non vides sur les PDF compatibles ; réglages des autres entités et des autres champs préservés.

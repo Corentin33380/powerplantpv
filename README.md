@@ -33,7 +33,7 @@ Desktop section titles include marker, identification and serial; mobile titles 
 Panel serials are available in a separate CSV attachment generated from the report snapshot.
 See [the implementation and validation notes](docs/release/v1.8-maintenance-development.md)
 for activation, historic reports, naming existing equipment and validation limits.
-Version 1.8.0 includes the maintenance report and equipment improvements listed in [ChangeLog.md](ChangeLog.md#180--2026-11-18).
+Version 1.8.0 includes the maintenance report and equipment improvements, PV input grouping, index transfers and access to past DC measurements. See [ChangeLog.md](ChangeLog.md#180--2026-11-18).
 
 ## Translations
 
