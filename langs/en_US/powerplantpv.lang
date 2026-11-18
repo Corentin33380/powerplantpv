@@ -1917,3 +1917,4 @@ PowerPlantPVVisualInsulationReadings=Insulation readings
 PowerPlantPVInverterProductionIndexCurrent=Inverter production index N
 PowerPlantPVInverterProductionIndexPrevious=Inverter production index N-1
 PowerPlantPVSelfConsumptionBetweenReadings=Calculated self-consumption between readings
+PowerPlantPVMaintenanceDcHistory = DC electrical measurements from the report

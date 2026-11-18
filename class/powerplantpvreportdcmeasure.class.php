@@ -88,6 +88,48 @@ class PowerPlantPVReportDcMeasure extends PowerPlantPVReportGeneratedBase
 	public $inverter_identification;
 	public $position;
 
+	/**
+	 * Find finalized reports with recorded DC measures for the selected plant.
+	 *
+	 * @param int $powerplantId Plant id
+	 * @param list<int> $interventionIds Interventions already accessible to the user
+	 * @return array<int,true>|int Intervention IDs or -1 on database failure
+	 */
+	public function fetchHistoryInterventions(int $powerplantId, array $interventionIds)
+	{
+		if ($powerplantId <= 0 || !$interventionIds) {
+			return array();
+		}
+		$prefix = $this->db->prefix();
+		$sql = "SELECT DISTINCT r.fk_fichinter";
+		$sql .= " FROM ".$prefix."powerplantpv_report as r";
+		$sql .= " INNER JOIN ".$prefix."powerplantpv_report_powerplant as p ON p.fk_report = r.rowid AND p.entity = r.entity";
+		$sql .= " INNER JOIN ".$prefix.$this->table_element." as m ON m.fk_report = r.rowid AND m.entity = r.entity";
+		$sql .= " WHERE r.status = '".PowerPlantPVReport::STATUS_SAVED."'";
+		$sql .= " AND r.entity IN (".$this->db->sanitize(getEntity('fichinter')).")";
+		$sql .= " AND r.fk_fichinter IN (".$this->db->sanitize(implode(',', $interventionIds)).")";
+		$sql .= " AND p.fk_powerplant = ".$powerplantId;
+		$sql .= " AND (m.fk_powerplant = p.fk_powerplant OR (COALESCE(m.fk_powerplant, 0) = 0";
+		$sql .= " AND (m.fk_report_powerplant = p.rowid OR (COALESCE(m.fk_report_powerplant, 0) = 0";
+		$sql .= " AND NOT EXISTS (SELECT other.rowid FROM ".$prefix."powerplantpv_report_powerplant as other";
+		$sql .= " WHERE other.entity = p.entity AND other.fk_report = p.fk_report AND other.rowid <> p.rowid)))))";
+		$sql .= " AND (m.open_circuit_voltage IS NOT NULL OR m.polarity_checked >= 0";
+		$sql .= " OR m.insulation_status IN ('valid', 'observation', 'not_applicable')";
+		$sql .= " OR m.insulation_positive_to_ground IS NOT NULL OR m.insulation_negative_to_ground IS NOT NULL";
+		$sql .= " OR m.positive_to_ground_voltage IS NOT NULL OR m.negative_to_ground_voltage IS NOT NULL";
+		$sql .= " OR (m.observation IS NOT NULL AND m.observation <> ''))";
+		$result = $this->db->query($sql);
+		if (!$result) {
+			$this->setError($this->db->lasterror());
+			return -1;
+		}
+		$history = array();
+		while (is_object($row = $this->db->fetch_object($result))) {
+			$history[(int) $row->fk_fichinter] = true;
+		}
+		$this->db->free($result);
+		return $history;
+	}
 	/** Whether this connected input has an older value that can fill an empty voltage. */
 	public function hasLegacyPoleVoltages(): bool
 	{

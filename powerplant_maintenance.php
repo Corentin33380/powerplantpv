@@ -66,6 +66,8 @@ dol_include_once('/contrat/class/contrat.class.php');
 dol_include_once('/fichinter/class/fichinter.class.php');
 dol_include_once('/powerplantpv/class/powerplant.class.php');
 dol_include_once('/powerplantpv/class/powerplantpvmaintenancescheduler.class.php');
+dol_include_once('/powerplantpv/class/powerplantpvreport.class.php');
+dol_include_once('/powerplantpv/class/powerplantpvreportdcmeasure.class.php');
 dol_include_once('/powerplantpv/lib/powerplantpv.lib.php');
 dol_include_once('/powerplantpv/lib/powerplantpv_maintenance.lib.php');
 dol_include_once('/powerplantpv/lib/powerplantpv_powerplant.lib.php');
@@ -144,6 +146,22 @@ $scheduler = new PowerPlantPVMaintenanceScheduler($db);
 $schedule = $scheduler->getScheduleForPowerPlant($object, $user);
 $items = (isset($schedule['items']) && is_array($schedule['items'])) ? $schedule['items'] : array();
 $interventions = (isset($schedule['interventions']) && is_array($schedule['interventions'])) ? $schedule['interventions'] : array();
+$dcHistory = array();
+if ($user->hasRight('ficheinter', 'lire') && $user->hasRight('powerplantpv', 'maintenance', 'read')) {
+	$historyIds = array();
+	foreach ($interventions as $linkedIntervention) {
+		if ((int) $linkedIntervention['fk_soc'] === (int) $object->fk_soc && (int) $linkedIntervention['id'] > 0) {
+			$historyIds[] = (int) $linkedIntervention['id'];
+		}
+	}
+	$measureObject = new PowerPlantPVReportDcMeasure($db);
+	$history = $measureObject->fetchHistoryInterventions((int) $object->id, $historyIds);
+	if (is_array($history)) {
+		$dcHistory = $history;
+	} else {
+		dol_syslog('PowerPlantPV DC history lookup failed', LOG_WARNING);
+	}
+}
 $summary = (isset($schedule['summary']) && is_array($schedule['summary'])) ? $schedule['summary'] : array();
 $summaryStatus = isset($summary['status']) ? (string) $summary['status'] : PowerPlantPVMaintenanceScheduler::STATUS_NOT_REQUIRED;
 $summaryPrimaryItem = (!empty($summary['primary_item']) && is_array($summary['primary_item'])) ? $summary['primary_item'] : array();
@@ -276,7 +294,12 @@ if (empty($interventions)) {
 		}
 		$dateLabel = powerplantpvMaintenanceFormatPeriod((int) $intervention['date_start'], (int) $intervention['date_end']);
 		print '<tr class="oddeven">';
-		print '<td class="nowrap">'.powerplantpvMaintenanceInterventionLink((int) $intervention['id'], (string) $intervention['ref']).'</td>';
+		print '<td class="nowrap">'.powerplantpvMaintenanceInterventionLink((int) $intervention['id'], (string) $intervention['ref']);
+		if (isset($dcHistory[(int) $intervention['id']])) {
+			$reportUrl = dol_buildpath('/powerplantpv/maintenance_intervention_report.php', 1).'?id='.(int) $intervention['id'].'#powerplantpv-dc-measures-'.(int) $object->id;
+			print '<br><a href="'.dol_escape_htmltag($reportUrl).'">'.$langs->trans('PowerPlantPVMaintenanceDcHistory').'</a>';
+		}
+		print '</td>';
 		print '<td>'.(!empty($contractLabels) ? implode('<br>', $contractLabels) : '<span class="opacitymedium">-</span>').'</td>';
 		print '<td>'.(!empty($intervention['nature_label']) ? dol_escape_htmltag((string) $intervention['nature_label']) : '<span class="opacitymedium">-</span>').'</td>';
 		print '<td>'.$dateLabel.'</td>';

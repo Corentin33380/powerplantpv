@@ -61,6 +61,16 @@ checkMaintenance(count($groups) === 3, 'Identical catalog products remain three 
 checkMaintenance(array_keys($groups) === array('2:line:1', '2:line:2', '2:line:10'), 'Natural marker order O1 O2 O10');
 checkMaintenance(array_keys($groups['2:line:1']['mppts']) === array(1, 2), 'MPPTs numerically ordered');
 checkMaintenance($groups['2:line:1']['mppts'][1][0]->pv_input_number === 1, 'Inputs numerically ordered');
+$legacy = array();
+foreach (array(array('10', 1, 1), array('2', 2, 1), array('2', 1, 2), array(' 2 ', 1, 1)) as $position => $values) {
+	$legacy[] = (object) array('fk_powerplant' => 2, 'fk_inverter' => 0, 'inverter_label' => $values[0], 'mppt_number' => $values[1], 'pv_input_number' => $values[2], 'position' => $position, 'stable_key' => 'manual:'.$position);
+}
+$otherPlant = clone $legacy[1];
+$otherPlant->fk_powerplant = 3;
+$legacyGroups = PowerPlantPVReportPresentation::groupMeasures(array_merge($legacy, array($otherPlant)));
+checkMaintenance(array_keys($legacyGroups) === array('2:manual:label:2', '2:manual:label:10', '3:manual:label:2'), 'Legacy inverter labels group within each plant in natural order');
+checkMaintenance(array_keys($legacyGroups['2:manual:label:2']['mppts']) === array(1, 2), 'Legacy MPPTs are grouped and ordered numerically');
+checkMaintenance(array_column($legacyGroups['2:manual:label:2']['mppts'][1], 'pv_input_number') === array(1, 2), 'Legacy inputs are ordered numerically within each MPPT');
 $identity = $groups['2:line:1']['identity'];
 checkMaintenance(PowerPlantPVReportPresentation::identity($identity, false) === 'O1 | Identical product', 'Mobile identity excludes serial');
 checkMaintenance(PowerPlantPVReportPresentation::identity($identity) === 'O1 | Identical product | SN1', 'Desktop identity includes serial');

@@ -257,11 +257,23 @@ if (($action === 'save_draft' || $action === 'save') && $caneditreport) {
 				$requiredValidationFailed = 1;
 				powerplantpvReportSetMissingRequiredFieldsError($missingRequiredFields);
 			} else {
-				$result = $builder->saveValues((int) $report->id, $values, $dateValues, $user, PowerPlantPVReport::STATUS_SAVED);
-				if ($result >= 0) {
-					$interventionValidationResult = powerplantpvReportValidateInterventionIfNeeded($intervention, $user);
-					if ($interventionValidationResult < 0) {
+				if ($db->begin() <= 0) {
+					$result = -1;
+					$builder->error = $db->lasterror();
+				} else {
+					$result = $builder->saveValues((int) $report->id, $values, $dateValues, $user, PowerPlantPVReport::STATUS_SAVED);
+					if ($result >= 0) {
+						$interventionValidationResult = powerplantpvReportValidateInterventionIfNeeded($intervention, $user);
+						if ($interventionValidationResult < 0) {
+							$result = -1;
+						}
+					}
+					if ($result >= 0 && $db->commit() <= 0) {
 						$result = -1;
+						$builder->error = $db->lasterror();
+					}
+					if ($result < 0) {
+						$db->rollback();
 					}
 				}
 			}
@@ -1063,6 +1075,8 @@ function powerplantpvReportRenderSections($sections, $editable, $form, $powerpla
 		$groups[$key]['sections'][] = $row;
 	}
 
+	$dcMeasuresAnchors = array();
+	$singlePlant = count($powerplants) === 1 ? powerplantpvReportPowerplantSourceId(reset($powerplants)) : 0;
 	foreach ($groups as $group) {
 		if (!empty($group['powerplant'])) {
 			print load_fiche_titre(dol_escape_htmltag(powerplantpvReportPowerplantLabel($group['powerplant'])), '', 'fa-industry');
@@ -1080,7 +1094,15 @@ function powerplantpvReportRenderSections($sections, $editable, $form, $powerpla
 			$label = powerplantpvReportLocalizedObjectLabel($section, 'section_label');
 			$identity = !empty($row['equipment']) ? (object) $row['equipment'] : null;
 			$identity = $identity && (string) $identity->equipment_type === 'INVERTER' ? $identity : null;
-			print '<details class="powerplantpv-report-section" data-state-key="section:'.hash('sha256', (string) ($section->fk_powerplant ?? '').':'.(string) $section->section_code.':'.(string) ($section->occurrence_key ?? '')).'" open>';
+			$anchor = '';
+			if ((string) $section->section_code === 'DC_ELECTRICAL_MEASURE') {
+				$plantId = empty($group['powerplant']) ? $singlePlant : powerplantpvReportPowerplantSourceId($group['powerplant']);
+				if ($plantId > 0 && !isset($dcMeasuresAnchors[$plantId])) {
+					$anchor = ' id="powerplantpv-dc-measures-'.$plantId.'"';
+					$dcMeasuresAnchors[$plantId] = true;
+				}
+			}
+			print '<details'.$anchor.' class="powerplantpv-report-section" data-state-key="section:'.hash('sha256', (string) ($section->fk_powerplant ?? '').':'.(string) $section->section_code.':'.(string) ($section->occurrence_key ?? '')).'" open>';
 			print '<summary class="liste_titre"><span>'.dol_escape_htmltag($label).'</span><span class="powerplantpv-report-progress opacitymedium" data-progress-label="'.dol_escape_htmltag($langs->transnoentities('PowerPlantPVReportProgress')).'"></span>';
 			if ($identity) {
 				print ' <span class="powerplantpv-identity-mobile">'.dol_escape_htmltag(PowerPlantPVReportPresentation::identity($identity, false)).'</span>';

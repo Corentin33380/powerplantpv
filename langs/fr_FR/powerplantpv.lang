@@ -1399,6 +1399,7 @@ PowerPlantPVVisualChartLegendGroundVoltage=Bleu : tension à vide (V) | Orange :
 PowerPlantPVInsulationNegativeToGround = Isolement - / terre
 PowerPlantPVAddDcMeasureLine = Ajouter une ligne de mesure DC
 PowerPlantPVDcMeasureLineAdded = Ligne de mesure DC ajoutée
+PowerPlantPVMaintenanceDcHistory = Mesures électriques DC du rapport
 PowerPlantPVDcMeasureNoConfigurationManualMode = Aucune configuration MPPT / entrée PV installée n'est renseignée pour cette section. Le rapport reste saisissable en mode manuel.
 PowerPlantPVReportManualLineAfterFirstSave = Enregistrez d'abord le rapport pour ajouter des lignes manuelles.
 PowerPlantPVManualDcLine = Ligne manuelle
