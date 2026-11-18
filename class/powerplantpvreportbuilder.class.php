@@ -196,9 +196,10 @@ class PowerPlantPVReportBuilder
 			$sourceId = (int) $equipment->fk_powerplant_line;
 			if ($sourceId <= 0) { $sourceId = (int) $equipment->fk_source_equipment; }
 			foreach ($row['fields'] as $field) {
-				if ((string) $field->field_code !== 'INVERTER_PRODUCTION_N_MINUS_1') { continue; }
+				$typeCode = $this->productionReadingTypeCodeFromField((string) $field->field_code, 1);
+				if (!in_array($typeCode, array('INVERTER_PRODUCTION', 'INVERTER_INJECTION'), true)) { continue; }
 				$archive = new PowerPlantPVIndexReading($this->db);
-				$latest = $archive->fetchLatestValue((int) $equipment->fk_powerplant, 'INVERTER_PRODUCTION', '', (int) $report->id, $sourceId);
+				$latest = $archive->fetchLatestValue((int) $equipment->fk_powerplant, $typeCode, '', (int) $report->id, $sourceId);
 				if ($archive->error !== '') { $this->copyErrorsFrom($archive); return -1; }
 				$field->value_number = is_array($latest) ? $latest['value'] : null;
 			}
@@ -374,7 +375,15 @@ class PowerPlantPVReportBuilder
 				}
 			} elseif ((string) $section->section_code === 'PRODUCTION_READING' && (int) $section->fk_report_equipment > 0) {
 				foreach ($row['fields'] as $field) {
-					if ((string) $field->field_code === 'INVERTER_PRODUCTION_N_MINUS_1' && $field->update($user, 0) < 0) { $this->copyErrorsFrom($field); $this->db->rollback(); return -1; }
+					if ((int) $field->id <= 0) {
+						if (isset($oldValues[(string) $field->stable_key]) && empty($field->readonly)) { $this->copyStoredValueToField($field, $oldValues[(string) $field->stable_key]); }
+						$result = $field->create($user, 0);
+					} elseif (in_array((string) $field->field_code, array('INVERTER_PRODUCTION_N_MINUS_1', 'INVERTER_INJECTION_N_MINUS_1'), true)) {
+						$result = $field->update($user, 0);
+					} else {
+						continue;
+					}
+					if ($result <= 0) { $this->copyErrorsFrom($field); $this->db->rollback(); return -1; }
 				}
 			} elseif ((string) $section->section_code === 'PRODUCTION_READING' && (int) $section->fk_report_equipment === 0) {
 				foreach ($row['fields'] as $field) {
@@ -1255,6 +1264,7 @@ class PowerPlantPVReportBuilder
 	{
 		return array(
 			'INVERTER_PRODUCTION' => 'INVERTER_PRODUCTION',
+			'INVERTER_INJECTION' => 'INVERTER_INJECTION',
 			'PRODUCTION_INDEX' => 'PRODUCTION_INDEX',
 			'INJECTION_INDEX' => 'INJECTION_INDEX',
 			'CONSUMPTION_INDEX' => 'CONSUMPTION_INDEX',

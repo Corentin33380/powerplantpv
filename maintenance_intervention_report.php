@@ -58,6 +58,7 @@ dol_include_once('/powerplantpv/class/powerplantpvreport.class.php');
 dol_include_once('/powerplantpv/class/powerplantpvreportbuilder.class.php');
 dol_include_once('/powerplantpv/class/powerplantpvreportfield.class.php');
 dol_include_once('/powerplantpv/class/powerplantpvreportfile.class.php');
+require_once __DIR__.'/lib/powerplantpv_indexphoto.lib.php';
 dol_include_once('/powerplantpv/class/powerplantpvreportdcmeasure.class.php');
 dol_include_once('/powerplantpv/class/powerplantpvpowerplantsummary.class.php');
 require_once __DIR__.'/class/powerplantpvreportpresentation.class.php';
@@ -125,6 +126,16 @@ $report = new PowerPlantPVReport($db);
 $reportFetch = $report->fetchByIntervention($id);
 if ($reportFetch < 0) {
 	setEventMessages($report->error, $report->errors, 'errors');
+}
+
+if ($action === 'view_index_photo') {
+	$field = new PowerPlantPVReportField($db);
+	if ($reportFetch <= 0 || $field->fetch(GETPOSTINT('field_id')) <= 0
+		|| (int) $field->fk_report !== (int) $report->id || (int) $field->entity !== (int) $report->entity
+		|| !powerplantpvReportIndexPhotoField($field)) {
+		accessforbidden();
+	}
+	powerplantpvIndexPhotoDownload(powerplantpvReportIndexPhotoPath($field));
 }
 
 $sensitiveActions = array('save_draft', 'save', 'recalculate', 'upload_file', 'delete_file', 'add_dc_measure_line');
@@ -208,6 +219,14 @@ if (($action === 'save_draft' || $action === 'save') && $caneditreport) {
 		}
 		$interventionValidationResult = 0;
 		$requiredValidationFailed = 0;
+		if ($result >= 0) {
+			$photoErrors = powerplantpvReportSaveIndexPhotos($report, (string) $status === PowerPlantPVReport::STATUS_SAVED);
+			if ($photoErrors) {
+				$result = -1;
+				$requiredValidationFailed = 1;
+				setEventMessages(null, $photoErrors, 'errors');
+			}
+		}
 		if ($result >= 0 && (string) $status === PowerPlantPVReport::STATUS_SAVED) {
 			$missingRequiredFields = powerplantpvReportFindMissingRequiredFields((int) $report->id);
 			if (!is_array($missingRequiredFields)) {
@@ -1666,7 +1685,9 @@ function powerplantpvReportRenderField($field, $editable, $form)
 		} else {
 			print '<div class="powerplantpv-report-readonly">'.dol_htmlentitiesbr((string) $value).'</div>';
 		}
-		print '</div></div>';
+		print '</div>';
+		powerplantpvReportRenderIndexPhoto($field, false);
+		print '</div>';
 		return;
 	}
 
@@ -1711,7 +1732,73 @@ function powerplantpvReportRenderField($field, $editable, $form)
 		print '<span class="opacitymedium powerplantpv-report-unit">'.dol_escape_htmltag((string) $field->unit).'</span>';
 	}
 	print '</div>';
+	powerplantpvReportRenderIndexPhoto($field, true);
 	print '</div>';
+}
+
+function powerplantpvReportIndexPhotoField(PowerPlantPVReportField $field): bool
+{
+	return empty($field->readonly) && (int) $field->visible_form > 0
+		&& powerplantpvIndexPhotoApplies((string) $field->field_code)
+		&& powerplantpvReportIsNumericFieldType((string) $field->field_type);
+}
+
+function powerplantpvReportIndexPhotoPath(PowerPlantPVReportField $field, bool $create = false): string
+{
+	if ($field->value_number === null || !is_numeric($field->value_number)) {
+		return '';
+	}
+	// Bind evidence to the saved index, including zero, across snapshot rebuilds.
+	$identity = $field->stable_key.':'.sprintf('%.8F', (float) $field->value_number);
+	return powerplantpvIndexPhotoPath((int) $field->entity, 'report', (int) $field->fk_report, $identity, $create);
+}
+
+/** @return list<string> Labels of uploads or required photos that need attention. */
+function powerplantpvReportSaveIndexPhotos(PowerPlantPVReport $report, bool $finalize): array
+{
+	global $db, $langs;
+
+	$required = $finalize && powerplantpvIndexPhotoRequired((int) $report->entity);
+	$fields = (new PowerPlantPVReportField($db))->fetchAllByReport((int) $report->id, 'position', 'ASC');
+	if (!is_array($fields)) {
+		return array($langs->trans('ErrorRecordNotFound'));
+	}
+	$errors = array();
+	foreach ($fields as $field) {
+		if (!powerplantpvReportIndexPhotoField($field)) {
+			continue;
+		}
+		$key = 'index_photo_'.hash('sha256', (string) $field->stable_key);
+		$upload = $_FILES[$key] ?? array();
+		$hasUpload = is_array($upload) && ($upload['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_NO_FILE;
+		$path = powerplantpvReportIndexPhotoPath($field, $hasUpload);
+		$label = powerplantpvReportLocalizedObjectLabel($field, 'field_label');
+		if ($hasUpload && !powerplantpvIndexPhotoStore($upload, $path)) {
+			$errors[] = $label.' — '.$langs->trans('PowerPlantPVIndexPhotoInvalid');
+		} elseif ($required && is_numeric($field->value_number) && ($path === '' || !is_file($path))) {
+			$errors[] = $label.' — '.$langs->trans('PowerPlantPVIndexPhotoRequired');
+		}
+	}
+	return $errors;
+}
+
+function powerplantpvReportRenderIndexPhoto(PowerPlantPVReportField $field, bool $editable): void
+{
+	global $langs;
+
+	if (!powerplantpvReportIndexPhotoField($field)) {
+		return;
+	}
+	$path = powerplantpvReportIndexPhotoPath($field);
+	if ($path !== '' && is_file($path)) {
+		$url = dol_buildpath('/powerplantpv/maintenance_intervention_report.php', 1).'?id='.GETPOSTINT('id').'&action=view_index_photo&field_id='.(int) $field->id;
+		print '<div><a href="'.dol_escape_htmltag($url).'">'.img_picto('', 'fa-camera').' '.$langs->trans('PowerPlantPVIndexPhoto').'</a></div>';
+	}
+	if ($editable && powerplantpvIndexPhotoAvailable()) {
+		$key = 'index_photo_'.hash('sha256', (string) $field->stable_key);
+		print '<div><label for="'.$key.'">'.$langs->trans('PowerPlantPVIndexPhoto').'</label>';
+		print '<input type="file" id="'.$key.'" name="'.$key.'" accept="image/jpeg,image/png" class="flat"></div>';
+	}
 }
 
 /**

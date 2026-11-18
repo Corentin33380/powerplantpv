@@ -68,6 +68,31 @@ class PowerPlantPVInverterProduction
 				$existing[$key] = true;
 			}
 		}
+		foreach ($sections as &$row) {
+			$section = $row['section'];
+			if ((string) $section->section_code !== 'PRODUCTION_READING' || (int) $section->fk_report_equipment <= 0) {
+				continue;
+			}
+			$fieldsByCode = array_column($row['fields'], null, 'field_code');
+			foreach (array('' => 'N', '_N_MINUS_1' => 'N−1') as $suffix => $period) {
+				$code = 'INVERTER_INJECTION'.$suffix;
+				$template = $fieldsByCode['INVERTER_PRODUCTION'.$suffix] ?? null;
+				if (isset($fieldsByCode[$code]) || !$template) {
+					continue;
+				}
+				$field = clone $template;
+				$field->id = $field->rowid = 0;
+				$field->fk_report_section = (int) $section->id;
+				$field->field_code = $code;
+				$field->stable_key = $section->occurrence_key.':field:'.$code;
+				$field->field_label = 'Index d’injection onduleur '.$period;
+				$field->field_label_en = 'Inverter export meter index '.$period;
+				$field->is_required = 0;
+				$field->value_number = $field->value_text = $field->value_date = null;
+				$row['fields'][] = $field;
+			}
+		}
+		unset($row);
 		$tree['sections'] = $sections;
 		return $tree;
 	}

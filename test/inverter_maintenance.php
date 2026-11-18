@@ -244,7 +244,13 @@ checkMaintenance($expanded['sections'][0]['fields'][0]->readonly === 1 && $expan
 checkMaintenance($expanded['sections'][1]['fields'][0]->value_number === null && $production->value_number === 123, 'New inverter values start empty and source is not mutated');
 checkMaintenance($expanded['sections'][1]['fields'][0]->stable_key !== $expanded['sections'][2]['fields'][0]->stable_key, 'Identical inverter models have distinct stable reading keys');
 checkMaintenance($expanded['sections'][1]['fields'][1]->readonly === 1, 'Per-inverter previous reading is read-only');
-checkMaintenance(count(PowerPlantPVInverterProduction::expand($expanded)['sections']) === 4, 'Repeated draft loading never duplicates inverter sections');
+checkMaintenance($expanded['sections'][1]['fields'][2]->field_code === 'INVERTER_INJECTION'
+	&& $expanded['sections'][1]['fields'][2]->value_number === null
+	&& $expanded['sections'][1]['fields'][2]->is_required === 0, 'Inverter injection is an optional independent reading');
+checkMaintenance($expanded['sections'][1]['fields'][3]->readonly === 1
+	&& $expanded['sections'][1]['fields'][2]->stable_key !== $expanded['sections'][2]['fields'][2]->stable_key, 'Injection history is read-only and scoped to each inverter');
+$reexpanded = PowerPlantPVInverterProduction::expand($expanded);
+checkMaintenance(count($reexpanded['sections']) === 4 && count($reexpanded['sections'][1]['fields']) === 4, 'Repeated draft loading never duplicates inverter sections or fields');
 $tree['report']->status = 'saved';
 checkMaintenance(count(PowerPlantPVInverterProduction::expand($tree)['sections']) === 1, 'Finalized historic reports are not expanded or rewritten');
 $stats = PowerPlantPVReportPresentation::indicators(array(array('fields' => array((object) array('visible_pdf' => 1, 'field_type' => 'conformity_so_valid_obs', 'value_text' => 'observation'), (object) array('visible_pdf' => 1, 'field_type' => 'conformity_so_valid_obs', 'value_text' => ''), (object) array('visible_pdf' => 1, 'field_type' => 'yesno', 'value_text' => '0')), 'dc_measures' => array($unusedInput, $usedInput))));

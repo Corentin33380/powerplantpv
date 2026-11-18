@@ -962,6 +962,15 @@ print $form->selectarray('maintenance_scheduled_intervention_mode', array(
 ), $maintenancescheduledmode, 0, 0, 0, '', 0, 0, 0, '', 'flat minwidth300');
 print '<br><span class="opacitymedium">'.$langs->trans('PowerPlantPVMaintenanceScheduledInterventionModeHelp').'</span></td></tr>';
 print '<tr class="oddeven"><td>'.$langs->trans('PowerPlantPVHideUnusedMppt').'<br><span class="opacitymedium">'.$langs->trans('PowerPlantPVHideUnusedMpptHelp').'</span></td><td>'.ajax_constantonoff('POWERPLANTPV_HIDE_UNUSED_MPPT', array(), (int) $conf->entity, 0, 0, 0, 2, 0, 1).'</td></tr>';
+require_once __DIR__.'/../lib/powerplantpv_indexphoto.lib.php';
+print '<tr class="oddeven"><td>'.$langs->trans('PowerPlantPVRequireIndexPhoto').'<br><span class="opacitymedium">'.$langs->trans('PowerPlantPVRequireIndexPhotoHelp').'</span></td><td>';
+if (powerplantpvIndexPhotoAvailable() || getDolGlobalInt('POWERPLANTPV_REQUIRE_INDEX_PHOTO')) {
+	print ajax_constantonoff('POWERPLANTPV_REQUIRE_INDEX_PHOTO', array(), (int) $conf->entity, 0, 0, 0, 2, 0, 1);
+}
+if (!powerplantpvIndexPhotoAvailable()) {
+	print '<div class="opacitymedium">'.$langs->trans('PowerPlantPVIndexPhotoUnavailable').'</div>';
+}
+print '</td></tr>';
 print '<tr class="oddeven"><td>'.$langs->trans('PowerPlantPVMaintenanceWeeklyReminderEnable').'</td><td>'.ajax_constantonoff('POWERPLANTPV_MAINTENANCE_WEEKLY_REMINDER_ENABLE', array(), (int) $conf->entity, 0, 0, 0, 2, 0, 1).'</td></tr>';
 print '<tr class="oddeven"><td>'.$langs->trans('PowerPlantPVMaintenanceWeeklyReminderStartTime').'</td><td>'.$form->selectDate($maintenanceweeklystart, 'maintenance_weekly_reminder_start', 1, 1, 1, '', 1, 1).'</td></tr>';
 print '<tr class="oddeven"><td>'.$langs->trans('PowerPlantPVMaintenanceMonthlyReminderEnable').'</td><td>'.ajax_constantonoff('POWERPLANTPV_MAINTENANCE_MONTHLY_REMINDER_ENABLE', array(), (int) $conf->entity, 0, 0, 0, 2, 0, 1).'</td></tr>';
