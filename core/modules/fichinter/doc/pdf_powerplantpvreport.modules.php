@@ -246,6 +246,7 @@ class pdf_powerplantpvreport extends ModelePDFFicheinter
 		$this->currentOutputLangs = $outputlangs;
 		$this->completedPageFooters = array();
 		$this->visualHeaders = array();
+		$this->visualInverterNumbers = array();
 		$this->visualReportTitle = PowerPlantPVReportPdfDataset::localizedProperty($dataset['report'], 'report_template_label', $outputlangs);
 
 		$pdf->Open();
