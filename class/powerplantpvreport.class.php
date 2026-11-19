@@ -48,6 +48,12 @@ class PowerPlantPVReport extends PowerPlantPVReportGeneratedBase
 		'fk_user_technical_sign' => array('type' => 'integer:User:user/class/user.class.php', 'label' => 'PowerPlantPVVisualTechnicalServiceSignature', 'enabled' => 1, 'position' => 71, 'notnull' => 0, 'visible' => 0),
 		'date_technical_sign' => array('type' => 'datetime', 'label' => 'Date', 'enabled' => 1, 'position' => 72, 'notnull' => 0, 'visible' => 0),
 		'technical_signer_name' => array('type' => 'varchar(255)', 'label' => 'Name', 'enabled' => 1, 'position' => 73, 'notnull' => 0, 'visible' => 0),
+		'fk_user_technician_sign' => array('type' => 'integer:User:user/class/user.class.php', 'label' => 'PowerPlantPVReportTechnicianSignature', 'enabled' => 1, 'position' => 74, 'notnull' => 0, 'visible' => 0),
+		'date_technician_sign' => array('type' => 'datetime', 'label' => 'Date', 'enabled' => 1, 'position' => 75, 'notnull' => 0, 'visible' => 0),
+		'technician_signer_name' => array('type' => 'varchar(255)', 'label' => 'Name', 'enabled' => 1, 'position' => 76, 'notnull' => 0, 'visible' => 0),
+		'fk_user_customer_sign' => array('type' => 'integer:User:user/class/user.class.php', 'label' => 'PowerPlantPVVisualCustomerSignature', 'enabled' => 1, 'position' => 77, 'notnull' => 0, 'visible' => 0),
+		'date_customer_sign' => array('type' => 'datetime', 'label' => 'Date', 'enabled' => 1, 'position' => 78, 'notnull' => 0, 'visible' => 0),
+		'customer_signer_name' => array('type' => 'varchar(255)', 'label' => 'Name', 'enabled' => 1, 'position' => 79, 'notnull' => 0, 'visible' => 0),
 		'date_creation' => array('type' => 'datetime', 'label' => 'DateCreation', 'enabled' => 1, 'position' => 500, 'notnull' => 0, 'visible' => -2),
 		'tms' => array('type' => 'timestamp', 'label' => 'DateModification', 'enabled' => 1, 'position' => 501, 'notnull' => 0, 'visible' => -2),
 		'fk_user_creat' => array('type' => 'integer:User:user/class/user.class.php', 'label' => 'UserAuthor', 'enabled' => 1, 'position' => 510, 'notnull' => 0, 'visible' => -2),
@@ -71,6 +77,100 @@ class PowerPlantPVReport extends PowerPlantPVReportGeneratedBase
 	public $fk_user_technical_sign;
 	public $date_technical_sign;
 	public $technical_signer_name;
+	public $fk_user_technician_sign;
+	public $date_technician_sign;
+	public $technician_signer_name;
+	public $fk_user_customer_sign;
+	public $date_customer_sign;
+	public $customer_signer_name;
+
+	/** Whether any technician, technical department or customer signature froze this report. */
+	public function hasAnySignature(): bool
+	{
+		return (int) $this->fk_user_technical_sign > 0 || (int) $this->fk_user_technician_sign > 0 || !empty($this->date_customer_sign);
+	}
+
+	/**
+	 * Check that the signer is an assigned internal technician of the intervention.
+	 * @param Fichinter $intervention Authorized intervention with native contacts
+	 * @param User $signer Authenticated internal user
+	 */
+	public function isAssignedTechnician($intervention, User $signer): bool
+	{
+		if ((int) $signer->socid > 0 || (int) $signer->id <= 0 || (int) $this->fk_fichinter !== (int) $intervention->id
+			|| (int) $this->entity !== (int) $intervention->entity) {
+			return false;
+		}
+		$contacts = $intervention->liste_contact(-1, 'internal');
+		if (!is_array($contacts)) {
+			return false;
+		}
+		foreach ($contacts as $contact) {
+			if (in_array($contact['code'] ?? '', array('INTERVENING', 'INTERREPFOLL'), true) && (int) ($contact['id'] ?? 0) === (int) $signer->id) {
+				return true;
+			}
+		}
+
+		return false;
+	}
+
+	/**
+	 * Check that the user is the works manager ("conducteur de travaux") contact of a power plant of this report.
+	 * @param User $user Authenticated internal user
+	 */
+	public function isWorksManager(User $user): bool
+	{
+		if ((int) $user->socid > 0 || (int) $user->id <= 0 || (int) $this->id <= 0) {
+			return false;
+		}
+		$sql = "SELECT ec.rowid FROM ".$this->db->prefix()."element_contact as ec";
+		$sql .= " INNER JOIN ".$this->db->prefix()."c_type_contact as tc ON tc.rowid = ec.fk_c_type_contact";
+		$sql .= " INNER JOIN ".$this->db->prefix()."powerplantpv_report_powerplant as rp ON rp.fk_powerplant = ec.element_id";
+		$sql .= " WHERE rp.fk_report = ".((int) $this->id)." AND rp.entity = ".((int) $this->entity);
+		$sql .= " AND tc.element = 'powerplant' AND tc.source = 'internal' AND tc.code = 'CENTPV_INTERNAL_WORKS_MANAGER'";
+		$sql .= " AND ec.fk_socpeople = ".((int) $user->id);
+		$result = $this->db->query($sql);
+		if (!$result) {
+			return false;
+		}
+		$found = is_object($this->db->fetch_object($result));
+		$this->db->free($result);
+
+		return $found;
+	}
+
+	/** Record the assigned technician's drawn signature once for this finalized snapshot. */
+	public function signAsTechnician($intervention, User $signer, string $signerName): int
+	{
+		if (!$this->isSaved() || !$this->isAssignedTechnician($intervention, $signer)) {
+			return -1;
+		}
+		$sql = "UPDATE ".$this->db->prefix().$this->table_element;
+		$sql .= " SET fk_user_technician_sign = ".((int) $signer->id).", date_technician_sign = '".$this->db->idate(dol_now())."'";
+		$sql .= ", technician_signer_name = '".$this->db->escape(dol_substr($signerName, 0, 255))."'";
+		$sql .= " WHERE rowid = ".((int) $this->id)." AND entity = ".((int) $this->entity);
+		$sql .= " AND status = '".self::STATUS_SAVED."' AND fk_user_technician_sign IS NULL";
+		$result = $this->db->query($sql);
+
+		return $result && (int) $this->db->affected_rows($result) === 1 ? 1 : -1;
+	}
+
+	/** Record the customer's signature drawn on the device of the user collecting it. */
+	public function signAsCustomer(User $collector, string $customerName): int
+	{
+		$customerName = trim($customerName);
+		if (!$this->isSaved() || $customerName === '' || (int) $collector->id <= 0 || (int) $collector->socid > 0) {
+			return -1;
+		}
+		$sql = "UPDATE ".$this->db->prefix().$this->table_element;
+		$sql .= " SET fk_user_customer_sign = ".((int) $collector->id).", date_customer_sign = '".$this->db->idate(dol_now())."'";
+		$sql .= ", customer_signer_name = '".$this->db->escape(dol_substr($customerName, 0, 255))."'";
+		$sql .= " WHERE rowid = ".((int) $this->id)." AND entity = ".((int) $this->entity);
+		$sql .= " AND status = '".self::STATUS_SAVED."' AND date_customer_sign IS NULL";
+		$result = $this->db->query($sql);
+
+		return $result && (int) $this->db->affected_rows($result) === 1 ? 1 : -1;
+	}
 
 	public function technicalSignatureEnabled(): bool
 	{
@@ -141,10 +241,10 @@ class PowerPlantPVReport extends PowerPlantPVReportGeneratedBase
 		return $result && (int) $this->db->affected_rows($result) === 1 ? 1 : -1;
 	}
 
-	/** Check the technical signature under a database lock within a report edit transaction. */
+	/** Check that no signature exists under a database lock within a report edit transaction. */
 	public function lockUnsignedForEdit(): bool
 	{
-		$sql = "SELECT fk_user_technical_sign FROM ".$this->db->prefix().$this->table_element;
+		$sql = "SELECT fk_user_technical_sign, fk_user_technician_sign, date_customer_sign FROM ".$this->db->prefix().$this->table_element;
 		$sql .= " WHERE rowid = ".((int) $this->id)." AND entity = ".((int) $this->entity)." FOR UPDATE";
 		$result = $this->db->query($sql);
 		if (!$result) {
@@ -153,7 +253,7 @@ class PowerPlantPVReport extends PowerPlantPVReportGeneratedBase
 		$row = $this->db->fetch_object($result);
 		$this->db->free($result);
 
-		return is_object($row) && empty($row->fk_user_technical_sign);
+		return is_object($row) && empty($row->fk_user_technical_sign) && empty($row->fk_user_technician_sign) && empty($row->date_customer_sign);
 	}
 
 	/**

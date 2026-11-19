@@ -22,6 +22,7 @@ require_once __DIR__.'/../../../../class/powerplantpvreportpresentation.class.ph
 require_once __DIR__.'/../../../../class/powerplantpvreportillustration.class.php';
 require_once __DIR__.'/../../../../class/powerplant.class.php';
 require_once __DIR__.'/powerplantpvreportvisualpdf.trait.php';
+require_once __DIR__.'/../../../../lib/powerplantpv_reportsignature.lib.php';
 dol_include_once('/powerplantpv/class/powerplantpvpowerplantsummary.class.php');
 
 /**
@@ -935,8 +936,8 @@ class pdf_powerplantpvreport extends ModelePDFFicheinter
 			'negative_to_ground_voltage' => array('PowerPlantPVNegativeToGroundVoltage', 'V'),
 		);
 		$resistance = array(
-			'insulation_positive_to_ground' => array('PowerPlantPVInsulationPositiveToGround', 'MOhm'),
-			'insulation_negative_to_ground' => array('PowerPlantPVInsulationNegativeToGround', 'MOhm'),
+			'insulation_positive_to_ground' => array('PowerPlantPVInsulationPositiveToGround', 'V'),
+			'insulation_negative_to_ground' => array('PowerPlantPVInsulationNegativeToGround', 'V'),
 		);
 		$hasVoltages = $hasResistances = false;
 		foreach ($group['mppts'] as $measures) {

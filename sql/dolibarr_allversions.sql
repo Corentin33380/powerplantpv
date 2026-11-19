@@ -643,6 +643,12 @@ CREATE TABLE IF NOT EXISTS llx_powerplantpv_report(
 	fk_user_technical_sign integer,
 	date_technical_sign datetime,
 	technical_signer_name varchar(255),
+	fk_user_technician_sign integer,
+	date_technician_sign datetime,
+	technician_signer_name varchar(255),
+	fk_user_customer_sign integer,
+	date_customer_sign datetime,
+	customer_signer_name varchar(255),
 	date_creation datetime,
 	tms timestamp DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
 	fk_user_creat integer,
@@ -652,6 +658,12 @@ CREATE TABLE IF NOT EXISTS llx_powerplantpv_report(
 ALTER TABLE llx_powerplantpv_report ADD COLUMN IF NOT EXISTS fk_user_technical_sign integer;
 ALTER TABLE llx_powerplantpv_report ADD COLUMN IF NOT EXISTS date_technical_sign datetime;
 ALTER TABLE llx_powerplantpv_report ADD COLUMN IF NOT EXISTS technical_signer_name varchar(255);
+ALTER TABLE llx_powerplantpv_report ADD COLUMN IF NOT EXISTS fk_user_technician_sign integer;
+ALTER TABLE llx_powerplantpv_report ADD COLUMN IF NOT EXISTS date_technician_sign datetime;
+ALTER TABLE llx_powerplantpv_report ADD COLUMN IF NOT EXISTS technician_signer_name varchar(255);
+ALTER TABLE llx_powerplantpv_report ADD COLUMN IF NOT EXISTS fk_user_customer_sign integer;
+ALTER TABLE llx_powerplantpv_report ADD COLUMN IF NOT EXISTS date_customer_sign datetime;
+ALTER TABLE llx_powerplantpv_report ADD COLUMN IF NOT EXISTS customer_signer_name varchar(255);
 ALTER TABLE llx_powerplantpv_report ADD UNIQUE INDEX IF NOT EXISTS uk_powerplantpv_report_fichinter (entity, fk_fichinter);
 ALTER TABLE llx_powerplantpv_report ADD INDEX IF NOT EXISTS idx_powerplantpv_report_entity (entity);
 ALTER TABLE llx_powerplantpv_report ADD INDEX IF NOT EXISTS idx_powerplantpv_report_soc (fk_soc);

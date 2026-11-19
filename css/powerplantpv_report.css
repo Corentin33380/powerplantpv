@@ -462,3 +462,9 @@
 	.page-maintenance-intervention-report button.powerplantpv-save-collapse[type="submit"] { display: inline-flex; align-items: center; justify-content: center; min-width: 44px; min-height: 44px; padding: 8px; margin: 0; }
 	.page-maintenance-intervention-report .powerplantpv-dc-card { scroll-margin-top: 110px; }
 }
+.page-maintenance-intervention-report .powerplantpv-erp-signatures { margin-top: 16px; }
+.page-maintenance-intervention-report .powerplantpv-signature-form > * { margin: 4px 0; }
+.page-maintenance-intervention-report .powerplantpv-signature-pad { max-width: 600px; border: 1px dashed #b8c0cc; border-radius: 4px; background: #fff; }
+.page-maintenance-intervention-report .powerplantpv-signature-pad-empty { border-color: #c0392b; }
+.page-maintenance-intervention-report .powerplantpv-signature-pad canvas { display: block; width: 100%; height: auto; aspect-ratio: 3 / 1; touch-action: none; cursor: crosshair; }
+.page-maintenance-intervention-report .powerplantpv-signature-image { max-width: 300px; max-height: 100px; margin-top: 4px; }

@@ -1,5 +1,11 @@
 # CHANGELOG MODULE POWERPLANTPV FOR [DOLIBARR ERP CRM](https://www.dolibarr.org)
 
+## Non publié
+
+- Mesures DC : les anciennes valeurs « Isolement + / − terre » sont des tensions d’isolement, affichées en volts dans la fiche, le tableau et le graphique du PDF.
+- Finalisation : le conducteur de travaux de la centrale (contact interne « Conducteur de travaux ») peut finaliser le rapport même si des photos d’index obligatoires manquent ; les photos absentes sont signalées en avertissement.
+- Signatures dessinées directement dans l’ERP pour le technicien affecté, le responsable technique et le client, reprises avec nom et date dans les cadres du PDF. Toute signature verrouille le rapport. Actualiser le module par l’action native de Dolibarr pour ajouter les colonnes de signature.
+
 ## 1.8.0 — 2026-11-18
 
 - Mesures DC : détail des chaînes dans le rapport principal. Une action par chaîne permet de reprendre dans les champs de tension vides les anciennes valeurs dont la mesure en volts est confirmée.

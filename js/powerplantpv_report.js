@@ -336,3 +336,84 @@
 		}
 	});
 }());
+/* Signature pads drawn directly in the ERP (technician, technical department, customer). */
+(function () {
+	'use strict';
+
+	function initSignaturePad(form) {
+		var canvas = form.querySelector('.powerplantpv-signature-pad canvas');
+		var input = form.querySelector('input[name="signature_image"]');
+		var clear = form.querySelector('.powerplantpv-signature-clear');
+		if (!canvas || !input || !canvas.getContext) {
+			return;
+		}
+		var context = canvas.getContext('2d');
+		var drawing = false;
+		var hasInk = false;
+		var last = null;
+		context.lineWidth = 2.5;
+		context.lineCap = 'round';
+		context.lineJoin = 'round';
+		context.strokeStyle = '#17284a';
+
+		function point(event) {
+			var rect = canvas.getBoundingClientRect();
+			return {
+				x: (event.clientX - rect.left) * canvas.width / rect.width,
+				y: (event.clientY - rect.top) * canvas.height / rect.height
+			};
+		}
+		function start(event) {
+			drawing = true;
+			last = point(event);
+			if (canvas.setPointerCapture) {
+				canvas.setPointerCapture(event.pointerId);
+			}
+			event.preventDefault();
+		}
+		function move(event) {
+			if (!drawing) {
+				return;
+			}
+			var current = point(event);
+			context.beginPath();
+			context.moveTo(last.x, last.y);
+			context.lineTo(current.x, current.y);
+			context.stroke();
+			last = current;
+			hasInk = true;
+			event.preventDefault();
+		}
+		function stop() {
+			if (drawing && hasInk) {
+				input.value = canvas.toDataURL('image/png');
+			}
+			drawing = false;
+		}
+		canvas.addEventListener('pointerdown', start);
+		canvas.addEventListener('pointermove', move);
+		canvas.addEventListener('pointerup', stop);
+		canvas.addEventListener('pointercancel', stop);
+		canvas.addEventListener('pointerleave', stop);
+		if (clear) {
+			clear.addEventListener('click', function () {
+				context.clearRect(0, 0, canvas.width, canvas.height);
+				input.value = '';
+				hasInk = false;
+			});
+		}
+		form.addEventListener('submit', function (event) {
+			if (!hasInk || input.value === '') {
+				event.preventDefault();
+				canvas.parentNode.classList.add('powerplantpv-signature-pad-empty');
+			}
+		});
+	}
+
+	document.addEventListener('DOMContentLoaded', function () {
+		var forms = document.querySelectorAll('.powerplantpv-signature-form');
+		for (var i = 0; i < forms.length; i++) {
+			initSignaturePad(forms[i]);
+		}
+	});
+}());

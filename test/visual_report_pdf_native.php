@@ -38,6 +38,7 @@ $conf = (object) array(
 	'file' => (object) array('character_set_client' => 'UTF-8', 'dol_document_root' => array('main' => $core, 'test' => dirname($module)), 'dol_url_root' => array('main' => '', 'test' => '/custom')),
 	'mycompany' => (object) array('dir_output' => $dataRoot.'/mycompany', 'multidir_output' => array(1 => $dataRoot.'/mycompany')),
 	'ficheinter' => (object) array('dir_output' => $dataRoot.'/ficheinter', 'multidir_output' => array(1 => $dataRoot.'/ficheinter')),
+	'powerplantpv' => (object) array('dir_output' => $dataRoot.'/powerplantpv', 'multidir_output' => array(1 => $dataRoot.'/powerplantpv')),
 	'tzuserinputkey' => 'tzserver', 'format_date_short' => '%d/%m/%Y', 'format_date_text_short' => '%d %b %Y',
 );
 $langs = new Translate('', $conf);
@@ -207,6 +208,36 @@ foreach ($runs as $name => $options) {
 	} else {
 		unset($dataset['report']->fk_user_technical_sign, $dataset['report']->date_technical_sign, $dataset['report']->technical_signer_name);
 	}
+	if ($name === 'mixed') {
+		// Signatures drawn in the ERP: stored through the real validation and printed with their signer.
+		$dataset['report']->id = 91;
+		$dataset['report']->entity = 1;
+		$dataset['report']->fk_user_technician_sign = 1;
+		$dataset['report']->date_technician_sign = dol_mktime(9, 0, 0, 11, 19, 2026);
+		$dataset['report']->technician_signer_name = 'Technicien Signataire';
+		$dataset['report']->date_customer_sign = dol_mktime(9, 5, 0, 11, 19, 2026);
+		$dataset['report']->customer_signer_name = 'Client Signataire';
+		$erpSignaturesStored = 0;
+		if (powerplantpvReportSignatureAvailable()) {
+			@mkdir($dataRoot.'/powerplantpv', 0777, true);
+			foreach (array('technician', 'customer') as $role) {
+				$pad = imagecreatetruecolor(600, 200);
+				imagesavealpha($pad, true);
+				imagefill($pad, 0, 0, imagecolorallocatealpha($pad, 255, 255, 255, 127));
+				imagesetthickness($pad, 3);
+				imageline($pad, 40, 150, 560, 60, imagecolorallocate($pad, 23, 40, 74));
+				ob_start(); imagepng($pad); $png = ob_get_clean();
+				$path = powerplantpvReportSignaturePath(1, 91, $role, true);
+				$erpSignaturesStored += (int) powerplantpvReportSignatureStore('data:image/png;base64,'.base64_encode($png), $path);
+			}
+			$blank = imagecreatetruecolor(600, 200);
+			imagefill($blank, 0, 0, imagecolorallocate($blank, 255, 255, 255));
+			ob_start(); imagepng($blank); $blankPng = ob_get_clean();
+			visualPdfCheck(!powerplantpvReportSignatureStore('data:image/png;base64,'.base64_encode($blankPng), $dataRoot.'/powerplantpv/blank.png')
+				&& !powerplantpvReportSignatureStore('data:image/png;base64,'.base64_encode('<?php echo 1;'), $dataRoot.'/powerplantpv/fake.png')
+				&& powerplantpvReportSignaturePath(1, 91, '../customer') === '', 'Blank pads, disguised content and unknown roles are rejected');
+		}
+	}
 	$model = VisualPdfFixture::create($mysoc);
 	$model->snapshot = $snapshot;
 	$file = ($outputDir !== '' ? rtrim($outputDir, '/\\') : $dataRoot).'/visual-'.$name.'.pdf';
@@ -266,6 +297,12 @@ visualPdfCheck(strpos($flat($client), 'Responsable Recette') !== false
 	&& strpos($flat($client), $langs->transnoentities('PowerPlantPVTechnicalSignAuthenticated')) !== false,
 	'An authenticated technical signature prints the recorded signer');
 visualPdfCheck(strpos($default, 'Technicien Test') !== false && strpos($default, $langs->transnoentities('PowerPlantPVVisualCustomerSignature')) !== false, 'Signature cards show the technician and the customer');
+visualPdfCheck(strpos($mixed, 'Technicien Signataire') !== false && strpos($mixed, 'Client Signataire') !== false && strpos($mixed, '19/11/2026') !== false,
+	'Signatures drawn in the ERP print their signer and date');
+if (powerplantpvReportSignatureAvailable()) {
+	visualPdfCheck($erpSignaturesStored === 2 && substr_count(file_get_contents(($outputDir !== '' ? rtrim($outputDir, '/\\') : $dataRoot).'/visual-mixed.pdf'), '/Subtype /Image') >= 2,
+		'Drawn ERP signatures are validated, stored and embedded in the PDF');
+}
 
 $reportFile = $dataRoot.'/pair.pdf';
 $annexFile = $dataRoot.'/pair-annexe.pdf';
