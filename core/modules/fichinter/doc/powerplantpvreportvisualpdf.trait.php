@@ -29,7 +29,7 @@ trait PowerPlantPVReportVisualPdf
 		$plants = array_values($dataset['powerplants']);
 		foreach ($plants as $i => $plant) {
 			if ($i > 0) { $this->visualNewPage($pdf); }
-			$this->visualCover($pdf, $plant, $dataset, $outputlangs);
+			$this->visualCover($pdf, $plant, $dataset, $outputlangs, $i === 0);
 		}
 		$general = array_filter($dataset['general_sections'], function ($row) {
 			return !empty($row['section']->visible_pdf) && in_array((string) $row['section']->section_code, array('GENERAL_INFORMATION', 'GENERAL_OBSERVATIONS'), true);
@@ -150,10 +150,23 @@ trait PowerPlantPVReportVisualPdf
 		return $this->currentOutputLangs->transnoentities('PowerPlantPVVisualInverterNumber', $this->visualInverterNumbers[$key]);
 	}
 
-	/** @param TCPDF|TCPDI $pdf @param PowerPlantPVReportPowerPlant $plant @param array<string,mixed> $dataset @param Translate $langs @return void */
-	protected function visualCover(&$pdf, $plant, $dataset, $langs)
+	/**
+	 * Cover of one plant: indicators, points to report and identity cards.
+	 * @param TCPDF|TCPDI $pdf @param PowerPlantPVReportPowerPlant $plant @param array<string,mixed> $dataset @param Translate $langs
+	 * @param bool $includeGeneral Also count report-level control sections (first cover only, so they are not repeated)
+	 * @return void
+	 */
+	protected function visualCover(&$pdf, $plant, $dataset, $langs, $includeGeneral = false)
 	{
-		$rows = array_filter($dataset['sections_by_powerplant'][(int) $plant->id] ?? array(), static function ($row) { return !empty($row['section']->visible_pdf); });
+		$rows = $dataset['sections_by_powerplant'][(int) $plant->id] ?? array();
+		if ($includeGeneral) {
+			// A control section without matching equipment (e.g. electrical boxes absent from the composition)
+			// is frozen at report level; its answers still belong to the points to report.
+			foreach ($dataset['general_sections'] ?? array() as $row) {
+				if (!in_array((string) $row['section']->section_code, array('GENERAL_INFORMATION', 'GENERAL_OBSERVATIONS', 'CUSTOMER_SIGNATURE'), true)) { $rows[] = $row; }
+			}
+		}
+		$rows = array_filter($rows, static function ($row) { return !empty($row['section']->visible_pdf); });
 		// The same four states feed the card, the answer count and the progress bar.
 		$counts = array('valid' => 0, 'observation' => 0, 'not_applicable' => 0, 'missing' => 0);
 		$dcConnected = 0;
