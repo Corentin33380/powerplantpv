@@ -1,5 +1,9 @@
 # CHANGELOG MODULE POWERPLANTPV FOR [DOLIBARR ERP CRM](https://www.dolibarr.org)
 
+## Correctif en attente
+
+- PDF de maintenance : la synthèse de couverture compte aussi les contrôles figés au niveau du rapport, par exemple les coffrets lorsque la composition de la centrale ne contient aucun coffret. Leurs « Non conforme / observation » apparaissent désormais dans les points à signaler et les indicateurs, une seule fois, sur la première centrale.
+
 ## 1.8.0 — 2026-11-18
 
 - Mesures DC : détail des chaînes dans le rapport principal. Une action par chaîne permet de reprendre dans les champs de tension vides les anciennes valeurs dont la mesure en volts est confirmée.
