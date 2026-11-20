@@ -174,6 +174,8 @@ $sections[] = visualSection('PRODUCTION_READING', 'Relevés', array(
 $general = array(
 	array('section' => (object) array('section_code' => 'GENERAL_INFORMATION', 'section_label' => 'Informations générales', 'visible_pdf' => 1, 'fk_report_powerplant' => 0), 'fields' => array(visualField('GENERAL_INTERVENTION_CONTEXT', 'Contexte de l’intervention', 'textarea', 'Maintenance préventive annuelle de la centrale.')), 'equipment' => null, 'dc_measures' => array()),
 	array('section' => (object) array('section_code' => 'GENERAL_OBSERVATIONS', 'section_label' => 'Observations générales', 'visible_pdf' => 1, 'fk_report_powerplant' => 0), 'fields' => array(visualField('GENERAL_OBSERVATIONS_TEXT', 'Observations générales', 'textarea', "Les contrôles sont conformes.\nConclusion : Aucun défaut majeur ; la fixation du capot reste à reprendre.")), 'equipment' => null, 'dc_measures' => array()),
+	// Control section frozen at report level: no matching equipment in the plant composition.
+	array('section' => (object) array('section_code' => 'ELECTRICAL_BOX', 'section_label' => 'Coffrets sans équipement', 'visible_pdf' => 1, 'fk_report_powerplant' => 0), 'fields' => array(visualField('BOX_PROCEDURES', 'Procédures de mise en sécurité affichées', 'conformity_so_valid_obs', 'observation')), 'equipment' => null, 'dc_measures' => array()),
 );
 $dataset = array(
 	'report_found' => true,
@@ -265,7 +267,8 @@ visualPdfCheck(strpos($default, $materialTitle) === false && strpos($default, $d
 visualPdfCheck(strpos($contents['default-annexe'], $materialTitle) !== false && strpos($contents['default-annexe'], $dcTitle) === false, 'The companion PDF contains equipment without DC tables');
 visualPdfCheck(strpos($contents['client-annexe'], $materialTitle) === false && strpos($client, $dcTitle) !== false && strpos($contents['client-annexe'], '6T22B9036710') === false, 'Companion PDF respects the equipment privacy option');
 visualPdfCheck(strpos($contents['default-annexe'], $langs->transnoentities('PowerPlantPVVisualCustomerSignature')) === false, 'Signature cards stay out of the companion PDF');
-visualPdfCheck(strpos($default, $langs->transnoentities('PowerPlantPVVisualVigilance', 5)) !== false, 'Cover lists observations and explicit No answers: 2 observations, switch, two missing caps');
+visualPdfCheck(strpos($default, $langs->transnoentities('PowerPlantPVVisualVigilance', 6)) !== false, 'Cover lists observations and explicit No answers: 2 plant observations, switch, two missing caps and one report-level control');
+visualPdfCheck(substr_count($default, 'Procédures de mise en sécurité affichées') >= 2, 'A report-level control section counts in the cover points to report, not only in its own panel');
 visualPdfCheck(strpos($default, $langs->transnoentities('PowerPlantPVVisualDelta').' : +525 416') !== false || strpos($default, '+525') !== false, 'Readings show the change since N-1');
 visualPdfCheck(strpos($default, 'Index consommation N') === false, 'A reading never taken does not produce an empty card');
 visualPdfCheck(strpos($default, 'OND-VIDE') === false, 'A section for an inverter without readings or comments does not leave an empty heading');
@@ -279,7 +282,7 @@ $mixed = $flat($contents['mixed']);
 if ($storedSignature) {
 	visualPdfCheck(strpos($mixed, 'Intervenant Signataire') !== false && strpos($mixed, '18/11/2026') !== false, 'The PDF displays the technician signer and date');
 }
-visualPdfCheck(strpos($flat($default), $langs->transnoentities('PowerPlantPVVisualAnswerSummary', 20, 21)) !== false, 'The additional not-applicable answer counts as completed');
+visualPdfCheck(strpos($flat($default), $langs->transnoentities('PowerPlantPVVisualAnswerSummary', 21, 22)) !== false, 'The additional not-applicable answer counts as completed (report-level control included)');
 visualPdfCheck(strpos($flat($default), 'Nettoyage / lubrification des joints Sans objet') !== false, 'The cabinet cleaning row shows Sans objet in the PDF');
 visualPdfCheck(strpos($default, 'Bleu : tension') === false && strpos($default, 'Pointillés :') === false, 'The chart legend uses graphic markers instead of color names');
 visualPdfCheck(strpos($mixed, $langs->transnoentities('PowerPlantPVReportChartMissing')) !== false && strpos($mixed, $langs->transnoentities('PowerPlantPVVisualToCheck')) !== false, 'Incomplete insulation and an unconfirmed zero retain distinct messages');
