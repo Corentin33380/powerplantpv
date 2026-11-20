@@ -99,12 +99,18 @@ class PowerPlantPVInterventionNature extends PowerPlantPVReportConfigBase
 	 */
 	public function configuredPdfModel(Fichinter $intervention): ?string
 	{
-		if ((int) $intervention->id <= 0 || (int) $intervention->entity <= 0) {
+		if ((int) $intervention->id <= 0) {
 			return null;
 		}
-		$sql = "SELECT n.model_pdf FROM ".$this->db->prefix()."fichinter_extrafields AS ef";
-		$sql .= " INNER JOIN ".$this->db->prefix().$this->table_element." AS n ON n.rowid = ef.powerplantpv_intervention_nature";
-		$sql .= " WHERE ef.fk_object = ".((int) $intervention->id)." AND n.entity = ".((int) $intervention->entity);
+		$sql = "SELECT n.model_pdf FROM ".$this->db->prefix()."fichinter AS fi";
+		$sql .= " LEFT JOIN ".$this->db->prefix()."fichinter_extrafields AS ef ON ef.fk_object = fi.rowid";
+		$sql .= " LEFT JOIN ".$this->db->prefix().$this->table_element." AS n";
+		$sql .= " ON n.rowid = ef.powerplantpv_intervention_nature AND n.entity = fi.entity";
+		$sql .= " WHERE fi.rowid = ".((int) $intervention->id);
+		// The v20 create trigger can receive an object without its persisted entity.
+		$sql .= (int) $intervention->entity > 0
+			? " AND fi.entity = ".((int) $intervention->entity)
+			: " AND fi.entity IN (".$this->db->sanitize(getEntity('fichinter', 0)).")";
 		$result = $this->db->query($sql);
 		if (!$result) {
 			return null;
@@ -112,7 +118,7 @@ class PowerPlantPVInterventionNature extends PowerPlantPVReportConfigBase
 		$row = $this->db->fetch_object($result);
 		$this->db->free($result);
 
-		return is_object($row) ? (string) $row->model_pdf : '';
+		return is_object($row) ? (string) $row->model_pdf : null;
 	}
 
 	/**

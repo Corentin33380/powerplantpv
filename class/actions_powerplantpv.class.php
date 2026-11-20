@@ -564,8 +564,8 @@ class ActionsPowerplantpv
 			}
 			if ($model !== '' && $requestedModel !== '' && $requestedModel !== $model) {
 				$langs->load('powerplantpv@powerplantpv');
-				setEventMessages($langs->trans('PowerPlantPVInterventionPdfModelForced', $model), null, 'errors');
-				return 1;
+				$this->error = $langs->trans('PowerPlantPVInterventionPdfModelForced', $model);
+				return -1;
 			}
 		}
 		// The native project card already owns the banner's surrounding POST form.
