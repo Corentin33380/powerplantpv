@@ -13,6 +13,7 @@
  * \brief		Dynamic PDF model for PowerPlantPV intervention reports.
  */
 
+require_once __DIR__.'/../../../../lib/powerplantpv_reportsignature.lib.php';
 require_once DOL_DOCUMENT_ROOT.'/core/modules/fichinter/modules_fichinter.php';
 require_once DOL_DOCUMENT_ROOT.'/core/lib/company.lib.php';
 require_once DOL_DOCUMENT_ROOT.'/core/lib/files.lib.php';
@@ -212,6 +213,11 @@ class pdf_powerplantpvreport extends ModelePDFFicheinter
 		}
 		$basename = !empty($object->specimen) ? 'SPECIMEN' : dol_sanitizeFileName($object->ref);
 		$file = $dir.'/'.$basename.'.pdf';
+		if ($object instanceof Fichinter && PowerPlantPVReport::interventionSignedByThirdParty((int) $object->signed_status)
+			&& preg_match('/_signed-[0-9]{14}\.pdf$/D', (string) $object->last_main_doc)) {
+			// Refresh the internal report without replacing or demoting the client's original signed PDF.
+			$this->update_main_doc_field = 0;
+		}
 		$annexFile = $dir.'/'.$basename.'-annexe.pdf';
 
 		if (!is_object($hookmanager)) {

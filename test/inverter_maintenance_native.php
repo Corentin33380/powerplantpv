@@ -303,4 +303,62 @@ $field = (new ReflectionClass('PowerPlantPVReportField'))->newInstanceWithoutCon
 $field->field_type = 'conformity_so_valid_obs'; $field->value_text = '-1';
 $langs->tab_translate['PowerPlantPVDataNotFilled'] = 'Donnée non renseignée';
 nativeMaintenanceCheck(PowerPlantPVReportPdfDataset::formatFieldValue($field, $langs) === 'Donnée non renseignée', 'Missing conformity selection never appears as raw -1 in the PDF');
+require_once $core.'/fichinter/class/fichinter.class.php';
+require_once $module.'/class/powerplantpvinterventionnature.class.php';
+$natureDb = new class {
+	public $model;
+	public $sql;
+	public function prefix() { return MAIN_DB_PREFIX; }
+	public function sanitize($value) { return $value; }
+	public function query($sql) { $this->sql = $sql; return true; }
+	public function fetch_object($result) { return (object) array('model_pdf' => $this->model); }
+	public function free($result) {}
+};
+$nature = (new ReflectionClass('PowerPlantPVInterventionNature'))->newInstanceWithoutConstructor();
+$nature->db = $natureDb;
+$newIntervention = (new ReflectionClass('Fichinter'))->newInstanceWithoutConstructor();
+$newIntervention->id = 91;
+$newIntervention->entity = null;
+nativeMaintenanceCheck($nature->configuredPdfModel($newIntervention) === '', 'A newly created intervention without a model allows the native default');
+$natureDb->model = 'powerplantpvreport';
+nativeMaintenanceCheck($nature->configuredPdfModel($newIntervention) === 'powerplantpvreport'
+	&& strpos($natureDb->sql, 'fi.rowid = 91 AND fi.entity IN (2)') !== false
+	&& strpos($natureDb->sql, 'n.entity = fi.entity') !== false, 'A v20 creation gets its PDF model from the persisted intervention in the active entity');
+$statuses = PowerPlantPVReport::interventionSignatureStatuses();
+foreach (array(false, true) as $technicalRequired) {
+	$orders = $technicalRequired
+		? array('TRC', 'TCR', 'RTC', 'RCT', 'CTR', 'CRT')
+		: array('TC', 'CT');
+	foreach ($orders as $order) {
+		$observed = $statuses['STATUS_NO_SIGNATURE'];
+		$completed = '';
+		foreach (str_split($order) as $signer) {
+			$completed .= $signer;
+			if ($signer === 'C') {
+				$observed = $statuses['STATUS_SIGNED_RECEIVER_ONLINE'] ?? $statuses['STATUS_SIGNED_RECEIVER'];
+			}
+			$observed = PowerPlantPVReport::resolveInterventionSignatureStatus(
+				$statuses,
+				$observed,
+				str_contains($completed, 'T'),
+				$technicalRequired,
+				str_contains($completed, 'R')
+			);
+			$internal = str_contains($completed, 'T') && (!$technicalRequired || str_contains($completed, 'R'));
+			$thirdParty = str_contains($completed, 'C');
+			if ($internal) {
+				$expected = $thirdParty ? $statuses['STATUS_SIGNED_ALL'] : $statuses['STATUS_SIGNED_SENDER'];
+			} else {
+				$expected = $thirdParty
+					? ($statuses['STATUS_SIGNED_RECEIVER_ONLINE'] ?? $statuses['STATUS_SIGNED_RECEIVER'])
+					: $statuses['STATUS_NO_SIGNATURE'];
+			}
+			nativeMaintenanceCheck($observed === $expected, 'Native signature state after '.$completed.' in order '.$order);
+		}
+		nativeMaintenanceCheck($observed === $statuses['STATUS_SIGNED_ALL'], 'All required parties produce combined status for '.$order);
+	}
+}
+nativeMaintenanceCheck(PowerPlantPVReport::resolveInterventionSignatureStatus($statuses, $statuses['STATUS_SIGNED_RECEIVER'], true, false, false)
+	=== $statuses['STATUS_SIGNED_ALL'], 'A third-party signature marked manually also combines with the technician signature');
+
 print 'OK: '.$checks.' native checks, PHP '.PHP_VERSION.', Dolibarr '.DOL_VERSION." (no live database).\n";

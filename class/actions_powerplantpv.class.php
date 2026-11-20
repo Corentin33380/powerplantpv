@@ -494,6 +494,24 @@ class ActionsPowerplantpv
 			}
 		}
 
+		// Dolibarr v20 stamps the PDF but does not persist a receiver status for interventions.
+		if (version_compare(DOL_VERSION, '21.0.0', '<')) {
+			global $db;
+			require_once __DIR__.'/powerplantpvreport.class.php';
+			$report = new PowerPlantPVReport($db);
+			$statuses = PowerPlantPVReport::interventionSignatureStatuses();
+			if ($db->begin() <= 0) {
+				throw new RuntimeException('Could not start signature status synchronization.');
+			}
+			$state = $report->readInterventionSignatureState($object, true);
+			if ($state === null
+				|| $report->synchronizeInterventionSignature($object, new User($db), $statuses['STATUS_SIGNED_RECEIVER']) < 0
+				|| $db->commit() <= 0) {
+				$db->rollback();
+				throw new RuntimeException('Could not synchronize the intervention signature status.');
+			}
+		}
+
 		return 1;
 	}
 
@@ -515,6 +533,41 @@ class ActionsPowerplantpv
 		}
 
 		$contexts = $this->getContexts($parameters, $hookmanager);
+		if ($action === '' && $object instanceof Fichinter && (int) $object->id > 0
+			&& in_array('interventioncard', $contexts, true)
+			&& $user->hasRight('ficheinter', 'lire') && $user->hasRight('powerplantpv', 'maintenance', 'read')) {
+			require_once __DIR__.'/powerplantpvreport.class.php';
+			$statuses = PowerPlantPVReport::interventionSignatureStatuses();
+			if ((int) $object->signed_status === $statuses['STATUS_SIGNED_ALL']) {
+				$report = new PowerPlantPVReport($db);
+				if ($report->fetchByIntervention((int) $object->id) > 0 && $report->isSaved()
+					&& (int) $report->entity === (int) $object->entity && (int) $report->fk_user_technician_sign > 0) {
+					$langs->loadLangs(array('commercial', 'powerplantpv@powerplantpv'));
+					$langs->tab_translate['SignedAll'] = $langs->transnoentitiesnoconv('PowerPlantPVInterventionSignedInternallyAndByThirdParty');
+				}
+			}
+		}
+		if ($action === 'builddoc' && $object instanceof Fichinter && $object->id > 0
+			&& in_array('interventioncard', $contexts, true) && $user->hasRight('ficheinter', 'creer')
+			&& getDolGlobalInt('POWERPLANTPV_MAINTENANCE_ENABLE', 1)) {
+			require_once __DIR__.'/powerplantpvinterventionnature.class.php';
+			$nature = new PowerPlantPVInterventionNature($db);
+			$model = $nature->configuredPdfModel($object);
+			$requestedModel = GETPOST('model', 'alpha');
+			if ($model === null || ($model !== '' && !$this->isSubmittedTokenValid())) {
+				return -1;
+			}
+			if ($model !== '' && $nature->applyPdfModel($object, $user, $model) < 0) {
+				$langs->load('powerplantpv@powerplantpv');
+				$this->error = $langs->trans('PowerPlantPVInterventionPdfModelFailed');
+				return -1;
+			}
+			if ($model !== '' && $requestedModel !== '' && $requestedModel !== $model) {
+				$langs->load('powerplantpv@powerplantpv');
+				$this->error = $langs->trans('PowerPlantPVInterventionPdfModelForced', $model);
+				return -1;
+			}
+		}
 		// The native project card already owns the banner's surrounding POST form.
 		if ($object instanceof Project && $action === 'update' && in_array('projectcard', $contexts, true)
 			&& GETPOST('powerplantpv_links_action', 'aZ09') === 'powerplantpv_save_plants') {

@@ -336,3 +336,20 @@
 		}
 	});
 }());
+
+jQuery(function ($) {
+	const form = $('#powerplantpv-signature-form');
+	if (!form.length || typeof $.fn.jSignature !== 'function') {
+		return;
+	}
+	const pad = $('#powerplantpv-signature-pad');
+	pad.jSignature({ color: '#000', 'decor-color': '#fff', height: 180 });
+	$('#powerplantpv-signature-clear').on('click', function () {
+		pad.jSignature('clear');
+	});
+	form.on('submit', function () {
+		const strokes = pad.jSignature('getData', 'native');
+		const drawing = strokes.length ? pad.jSignature('getData', 'image') : [];
+		form.find('[name="signature_image"]').val(drawing.length ? 'data:' + drawing.join(',') : '');
+	});
+});

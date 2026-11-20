@@ -47,6 +47,9 @@ class PowerPlantPVReport extends PowerPlantPVReportGeneratedBase
 		'status' => array('type' => 'varchar(16)', 'label' => 'Status', 'enabled' => 1, 'position' => 70, 'notnull' => 1, 'visible' => 1, 'default' => self::STATUS_DRAFT),
 		'fk_user_technical_sign' => array('type' => 'integer:User:user/class/user.class.php', 'label' => 'PowerPlantPVVisualTechnicalServiceSignature', 'enabled' => 1, 'position' => 71, 'notnull' => 0, 'visible' => 0),
 		'date_technical_sign' => array('type' => 'datetime', 'label' => 'Date', 'enabled' => 1, 'position' => 72, 'notnull' => 0, 'visible' => 0),
+		'fk_user_technician_sign' => array('type' => 'integer:User:user/class/user.class.php', 'label' => 'PowerPlantPVReportTechnicianSignature', 'enabled' => 1, 'position' => 74, 'notnull' => 0, 'visible' => 0),
+		'date_technician_sign' => array('type' => 'datetime', 'label' => 'Date', 'enabled' => 1, 'position' => 75, 'notnull' => 0, 'visible' => 0),
+		'technician_signer_name' => array('type' => 'varchar(255)', 'label' => 'Name', 'enabled' => 1, 'position' => 76, 'notnull' => 0, 'visible' => 0),
 		'technical_signer_name' => array('type' => 'varchar(255)', 'label' => 'Name', 'enabled' => 1, 'position' => 73, 'notnull' => 0, 'visible' => 0),
 		'date_creation' => array('type' => 'datetime', 'label' => 'DateCreation', 'enabled' => 1, 'position' => 500, 'notnull' => 0, 'visible' => -2),
 		'tms' => array('type' => 'timestamp', 'label' => 'DateModification', 'enabled' => 1, 'position' => 501, 'notnull' => 0, 'visible' => -2),
@@ -71,6 +74,197 @@ class PowerPlantPVReport extends PowerPlantPVReportGeneratedBase
 	public $fk_user_technical_sign;
 	public $date_technical_sign;
 	public $technical_signer_name;
+	public $fk_user_technician_sign;
+	public $date_technician_sign;
+	public $technician_signer_name;
+
+	/** Check an internal intervention contact against the authenticated signer. */
+	public function isAssignedTechnician(Fichinter $intervention, User $signer): bool
+	{
+		if ((int) $signer->id <= 0 || (int) $signer->socid > 0 || (int) $this->fk_fichinter !== (int) $intervention->id
+			|| (int) $this->entity !== (int) $intervention->entity) {
+			return false;
+		}
+		$contacts = $intervention->liste_contact(-1, 'internal');
+		if (!is_array($contacts)) {
+			return false;
+		}
+		foreach ($contacts as $contact) {
+			if ((int) ($contact['id'] ?? 0) === (int) $signer->id
+				&& in_array($contact['code'] ?? '', array('INTERVENING', 'INTERREPFOLL'), true)) {
+				return true;
+			}
+		}
+
+		return false;
+	}
+
+	/**
+	 * Read the native signature state, including in v20 where Fichinter::fetch() does not load it.
+	 * A signing transaction locks the intervention before updating the report.
+	 * @return object{signed_status: int|string|null, fk_statut: int|string, last_main_doc: ?string}|null
+	 */
+	public function readInterventionSignatureState(Fichinter $intervention, bool $lock = false): ?object
+	{
+		$sql = "SELECT signed_status, fk_statut, last_main_doc FROM ".$this->db->prefix()."fichinter";
+		$sql .= " WHERE rowid = ".((int) $intervention->id)." AND entity = ".((int) $intervention->entity);
+		if ($lock) {
+			$sql .= " FOR UPDATE";
+		}
+		$result = $this->db->query($sql);
+		if (!$result) {
+			return null;
+		}
+		$row = $this->db->fetch_object($result);
+		$this->db->free($result);
+
+		return is_object($row) ? $row : null;
+	}
+
+	/**
+	 * Derive the native signed_status from the existing third-party status and the report's internal signatures.
+	 * @param array<string,int> $statuses Native signature statuses for the active core
+	 */
+	public static function resolveInterventionSignatureStatus(array $statuses, int $currentStatus, bool $technicianSigned, bool $technicalRequired, bool $technicalSigned): int
+	{
+		$internallySigned = $technicianSigned && (!$technicalRequired || $technicalSigned);
+		$receiverSigned = $currentStatus === $statuses['STATUS_SIGNED_RECEIVER']
+			|| $currentStatus === ($statuses['STATUS_SIGNED_RECEIVER_ONLINE'] ?? -1);
+		if ($internallySigned) {
+			return $receiverSigned || $currentStatus === $statuses['STATUS_SIGNED_ALL']
+				? $statuses['STATUS_SIGNED_ALL'] : $statuses['STATUS_SIGNED_SENDER'];
+		}
+		if ($currentStatus === $statuses['STATUS_SIGNED_SENDER']) {
+			return $statuses['STATUS_NO_SIGNATURE'];
+		}
+		if ($currentStatus === $statuses['STATUS_SIGNED_ALL']) {
+			return $statuses['STATUS_SIGNED_RECEIVER_ONLINE'] ?? $statuses['STATUS_SIGNED_RECEIVER'];
+		}
+
+		return $currentStatus;
+	}
+
+	/** @return array<string,int> Native signature status names and values. */
+	public static function interventionSignatureStatuses(): array
+	{
+		if (property_exists(Fichinter::class, 'SIGNED_STATUSES')) {
+			return Fichinter::$SIGNED_STATUSES;
+		}
+
+		return array(
+			'STATUS_NO_SIGNATURE' => (int) constant('Fichinter::STATUS_NO_SIGNATURE'),
+			'STATUS_SIGNED_SENDER' => (int) constant('Fichinter::STATUS_SIGNED_SENDER'),
+			'STATUS_SIGNED_RECEIVER' => (int) constant('Fichinter::STATUS_SIGNED_RECEIVER'),
+			'STATUS_SIGNED_ALL' => (int) constant('Fichinter::STATUS_SIGNED_ALL'),
+		);
+	}
+
+	/**
+	 * Synchronize a finalized maintenance report within the caller's intervention transaction.
+	 * @return int 1 on persisted state, 0 when the intervention has no finalized report, -1 on error
+	 */
+	public function synchronizeInterventionSignature(Fichinter $intervention, User $user, int $observedStatus): int
+	{
+		$sql = "SELECT rowid, entity, fk_user_technician_sign, fk_user_technical_sign FROM ".$this->db->prefix().$this->table_element;
+		$sql .= " WHERE fk_fichinter = ".((int) $intervention->id)." AND entity = ".((int) $intervention->entity);
+		$sql .= " AND status = '".self::STATUS_SAVED."' ORDER BY rowid DESC";
+		$sql .= $this->db->plimit(1)." FOR UPDATE";
+		$result = $this->db->query($sql);
+		if (!$result) {
+			return -1;
+		}
+		$row = $this->db->fetch_object($result);
+		$this->db->free($result);
+		if (!is_object($row)) {
+			return 0;
+		}
+		$this->entity = (int) $row->entity;
+		$nextStatus = self::resolveInterventionSignatureStatus(
+			self::interventionSignatureStatuses(),
+			$observedStatus,
+			(int) $row->fk_user_technician_sign > 0,
+			$this->technicalSignatureEnabled(),
+			(int) $row->fk_user_technical_sign > 0
+		);
+		if ($nextStatus !== (int) $intervention->signed_status) {
+			$lifecycleStatus = (int) $intervention->status;
+			$context = $intervention->context;
+			$oldCopy = $intervention->oldcopy;
+			$result = $intervention->setSignedStatus($user, $nextStatus, 1);
+			$intervention->status = $lifecycleStatus;
+			$intervention->context = $context;
+			$intervention->oldcopy = $oldCopy;
+			if ($result <= 0) {
+				return -1;
+			}
+		}
+		$intervention->signed_status = $nextStatus;
+
+		return 1;
+	}
+
+	/** Whether the native status includes a signature from the third party. */
+	public static function interventionSignedByThirdParty(int $status): bool
+	{
+		$statuses = self::interventionSignatureStatuses();
+
+		return $status === $statuses['STATUS_SIGNED_RECEIVER'] || $status === $statuses['STATUS_SIGNED_ALL']
+			|| $status === ($statuses['STATUS_SIGNED_RECEIVER_ONLINE'] ?? -1);
+	}
+
+	/** Store the drawing and signer on the same finalized report revision. */
+	public function signDrawn(Fichinter $intervention, User $signer, string $role, string $name, string $drawing): int
+	{
+		require_once __DIR__.'/../lib/powerplantpv_reportsignature.lib.php';
+		if (!$this->isSaved() || !in_array($role, powerplantpvReportSignatureRoles(), true)) {
+			return -1;
+		}
+		if ($role === 'technician' && !$this->isAssignedTechnician($intervention, $signer)) {
+			return -1;
+		}
+		if ($role === 'technical' && (!$signer->hasRight('powerplantpv', 'maintenance', 'sign_technical')
+			|| !$this->technicalSignatureEnabled() || !$this->isTechnicalSupervisor($intervention, $signer))) {
+			return -1;
+		}
+
+		// The role is selected from a fixed list and is used in column names only.
+		$signerColumn = 'fk_user_'.$role.'_sign';
+		$sql = "UPDATE ".$this->db->prefix().$this->table_element;
+		$sql .= " SET ".$signerColumn." = ".((int) $signer->id);
+		$sql .= ", date_".$role."_sign = '".$this->db->idate(dol_now())."'";
+		$sql .= ", ".$role."_signer_name = '".$this->db->escape(dol_substr($name, 0, 255))."'";
+		$sql .= " WHERE rowid = ".((int) $this->id)." AND entity = ".((int) $this->entity);
+		$sql .= " AND status = '".self::STATUS_SAVED."' AND ".$signerColumn." IS NULL";
+
+		if ($this->db->begin() <= 0) {
+			return -1;
+		}
+		$state = $this->readInterventionSignatureState($intervention, true);
+		if ($state === null || (int) $state->fk_statut !== Fichinter::STATUS_VALIDATED) {
+			$this->db->rollback();
+			return -1;
+		}
+		$intervention->signed_status = (int) $state->signed_status;
+		$intervention->last_main_doc = (string) $state->last_main_doc;
+		$result = $this->db->query($sql);
+		if (!$result || (int) $this->db->affected_rows($result) !== 1) {
+			$this->db->rollback();
+			return -1;
+		}
+		$path = powerplantpvReportSignaturePath((int) $this->entity, (int) $this->id, $role, true);
+		if (!powerplantpvReportSignatureStore($drawing, $path)) {
+			$this->db->rollback();
+			return -1;
+		}
+		if ($this->synchronizeInterventionSignature($intervention, $signer, (int) $state->signed_status) <= 0
+			|| $this->db->commit() <= 0) {
+			$this->db->rollback();
+			dol_delete_file($path, 1, 1, 1, null, false, 0);
+			return -1;
+		}
+
+		return 1;
+	}
 
 	public function technicalSignatureEnabled(): bool
 	{
@@ -144,7 +338,7 @@ class PowerPlantPVReport extends PowerPlantPVReportGeneratedBase
 	/** Check the technical signature under a database lock within a report edit transaction. */
 	public function lockUnsignedForEdit(): bool
 	{
-		$sql = "SELECT fk_user_technical_sign FROM ".$this->db->prefix().$this->table_element;
+		$sql = "SELECT fk_user_technical_sign, fk_user_technician_sign FROM ".$this->db->prefix().$this->table_element;
 		$sql .= " WHERE rowid = ".((int) $this->id)." AND entity = ".((int) $this->entity)." FOR UPDATE";
 		$result = $this->db->query($sql);
 		if (!$result) {
@@ -153,7 +347,7 @@ class PowerPlantPVReport extends PowerPlantPVReportGeneratedBase
 		$row = $this->db->fetch_object($result);
 		$this->db->free($result);
 
-		return is_object($row) && empty($row->fk_user_technical_sign);
+		return is_object($row) && empty($row->fk_user_technical_sign) && empty($row->fk_user_technician_sign);
 	}
 
 	/**

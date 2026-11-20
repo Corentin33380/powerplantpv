@@ -1020,14 +1020,24 @@ trait PowerPlantPVReportVisualPdf
 		$technicianImage = $this->visualSignatureImage($technicianField, $dataset);
 		$customerImage = $this->visualSignatureImage($customerField, $dataset);
 		$customerName = is_object($customerField) ? trim(dol_string_nohtmltag(PowerPlantPVReportPdfDataset::formatFieldValue($customerField, $langs))) : '';
-		$cards = array(array($langs->transnoentities('PowerPlantPVReportTechnicianSignature'), implode(', ', array_unique($names)), $names || $technicianImage !== '' ? $date : '', $technicianImage));
 		$report = $dataset['report'] ?? null;
+		$technicianName = implode(', ', array_unique($names));
+		$technicianDate = $names || $technicianImage !== '' ? $date : '';
+		if (!empty($report->fk_user_technician_sign)) {
+			$technicianName = (string) $report->technician_signer_name;
+			$technicianDate = dol_print_date($report->date_technician_sign, 'day', 'tzuser', $langs);
+			$technicianImage = powerplantpvReportSignaturePath((int) $report->entity, (int) $report->id, 'technician');
+			$technicianImage = is_file($technicianImage) ? $technicianImage : '';
+		}
+		$cards = array(array($langs->transnoentities('PowerPlantPVReportTechnicianSignature'), $technicianName, $technicianDate, $technicianImage));
 		$technicalSigned = !empty($report->fk_user_technical_sign);
 		$technicalEnabled = $report instanceof PowerPlantPVReport ? $report->technicalSignatureEnabled()
 			: getDolGlobalInt('POWERPLANTPV_REPORT_PDF_TECHNICAL_SERVICE_SIGNATURE') > 0;
 		if ($technicalSigned || $technicalEnabled) {
 			$technicalDate = $technicalSigned ? dol_print_date($report->date_technical_sign, 'day', 'tzuser', $langs) : '';
-			$cards[] = array($langs->transnoentities('PowerPlantPVVisualTechnicalServiceSignature'), (string) ($report->technical_signer_name ?? ''), $technicalDate, '', $technicalSigned);
+			$technicalImage = $technicalSigned ? powerplantpvReportSignaturePath((int) ($report->entity ?? 0), (int) ($report->id ?? 0), 'technical') : '';
+			$technicalImage = is_file($technicalImage) ? $technicalImage : '';
+			$cards[] = array($langs->transnoentities('PowerPlantPVVisualTechnicalServiceSignature'), (string) ($report->technical_signer_name ?? ''), $technicalDate, $technicalImage, $technicalSigned && $technicalImage === '');
 		}
 		$cards[] = array($langs->transnoentities('PowerPlantPVVisualCustomerSignature'), $customerName, $customerImage !== '' ? $date : '', $customerImage);
 

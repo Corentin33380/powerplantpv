@@ -77,7 +77,7 @@ class modPowerPlantPV extends DolibarrModules
 		$this->editor_squarred_logo = '';					// Must be image filename into the module/img directory followed with @modulename. Example: 'myimage.png@powerplantpv'
 
 		// Possible values for version are: 'development', 'experimental', 'dolibarr', 'dolibarr_deprecated', 'experimental_deprecated' or a version string like 'x.y.z'
-		$this->version = '1.8.1';
+		$this->version = '1.9.0';
 		// Url to the file with your last numberversion of this module
 		//$this->url_last_version = 'http://www.example.com/versionmodule.txt';
 
@@ -333,7 +333,7 @@ class modPowerPlantPV extends DolibarrModules
 			),
 			'tabsql' => array(
 				'SELECT f.rowid as rowid, f.code, f.label, f.active FROM '.$this->db->prefix().'c_powerplantpv_categorypv as f',
-				'SELECT f.rowid as rowid, f.code, f.label, f.report_template_code, f.is_maintenance, f.is_preventive, f.requires_report, f.requires_signature, f.active, f.position FROM '.$this->db->prefix().'c_powerplantpv_intervention_nature as f WHERE f.entity = '.((int) $conf->entity),
+				'SELECT f.rowid as rowid, f.code, f.label, f.report_template_code, f.model_pdf, f.is_maintenance, f.is_preventive, f.requires_report, f.requires_signature, f.active, f.position FROM '.$this->db->prefix().'c_powerplantpv_intervention_nature as f WHERE f.entity = '.((int) $conf->entity),
 				'SELECT f.rowid as rowid, f.code, f.label, f.description, f.active, f.position FROM '.$this->db->prefix().'c_powerplantpv_maintenance_service as f WHERE f.entity = '.((int) $conf->entity),
 				'SELECT f.rowid as rowid, f.code, f.label, f.description, f.default_unit, f.active, f.position FROM '.$this->db->prefix().'c_powerplantpv_index_type as f WHERE f.entity = '.((int) $conf->entity),
 				'SELECT f.rowid as rowid, f.code, f.label, f.description, f.active, f.position FROM '.$this->db->prefix().'c_powerplantpv_communication_protocol as f WHERE f.entity = '.((int) $conf->entity),
@@ -353,7 +353,7 @@ class modPowerPlantPV extends DolibarrModules
 			),
 			'tabfield' => array(
 				'code,label',
-				'code,label,report_template_code,is_maintenance,is_preventive,requires_report,requires_signature,position',
+				'code,label,report_template_code,model_pdf,is_maintenance,is_preventive,requires_report,requires_signature,position',
 				'code,label,description,position',
 				'code,label,description,default_unit,position',
 				'code,label,description,position',
@@ -603,6 +603,11 @@ class modPowerPlantPV extends DolibarrModules
 		$this->rights[$r][1] = 'PowerPlantPVMaintenancePermissionTechnicalSign';
 		$this->rights[$r][4] = 'maintenance';
 		$this->rights[$r][5] = 'sign_technical';
+		$r++;
+		$this->rights[$r][0] = $this->numero * 100 + $r;
+		$this->rights[$r][1] = 'PowerPlantPVMaintenancePermissionMissingEvidence';
+		$this->rights[$r][4] = 'maintenance';
+		$this->rights[$r][5] = 'finalize_missing_evidence';
 
 		/* END MODULEBUILDER PERMISSIONS */
 
@@ -1759,6 +1764,7 @@ class modPowerPlantPV extends DolibarrModules
 	{
 		$tables = array(
 			$this->db->prefix().'c_powerplantpv_intervention_nature' => array(
+				'model_pdf' => array('type' => 'varchar', 'value' => '255', 'null' => ''),
 				'fk_report_template' => array('type' => 'integer', 'value' => '', 'null' => ''),
 			),
 			$this->db->prefix().'powerplantpv_maintenance_service_section' => array(
@@ -1943,6 +1949,9 @@ class modPowerPlantPV extends DolibarrModules
 				'fk_user_technical_sign' => array('type' => 'integer', 'value' => '', 'null' => ''),
 				'date_technical_sign' => array('type' => 'datetime', 'value' => '', 'null' => ''),
 				'technical_signer_name' => array('type' => 'varchar', 'value' => '255', 'null' => ''),
+				'fk_user_technician_sign' => array('type' => 'integer', 'value' => '', 'null' => ''),
+				'date_technician_sign' => array('type' => 'datetime', 'value' => '', 'null' => ''),
+				'technician_signer_name' => array('type' => 'varchar', 'value' => '255', 'null' => ''),
 				'source_mode' => array('type' => 'varchar', 'value' => '16', 'null' => "DEFAULT 'contract' NOT NULL"),
 				'status' => array('type' => 'varchar', 'value' => '16', 'null' => "DEFAULT 'draft' NOT NULL"),
 			),
