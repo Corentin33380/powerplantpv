@@ -4,6 +4,7 @@
 
 - Rapports de maintenance avec photos obligatoires : une permission dédiée autorise la finalisation avec un index renseigné et une photo absente. Les autres contrôles de finalisation s’appliquent.
 - Signatures internes tracées via le pavé Dolibarr pour l’intervenant affecté et le responsable technique. Le rapport PowerPlantPV affiche le tracé, le nom et la date dans les cadres correspondants.
+- Le statut natif de l’intervention reflète les signatures internes requises et celle du tiers, quel que soit leur ordre. Le PDF signé par le client est conservé si une signature interne est ajoutée ensuite.
 - Le dictionnaire des natures d’intervention peut imposer un modèle PDF natif. Le module enregistre ce choix sur la fiche Intervention et génère le modèle configuré à la finalisation.
 - Actualiser le module dans Dolibarr pour ajouter les champs et attribuer la nouvelle permission aux utilisateurs ou groupes concernés.
 

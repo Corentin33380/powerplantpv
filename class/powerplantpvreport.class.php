@@ -99,6 +99,119 @@ class PowerPlantPVReport extends PowerPlantPVReportGeneratedBase
 		return false;
 	}
 
+	/**
+	 * Read the native signature state, including in v20 where Fichinter::fetch() does not load it.
+	 * A signing transaction locks the intervention before updating the report.
+	 * @return object{signed_status: int|string|null, fk_statut: int|string, last_main_doc: ?string}|null
+	 */
+	public function readInterventionSignatureState(Fichinter $intervention, bool $lock = false): ?object
+	{
+		$sql = "SELECT signed_status, fk_statut, last_main_doc FROM ".$this->db->prefix()."fichinter";
+		$sql .= " WHERE rowid = ".((int) $intervention->id)." AND entity = ".((int) $intervention->entity);
+		if ($lock) {
+			$sql .= " FOR UPDATE";
+		}
+		$result = $this->db->query($sql);
+		if (!$result) {
+			return null;
+		}
+		$row = $this->db->fetch_object($result);
+		$this->db->free($result);
+
+		return is_object($row) ? $row : null;
+	}
+
+	/**
+	 * Derive the native signed_status from the existing third-party status and the report's internal signatures.
+	 * @param array<string,int> $statuses Native signature statuses for the active core
+	 */
+	public static function resolveInterventionSignatureStatus(array $statuses, int $currentStatus, bool $technicianSigned, bool $technicalRequired, bool $technicalSigned): int
+	{
+		$internallySigned = $technicianSigned && (!$technicalRequired || $technicalSigned);
+		$receiverSigned = $currentStatus === $statuses['STATUS_SIGNED_RECEIVER']
+			|| $currentStatus === ($statuses['STATUS_SIGNED_RECEIVER_ONLINE'] ?? -1);
+		if ($internallySigned) {
+			return $receiverSigned || $currentStatus === $statuses['STATUS_SIGNED_ALL']
+				? $statuses['STATUS_SIGNED_ALL'] : $statuses['STATUS_SIGNED_SENDER'];
+		}
+		if ($currentStatus === $statuses['STATUS_SIGNED_SENDER']) {
+			return $statuses['STATUS_NO_SIGNATURE'];
+		}
+		if ($currentStatus === $statuses['STATUS_SIGNED_ALL']) {
+			return $statuses['STATUS_SIGNED_RECEIVER_ONLINE'] ?? $statuses['STATUS_SIGNED_RECEIVER'];
+		}
+
+		return $currentStatus;
+	}
+
+	/** @return array<string,int> Native signature status names and values. */
+	public static function interventionSignatureStatuses(): array
+	{
+		if (property_exists(Fichinter::class, 'SIGNED_STATUSES')) {
+			return Fichinter::$SIGNED_STATUSES;
+		}
+
+		return array(
+			'STATUS_NO_SIGNATURE' => (int) constant('Fichinter::STATUS_NO_SIGNATURE'),
+			'STATUS_SIGNED_SENDER' => (int) constant('Fichinter::STATUS_SIGNED_SENDER'),
+			'STATUS_SIGNED_RECEIVER' => (int) constant('Fichinter::STATUS_SIGNED_RECEIVER'),
+			'STATUS_SIGNED_ALL' => (int) constant('Fichinter::STATUS_SIGNED_ALL'),
+		);
+	}
+
+	/**
+	 * Synchronize a finalized maintenance report within the caller's intervention transaction.
+	 * @return int 1 on persisted state, 0 when the intervention has no finalized report, -1 on error
+	 */
+	public function synchronizeInterventionSignature(Fichinter $intervention, User $user, int $observedStatus): int
+	{
+		$sql = "SELECT rowid, entity, fk_user_technician_sign, fk_user_technical_sign FROM ".$this->db->prefix().$this->table_element;
+		$sql .= " WHERE fk_fichinter = ".((int) $intervention->id)." AND entity = ".((int) $intervention->entity);
+		$sql .= " AND status = '".self::STATUS_SAVED."' ORDER BY rowid DESC";
+		$sql .= $this->db->plimit(1)." FOR UPDATE";
+		$result = $this->db->query($sql);
+		if (!$result) {
+			return -1;
+		}
+		$row = $this->db->fetch_object($result);
+		$this->db->free($result);
+		if (!is_object($row)) {
+			return 0;
+		}
+		$this->entity = (int) $row->entity;
+		$nextStatus = self::resolveInterventionSignatureStatus(
+			self::interventionSignatureStatuses(),
+			$observedStatus,
+			(int) $row->fk_user_technician_sign > 0,
+			$this->technicalSignatureEnabled(),
+			(int) $row->fk_user_technical_sign > 0
+		);
+		if ($nextStatus !== (int) $intervention->signed_status) {
+			$lifecycleStatus = (int) $intervention->status;
+			$context = $intervention->context;
+			$oldCopy = $intervention->oldcopy;
+			$result = $intervention->setSignedStatus($user, $nextStatus, 1);
+			$intervention->status = $lifecycleStatus;
+			$intervention->context = $context;
+			$intervention->oldcopy = $oldCopy;
+			if ($result <= 0) {
+				return -1;
+			}
+		}
+		$intervention->signed_status = $nextStatus;
+
+		return 1;
+	}
+
+	/** Whether the native status includes a signature from the third party. */
+	public static function interventionSignedByThirdParty(int $status): bool
+	{
+		$statuses = self::interventionSignatureStatuses();
+
+		return $status === $statuses['STATUS_SIGNED_RECEIVER'] || $status === $statuses['STATUS_SIGNED_ALL']
+			|| $status === ($statuses['STATUS_SIGNED_RECEIVER_ONLINE'] ?? -1);
+	}
+
 	/** Store the drawing and signer on the same finalized report revision. */
 	public function signDrawn(Fichinter $intervention, User $signer, string $role, string $name, string $drawing): int
 	{
@@ -126,6 +239,13 @@ class PowerPlantPVReport extends PowerPlantPVReportGeneratedBase
 		if ($this->db->begin() <= 0) {
 			return -1;
 		}
+		$state = $this->readInterventionSignatureState($intervention, true);
+		if ($state === null || (int) $state->fk_statut !== Fichinter::STATUS_VALIDATED) {
+			$this->db->rollback();
+			return -1;
+		}
+		$intervention->signed_status = (int) $state->signed_status;
+		$intervention->last_main_doc = (string) $state->last_main_doc;
 		$result = $this->db->query($sql);
 		if (!$result || (int) $this->db->affected_rows($result) !== 1) {
 			$this->db->rollback();
@@ -136,7 +256,8 @@ class PowerPlantPVReport extends PowerPlantPVReportGeneratedBase
 			$this->db->rollback();
 			return -1;
 		}
-		if ($this->db->commit() <= 0) {
+		if ($this->synchronizeInterventionSignature($intervention, $signer, (int) $state->signed_status) <= 0
+			|| $this->db->commit() <= 0) {
 			$this->db->rollback();
 			dol_delete_file($path, 1, 1, 1, null, false, 0);
 			return -1;

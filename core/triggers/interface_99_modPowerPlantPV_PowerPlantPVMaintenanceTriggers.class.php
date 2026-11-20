@@ -71,6 +71,20 @@ class InterfacePowerPlantPVMaintenanceTriggers extends DolibarrTriggers
 			}
 		}
 
+		if ($action === 'FICHINTER_MODIFY' && $object instanceof Fichinter && isset($object->context['signature'])) {
+			dol_include_once('/powerplantpv/class/powerplantpvreport.class.php');
+			$signature = (int) $object->context['signature'];
+			$statuses = PowerPlantPVReport::interventionSignatureStatuses();
+			if ($signature === $statuses['STATUS_SIGNED_RECEIVER']
+				|| $signature === ($statuses['STATUS_SIGNED_RECEIVER_ONLINE'] ?? -1)) {
+				$report = new PowerPlantPVReport($this->db);
+				if ($report->synchronizeInterventionSignature($object, $user, $signature) < 0) {
+					$this->error = 'PowerPlantPVInterventionSignatureStatusFailed';
+					return -1;
+				}
+			}
+		}
+
 		if ($action === 'FICHINTER_CREATE') {
 			$linker = new PowerPlantPVMaintenanceContractLinker($this->db);
 			$linkResult = $linker->linkInterventionToMaintenanceContract($object, $user, 'trigger_create');

@@ -124,12 +124,17 @@ if (!$permissiontoread) {
 
 restrictedArea($user, 'ficheinter', $id, 'fichinter');
 
+$builder = new PowerPlantPVReportBuilder($db);
+$report = new PowerPlantPVReport($db);
+$signatureState = $report->readInterventionSignatureState($intervention);
+if ($signatureState === null) {
+	accessforbidden();
+}
+$intervention->signed_status = (int) $signatureState->signed_status;
+$thirdPartySigned = PowerPlantPVReport::interventionSignedByThirdParty((int) $intervention->signed_status);
 $locked = powerplantpvReportIsInterventionLocked($intervention);
 $caneditreport = $permissiontowrite && !$locked;
 $cangenerateserialannex = $permissiontowrite && $user->hasRight('ficheinter', 'creer');
-
-$builder = new PowerPlantPVReportBuilder($db);
-$report = new PowerPlantPVReport($db);
 $reportFetch = $report->fetchByIntervention($id);
 if ($reportFetch < 0) {
 	setEventMessages($report->error, $report->errors, 'errors');
@@ -147,7 +152,8 @@ if (powerplantpvReportSignatureAvailable() && !empty($conf->use_javascript_ajax)
 		}
 	}
 }
-$canSign = $reportFetch > 0 && !$locked && $report->isSaved() && $signatureScript !== '';
+$canSign = $reportFetch > 0 && (int) $signatureState->fk_statut === Fichinter::STATUS_VALIDATED
+	&& $report->isSaved() && $signatureScript !== '';
 $signingAllowed = array(
 	'technician' => $canSign && !$technicianSigned && $report->isAssignedTechnician($intervention, $user),
 	'technical' => $canSign && !$technicalSigned && $user->hasRight('powerplantpv', 'maintenance', 'sign_technical')
@@ -168,7 +174,9 @@ if ($action === 'prepare_signature' || $action === 'save_signature') {
 		if ($report->signDrawn($intervention, $user, $signatureRole, $user->getFullName($langs), $drawing) > 0) {
 			setEventMessages($langs->trans('PowerPlantPVSignatureRecorded'), null, 'mesgs');
 			$model = (new PowerPlantPVInterventionNature($db))->configuredPdfModel($intervention);
-			if ($model === null || $intervention->generateDocument($model !== '' ? $model : 'powerplantpvreport', $langs) <= 0) {
+			$canRegenerate = !PowerPlantPVReport::interventionSignedByThirdParty((int) $intervention->signed_status)
+				|| $model === '' || $model === 'powerplantpvreport';
+			if ($model === null || ($canRegenerate && $intervention->generateDocument($model !== '' ? $model : 'powerplantpvreport', $langs) <= 0)) {
 				setEventMessages($langs->trans('PowerPlantPVInterventionPdfGenerationFailed'), null, 'warnings');
 			}
 			header('Location: '.$_SERVER['PHP_SELF'].'?id='.(int) $id.'#powerplantpv-report-signatures');
@@ -489,6 +497,11 @@ if (isModEnabled('project')) {
 	}
 }
 $morehtmlref .= '</div>';
+$signatureStatuses = PowerPlantPVReport::interventionSignatureStatuses();
+if ($reportFetch > 0 && (int) $intervention->signed_status === $signatureStatuses['STATUS_SIGNED_ALL']) {
+	$langs->load('commercial');
+	$langs->tab_translate['SignedAll'] = $langs->transnoentitiesnoconv('PowerPlantPVInterventionSignedInternallyAndByThirdParty');
+}
 dol_banner_tab($intervention, 'ref', $linkback, 1, 'ref', 'ref', $morehtmlref);
 
 print '<div class="fichecenter">';
@@ -579,21 +592,6 @@ if (is_array($tree) && empty($tree['can_generate'])) {
 		print ' ';
 		print '<input type="submit" class="button button-save" name="save_report_submit" value="'.dol_escape_htmltag($langs->trans('PowerPlantPVReportFinalize')).'">';
 		print ' ';
-		$signatureUrl = powerplantpvReportGetInterventionOnlineSignatureUrl($intervention);
-		$reportIsFinalized = ($reportFetch > 0 && (string) $report->status === PowerPlantPVReport::STATUS_SAVED);
-		$signatureEnabled = ($reportIsFinalized && !$snapshotNeedsRebuild && $signatureUrl !== '');
-		$signatureTooltip = $langs->trans('PowerPlantPVReportSignatureUnavailable');
-		if (!$reportIsFinalized) {
-			$signatureTooltip = $langs->trans('PowerPlantPVReportSignatureRequiresFinalizedReport');
-		}
-		print dolGetButtonAction(
-			$langs->trans('PowerPlantPVReportSignButton'),
-			$signatureEnabled ? '' : $signatureTooltip,
-			'default',
-			$signatureEnabled ? $signatureUrl : '#',
-			'',
-			$signatureEnabled
-		);
 		if ($snapshotNeedsRebuild && $reportFetch > 0) {
 			print ' ';
 			print '<input type="submit" class="button button-save" name="recalculate_submit" value="'.dol_escape_htmltag($langs->trans('PowerPlantPVReportRecalculate')).'">';
@@ -604,6 +602,12 @@ if (is_array($tree) && empty($tree['can_generate'])) {
 	print '</form>';
 
 	print '<div class="center powerplantpv-report-actions" id="powerplantpv-report-signatures">';
+	if ($reportFetch > 0 && $report->isSaved() && !$snapshotNeedsRebuild && !$thirdPartySigned && $permissiontowrite) {
+		$signatureUrl = powerplantpvReportGetInterventionOnlineSignatureUrl($intervention);
+		if ($signatureUrl !== '') {
+			print dolGetButtonAction($langs->trans('PowerPlantPVReportSignButton'), '', 'default', $signatureUrl);
+		}
+	}
 	$signatureLabels = array('technician' => 'PowerPlantPVTechnicianSignButton', 'technical' => 'PowerPlantPVTechnicalSignButton');
 	foreach ($signatureLabels as $role => $label) {
 		if ($signingAllowed[$role] && !$snapshotNeedsRebuild) {
@@ -681,11 +685,7 @@ function powerplantpvReportIsInterventionLocked($intervention)
 	if ($status === $closedStatus) {
 		return true;
 	}
-	$signedStatus = isset($intervention->signed_status) ? (int) $intervention->signed_status : 0;
-	$receiver = (class_exists('Fichinter') && defined('Fichinter::STATUS_SIGNED_RECEIVER')) ? (int) constant('Fichinter::STATUS_SIGNED_RECEIVER') : 2;
-	$all = (class_exists('Fichinter') && defined('Fichinter::STATUS_SIGNED_ALL')) ? (int) constant('Fichinter::STATUS_SIGNED_ALL') : 9;
-
-	return in_array($signedStatus, array($receiver, 3, $all), true);
+	return PowerPlantPVReport::interventionSignedByThirdParty((int) ($intervention->signed_status ?? 0));
 }
 
 /**
@@ -1435,7 +1435,7 @@ function powerplantpvReportRenderSummaryTable($columns, $rows)
  */
 function powerplantpvReportRenderNativeCustomerSignatureBlock($signatureRows)
 {
-	global $intervention, $langs, $report, $reportFetch, $snapshotNeedsRebuild;
+	global $intervention, $langs, $report, $reportFetch, $snapshotNeedsRebuild, $thirdPartySigned;
 
 	$firstRow = reset($signatureRows);
 	$section = is_array($firstRow) && isset($firstRow['section']) && is_object($firstRow['section']) ? $firstRow['section'] : null;
@@ -1445,9 +1445,12 @@ function powerplantpvReportRenderNativeCustomerSignatureBlock($signatureRows)
 	}
 	$signatureUrl = powerplantpvReportGetInterventionOnlineSignatureUrl($intervention);
 	$reportIsFinalized = ($reportFetch > 0 && (string) $report->status === PowerPlantPVReport::STATUS_SAVED);
-	$signatureEnabled = ($reportIsFinalized && !$snapshotNeedsRebuild && $signatureUrl !== '');
+	$signatureEnabled = ($reportIsFinalized && !$snapshotNeedsRebuild && $signatureUrl !== '' && !$thirdPartySigned);
 	$message = $langs->trans('PowerPlantPVReportSignatureUnavailable');
-	if (!$reportIsFinalized) {
+	if ($thirdPartySigned) {
+		$langs->load('commercial');
+		$message = $langs->trans('SignedReceiver');
+	} elseif (!$reportIsFinalized) {
 		$message = $langs->trans('PowerPlantPVReportSignatureRequiresFinalizedReport');
 	}
 

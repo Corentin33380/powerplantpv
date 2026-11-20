@@ -1930,3 +1930,4 @@ PowerPlantPVInvalidInterventionPdfModel=Sélectionnez un modèle PDF actif du mo
 PowerPlantPVInterventionPdfModelFailed=Le modèle PDF associé à la nature de l’intervention n’a pas pu être enregistré.
 PowerPlantPVInterventionPdfModelForced=Cette nature d’intervention impose le modèle PDF %s.
 PowerPlantPVInterventionPdfGenerationFailed=Les données ont été enregistrées. La génération du PDF a échoué. Relancez-la depuis la fiche Intervention.
+PowerPlantPVInterventionSignedInternallyAndByThirdParty=Signé en interne et par le tiers

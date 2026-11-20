@@ -1929,3 +1929,4 @@ PowerPlantPVInvalidInterventionPdfModel=Select an active intervention PDF templa
 PowerPlantPVInterventionPdfModelFailed=The PDF template assigned to this intervention type could not be saved.
 PowerPlantPVInterventionPdfModelForced=This intervention type requires the %s PDF template.
 PowerPlantPVInterventionPdfGenerationFailed=The data was saved. PDF generation failed. Retry from the intervention card.
+PowerPlantPVInterventionSignedInternallyAndByThirdParty=Signed internally and by the third party

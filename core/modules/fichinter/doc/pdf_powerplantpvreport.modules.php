@@ -213,6 +213,11 @@ class pdf_powerplantpvreport extends ModelePDFFicheinter
 		}
 		$basename = !empty($object->specimen) ? 'SPECIMEN' : dol_sanitizeFileName($object->ref);
 		$file = $dir.'/'.$basename.'.pdf';
+		if ($object instanceof Fichinter && PowerPlantPVReport::interventionSignedByThirdParty((int) $object->signed_status)
+			&& preg_match('/_signed-[0-9]{14}\.pdf$/D', (string) $object->last_main_doc)) {
+			// Refresh the internal report without replacing or demoting the client's original signed PDF.
+			$this->update_main_doc_field = 0;
+		}
 		$annexFile = $dir.'/'.$basename.'-annexe.pdf';
 
 		if (!is_object($hookmanager)) {

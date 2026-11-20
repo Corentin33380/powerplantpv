@@ -303,4 +303,42 @@ $field = (new ReflectionClass('PowerPlantPVReportField'))->newInstanceWithoutCon
 $field->field_type = 'conformity_so_valid_obs'; $field->value_text = '-1';
 $langs->tab_translate['PowerPlantPVDataNotFilled'] = 'Donnée non renseignée';
 nativeMaintenanceCheck(PowerPlantPVReportPdfDataset::formatFieldValue($field, $langs) === 'Donnée non renseignée', 'Missing conformity selection never appears as raw -1 in the PDF');
+require_once $core.'/fichinter/class/fichinter.class.php';
+$statuses = PowerPlantPVReport::interventionSignatureStatuses();
+foreach (array(false, true) as $technicalRequired) {
+	$orders = $technicalRequired
+		? array('TRC', 'TCR', 'RTC', 'RCT', 'CTR', 'CRT')
+		: array('TC', 'CT');
+	foreach ($orders as $order) {
+		$observed = $statuses['STATUS_NO_SIGNATURE'];
+		$completed = '';
+		foreach (str_split($order) as $signer) {
+			$completed .= $signer;
+			if ($signer === 'C') {
+				$observed = $statuses['STATUS_SIGNED_RECEIVER_ONLINE'] ?? $statuses['STATUS_SIGNED_RECEIVER'];
+			}
+			$observed = PowerPlantPVReport::resolveInterventionSignatureStatus(
+				$statuses,
+				$observed,
+				str_contains($completed, 'T'),
+				$technicalRequired,
+				str_contains($completed, 'R')
+			);
+			$internal = str_contains($completed, 'T') && (!$technicalRequired || str_contains($completed, 'R'));
+			$thirdParty = str_contains($completed, 'C');
+			if ($internal) {
+				$expected = $thirdParty ? $statuses['STATUS_SIGNED_ALL'] : $statuses['STATUS_SIGNED_SENDER'];
+			} else {
+				$expected = $thirdParty
+					? ($statuses['STATUS_SIGNED_RECEIVER_ONLINE'] ?? $statuses['STATUS_SIGNED_RECEIVER'])
+					: $statuses['STATUS_NO_SIGNATURE'];
+			}
+			nativeMaintenanceCheck($observed === $expected, 'Native signature state after '.$completed.' in order '.$order);
+		}
+		nativeMaintenanceCheck($observed === $statuses['STATUS_SIGNED_ALL'], 'All required parties produce combined status for '.$order);
+	}
+}
+nativeMaintenanceCheck(PowerPlantPVReport::resolveInterventionSignatureStatus($statuses, $statuses['STATUS_SIGNED_RECEIVER'], true, false, false)
+	=== $statuses['STATUS_SIGNED_ALL'], 'A third-party signature marked manually also combines with the technician signature');
+
 print 'OK: '.$checks.' native checks, PHP '.PHP_VERSION.', Dolibarr '.DOL_VERSION." (no live database).\n";
