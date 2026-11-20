@@ -1,6 +1,6 @@
 # CHANGELOG MODULE POWERPLANTPV FOR [DOLIBARR ERP CRM](https://www.dolibarr.org)
 
-## Correctif en attente
+## 1.8.1 — 2026-11-20
 
 - PDF de maintenance : la synthèse de couverture compte aussi les contrôles figés au niveau du rapport, par exemple les coffrets lorsque la composition de la centrale ne contient aucun coffret. Leurs « Non conforme / observation » apparaissent désormais dans les points à signaler et les indicateurs, une seule fois, sur la première centrale.
 
