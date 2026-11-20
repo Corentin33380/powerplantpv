@@ -62,6 +62,32 @@ class PowerPlantPVInterventionNature extends PowerPlantPVReportConfigBase
 	public $position;
 
 	/**
+	 * Write a new dictionary row to the entity chosen by the native dictionary settings.
+	 * @param User $user Author
+	 * @param int<0,1> $notrigger Skip object triggers
+	 * @return int New row id or negative on error
+	 */
+	public function create(User $user, $notrigger = 0)
+	{
+		$this->entity = (int) getEntity($this->table_element, 0);
+		return parent::create($user, $notrigger);
+	}
+
+	/**
+	 * Load an intervention nature visible through the native dictionary sharing settings.
+	 * @param int $id Dictionary row ID
+	 * @param string $ref Reference
+	 * @return int Native fetch result
+	 */
+	public function fetch($id, $ref = '')
+	{
+		if ((int) $id <= 0) {
+			return 0;
+		}
+		return $this->fetchCommon($id, $ref, ' AND t.entity IN ('.$this->db->sanitize(getEntity($this->table_element)).')', 1);
+	}
+
+	/**
 	 * Validate object before persistence.
 	 *
 	 * @return	int		1 if OK, <0 if KO
@@ -75,10 +101,8 @@ class PowerPlantPVInterventionNature extends PowerPlantPVReportConfigBase
 			return -1;
 		}
 		if ((string) $this->model_pdf !== '') {
-			require_once DOL_DOCUMENT_ROOT.'/core/modules/fichinter/modules_fichinter.php';
-			$models = ModelePDFFicheinter::liste_modeles($this->db);
-			if (!preg_match('/^[A-Za-z][A-Za-z0-9_]*$/D', (string) $this->model_pdf)
-				|| strpos((string) $this->model_pdf, 'doc_generic_') === 0 || !is_array($models) || !isset($models[$this->model_pdf])) {
+			$models = self::getPdfModels($this->db);
+			if (!isset($models[$this->model_pdf])) {
 				$this->error = 'PowerPlantPVInvalidInterventionPdfModel';
 				return -1;
 			}
@@ -94,6 +118,26 @@ class PowerPlantPVInterventionNature extends PowerPlantPVReportConfigBase
 	}
 
 	/**
+	 * Return active native intervention PDF models compatible with a nature.
+	 * @param DoliDB $db Database
+	 * @return array<string,string> Model IDs and labels
+	 */
+	public static function getPdfModels($db): array
+	{
+		require_once DOL_DOCUMENT_ROOT.'/core/modules/fichinter/modules_fichinter.php';
+		$models = ModelePDFFicheinter::liste_modeles($db);
+		if (!is_array($models)) {
+			return array();
+		}
+		foreach (array_keys($models) as $model) {
+			if (!preg_match('/^[A-Za-z][A-Za-z0-9_]*$/D', (string) $model) || strpos((string) $model, 'doc_generic_') === 0) {
+				unset($models[$model]);
+			}
+		}
+		return $models;
+	}
+
+	/**
 	 * Resolve the native PDF model for an intervention already authorized by the caller.
 	 * @return ?string Model name, empty when unmapped, null on read failure
 	 */
@@ -105,7 +149,10 @@ class PowerPlantPVInterventionNature extends PowerPlantPVReportConfigBase
 		$sql = "SELECT n.model_pdf FROM ".$this->db->prefix()."fichinter AS fi";
 		$sql .= " LEFT JOIN ".$this->db->prefix()."fichinter_extrafields AS ef ON ef.fk_object = fi.rowid";
 		$sql .= " LEFT JOIN ".$this->db->prefix().$this->table_element." AS n";
-		$sql .= " ON n.rowid = ef.powerplantpv_intervention_nature AND n.entity = fi.entity";
+		$sql .= " ON n.rowid = ef.powerplantpv_intervention_nature AND n.entity IN (".$this->db->sanitize(getEntity($this->table_element)).")";
+		// A shared intervention may only read a dictionary row of its own entity
+		// while it is being accessed from another entity.
+		$sql .= " AND (n.entity = fi.entity OR fi.entity IN (".$this->db->sanitize(getEntity('fichinter', 0))."))";
 		$sql .= " WHERE fi.rowid = ".((int) $intervention->id);
 		// The v20 create trigger can receive an object without its persisted entity.
 		$sql .= (int) $intervention->entity > 0

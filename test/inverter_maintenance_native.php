@@ -323,7 +323,26 @@ nativeMaintenanceCheck($nature->configuredPdfModel($newIntervention) === '', 'A 
 $natureDb->model = 'powerplantpvreport';
 nativeMaintenanceCheck($nature->configuredPdfModel($newIntervention) === 'powerplantpvreport'
 	&& strpos($natureDb->sql, 'fi.rowid = 91 AND fi.entity IN (2)') !== false
-	&& strpos($natureDb->sql, 'n.entity = fi.entity') !== false, 'A v20 creation gets its PDF model from the persisted intervention in the active entity');
+	&& strpos($natureDb->sql, 'n.entity IN (2)') !== false, 'A v20 creation gets its PDF model from the persisted intervention in the active entity');
+
+$mc = new class {
+	public $mode = 0;
+	public function getEntity($table, $shared, $object = null) {
+		if ($table !== 'c_powerplantpv_intervention_nature') {
+			return 2;
+		}
+		return $this->mode === 0 ? 1 : ($this->mode === 2 && $shared ? '1,2' : 2);
+	}
+};
+$newIntervention->entity = 2;
+foreach (array(0 => '1', 1 => '2', 2 => '1,2') as $mode => $entities) {
+	$mc->mode = $mode;
+	nativeMaintenanceCheck($nature->configuredPdfModel($newIntervention) === 'powerplantpvreport'
+		&& strpos($natureDb->sql, 'n.entity IN ('.$entities.')') !== false
+		&& strpos($natureDb->sql, 'fi.rowid = 91 AND fi.entity = 2') !== false,
+		'PDF model lookup follows dictionary sharing mode '.$mode.' without changing intervention ownership');
+}
+$mc = null;
 $statuses = PowerPlantPVReport::interventionSignatureStatuses();
 foreach (array(false, true) as $technicalRequired) {
 	$orders = $technicalRequired

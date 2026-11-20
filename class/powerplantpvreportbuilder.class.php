@@ -1564,7 +1564,8 @@ class PowerPlantPVReportBuilder
 		$result = 0;
 		if (!empty($nature['fk_report_template'])) {
 			$result = $template->fetch((int) $nature['fk_report_template']);
-		} elseif (!empty($nature['report_template_code'])) {
+		}
+		if ($result === 0 && !empty($nature['report_template_code'])) {
 			$result = $template->fetchByCode((string) $nature['report_template_code']);
 		}
 		if ($result <= 0 || empty($template->active) || (string) $template->target_element !== PowerPlantPVReportTemplate::TARGET_INTERVENTION) {

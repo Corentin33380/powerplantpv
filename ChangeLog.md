@@ -2,6 +2,7 @@
 
 ## 1.9.0 — 2026-11-20
 
+- Dictionnaire des natures d’intervention : ajout et modification selon le partage Multicompany, enregistrement du modèle PDF facultatif et en-têtes traduits. Actualiser le module pour enregistrer le hook du dictionnaire natif.
 - Rapports de maintenance avec photos obligatoires : une permission dédiée autorise la finalisation avec un index renseigné et une photo absente. Les autres contrôles de finalisation s’appliquent.
 - Signatures internes tracées via le pavé Dolibarr pour l’intervenant affecté et le responsable technique. Le rapport PowerPlantPV affiche le tracé, le nom et la date dans les cadres correspondants.
 - Le statut natif de l’intervention reflète les signatures internes requises et celle du tiers, quel que soit leur ordre. Le PDF signé par le client est conservé si une signature interne est ajoutée ensuite.
