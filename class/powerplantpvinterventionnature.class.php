@@ -35,7 +35,7 @@ class PowerPlantPVInterventionNature extends PowerPlantPVReportConfigBase
 		'description' => array('type' => 'text', 'label' => 'Description', 'enabled' => 1, 'position' => 30, 'notnull' => 0, 'visible' => 1),
 		'description_en' => array('type' => 'text', 'label' => 'PowerPlantPVEnglishDescription', 'enabled' => 1, 'position' => 31, 'notnull' => 0, 'visible' => 1),
 		'fk_report_template' => array('type' => 'integer:PowerPlantPVReportTemplate:powerplantpv/class/powerplantpvreporttemplate.class.php', 'label' => 'PowerPlantPVReportTemplate', 'enabled' => 1, 'position' => 40, 'notnull' => 0, 'visible' => 1),
-		'model_pdf' => array('type' => 'varchar(255)', 'label' => 'PDFTemplate', 'enabled' => 1, 'position' => 42, 'notnull' => 0, 'visible' => 1),
+		'model_pdf' => array('type' => 'varchar(255)', 'label' => 'Model', 'enabled' => 1, 'position' => 42, 'notnull' => 0, 'visible' => 1),
 		'report_template_code' => array('type' => 'varchar(64)', 'label' => 'PowerPlantPVReportTemplateCode', 'enabled' => 1, 'position' => 41, 'notnull' => 0, 'visible' => -2),
 		'is_maintenance' => array('type' => 'smallint', 'label' => 'PowerPlantPVIsMaintenance', 'enabled' => 1, 'position' => 50, 'notnull' => 1, 'visible' => 1, 'default' => 0),
 		'is_preventive' => array('type' => 'smallint', 'label' => 'PowerPlantPVIsPreventive', 'enabled' => 1, 'position' => 60, 'notnull' => 1, 'visible' => 1, 'default' => 0),

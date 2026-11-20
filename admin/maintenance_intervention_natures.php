@@ -93,7 +93,8 @@ if ($action === 'add' || $action === 'update') {
 	$object->description_en = GETPOST('description_en', 'restricthtml');
 	$object->fk_report_template = $templateId;
 	$object->report_template_code = $templateCode;
-	$object->model_pdf = GETPOST('model_pdf', 'alphanohtml');
+	$modelName = GETPOST('model_pdf', 'alphanohtml');
+	$object->model_pdf = $modelName === '-1' ? '' : $modelName;
 	$object->is_maintenance = GETPOSTINT('is_maintenance');
 	$object->is_preventive = GETPOSTINT('is_preventive');
 	$object->requires_report = GETPOSTINT('requires_report');
@@ -237,7 +238,7 @@ print '<tr class="liste_titre">';
 print_liste_field_titre('Code', $_SERVER['PHP_SELF'], 'code', '', $param, '', $sortfield, $sortorder);
 print_liste_field_titre('Label', $_SERVER['PHP_SELF'], 'label', '', $param, '', $sortfield, $sortorder);
 print_liste_field_titre('PowerPlantPVReportTemplate', $_SERVER['PHP_SELF'], 'fk_report_template', '', $param, '', $sortfield, $sortorder);
-print '<th>'.$langs->trans('PDFTemplate').'</th>';
+print '<th>'.$langs->trans('Model').'</th>';
 print_liste_field_titre('PowerPlantPVRequiresReport', $_SERVER['PHP_SELF'], 'requires_report', '', $param, 'class="center"', $sortfield, $sortorder);
 print_liste_field_titre('Status', $_SERVER['PHP_SELF'], 'active', '', $param, 'class="center"', $sortfield, $sortorder);
 print '<th class="center">'.$langs->trans('PowerPlantPVActivationSwitch').'</th>';
@@ -293,7 +294,7 @@ print '<tr><td>'.$langs->trans('PowerPlantPVEnglishLabel').'</td><td><input clas
 print '<tr><td>'.$langs->trans('Description').'</td><td><textarea class="flat centpercent" name="description" rows="2">'.dol_escape_htmltag((string) $object->description).'</textarea></td></tr>';
 print '<tr><td>'.$langs->trans('PowerPlantPVEnglishDescription').'</td><td><textarea class="flat centpercent" name="description_en" rows="2">'.dol_escape_htmltag((string) $object->description_en).'</textarea></td></tr>';
 print '<tr><td>'.$langs->trans('PowerPlantPVReportTemplate').'</td><td>'.$form->selectarray('fk_report_template', powerplantpvReportTemplateOptions(1), $object->fk_report_template, 1, 0, 0, '', 0, 0, 0, '', 'minwidth300').'</td></tr>';
-print '<tr><td>'.$langs->trans('PDFTemplate').'</td><td>'.$form->selectarray('model_pdf', $pdfModels, $object->model_pdf, 1).'</td></tr>';
+print '<tr><td>'.$langs->trans('Model').'</td><td>'.$form->selectarray('model_pdf', $pdfModels, $object->model_pdf, 1).'</td></tr>';
 print '<tr><td>'.$langs->trans('PowerPlantPVIsMaintenance').'</td><td>'.$form->selectyesno('is_maintenance', isset($object->is_maintenance) ? (int) $object->is_maintenance : 1, 1).'</td></tr>';
 print '<tr><td>'.$langs->trans('PowerPlantPVIsPreventive').'</td><td>'.$form->selectyesno('is_preventive', (int) $object->is_preventive, 1).'</td></tr>';
 print '<tr><td>'.$langs->trans('PowerPlantPVRequiresReport').'</td><td>'.$form->selectyesno('requires_report', (int) $object->requires_report, 1).'</td></tr>';
