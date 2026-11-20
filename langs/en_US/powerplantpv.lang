@@ -1930,3 +1930,11 @@ PowerPlantPVInterventionPdfModelFailed=The PDF template assigned to this interve
 PowerPlantPVInterventionPdfModelForced=This intervention type requires the %s PDF template.
 PowerPlantPVInterventionPdfGenerationFailed=The data was saved. PDF generation failed. Retry from the intervention card.
 PowerPlantPVInterventionSignedInternallyAndByThirdParty=Signed internally and by the third party
+
+# Native dictionary headings use the capitalized SQL field names.
+Report_template_code=Report template code
+Model_pdf=PDF template
+Is_maintenance=Maintenance nature
+Is_preventive=Preventive maintenance
+Requires_report=Report required
+Requires_signature=Signature required

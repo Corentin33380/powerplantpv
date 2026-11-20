@@ -204,16 +204,18 @@ function powerplantpvDefaultReportTemplateId()
  * @param	int		$id			Current row id
  * @param	string	$direction	up or down
  * @param	string	$whereExtra	Additional SQL where clause starting with AND
+ * @param	?int	$entity		Owning entity, defaults to the current entity
  * @return	int					1 if OK, 0 if no swap, <0 if KO
  */
-function powerplantpvReportTemplateMoveRow($table, $id, $direction, $whereExtra = '')
+function powerplantpvReportTemplateMoveRow($table, $id, $direction, $whereExtra = '', ?int $entity = null)
 {
 	global $db, $conf;
 
+	$entity = $entity ?? (int) $conf->entity;
 	$fullTable = $db->prefix().$table;
 	$sql = "SELECT rowid, position FROM ".$fullTable;
 	$sql .= " WHERE rowid = ".((int) $id);
-	$sql .= " AND entity = ".((int) $conf->entity);
+	$sql .= " AND entity = ".$entity;
 	$sql .= $whereExtra;
 	$resql = $db->query($sql);
 	if (!$resql) {
@@ -228,7 +230,7 @@ function powerplantpvReportTemplateMoveRow($table, $id, $direction, $whereExtra 
 	$operator = ($direction === 'up') ? '<' : '>';
 	$order = ($direction === 'up') ? 'DESC' : 'ASC';
 	$sql = "SELECT rowid, position FROM ".$fullTable;
-	$sql .= " WHERE entity = ".((int) $conf->entity);
+	$sql .= " WHERE entity = ".$entity;
 	$sql .= " AND position ".$operator." ".((int) $current->position);
 	$sql .= $whereExtra;
 	$sql .= " ORDER BY position ".$order.", rowid ".$order;
@@ -244,12 +246,12 @@ function powerplantpvReportTemplateMoveRow($table, $id, $direction, $whereExtra 
 	}
 
 	$db->begin();
-	$sql = "UPDATE ".$fullTable." SET position = ".((int) $other->position)." WHERE rowid = ".((int) $current->rowid)." AND entity = ".((int) $conf->entity);
+	$sql = "UPDATE ".$fullTable." SET position = ".((int) $other->position)." WHERE rowid = ".((int) $current->rowid)." AND entity = ".$entity;
 	if (!$db->query($sql)) {
 		$db->rollback();
 		return -1;
 	}
-	$sql = "UPDATE ".$fullTable." SET position = ".((int) $current->position)." WHERE rowid = ".((int) $other->rowid)." AND entity = ".((int) $conf->entity);
+	$sql = "UPDATE ".$fullTable." SET position = ".((int) $current->position)." WHERE rowid = ".((int) $other->rowid)." AND entity = ".$entity;
 	if (!$db->query($sql)) {
 		$db->rollback();
 		return -1;

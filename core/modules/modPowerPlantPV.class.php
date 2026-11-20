@@ -143,6 +143,7 @@ class modPowerPlantPV extends DolibarrModules
 					'invoicecard',
 					'contractcard',
 					'interventioncard',
+					'dictionaryadmin',
 					'fichintercard',
 					'ajaxonlinesign',
 					'ticketcard',
@@ -333,7 +334,7 @@ class modPowerPlantPV extends DolibarrModules
 			),
 			'tabsql' => array(
 				'SELECT f.rowid as rowid, f.code, f.label, f.active FROM '.$this->db->prefix().'c_powerplantpv_categorypv as f',
-				'SELECT f.rowid as rowid, f.code, f.label, f.report_template_code, f.model_pdf, f.is_maintenance, f.is_preventive, f.requires_report, f.requires_signature, f.active, f.position FROM '.$this->db->prefix().'c_powerplantpv_intervention_nature as f WHERE f.entity = '.((int) $conf->entity),
+				'SELECT f.rowid as rowid, f.code, f.label, f.report_template_code, f.model_pdf, f.is_maintenance, f.is_preventive, f.requires_report, f.requires_signature, f.active, f.position, f.entity FROM '.$this->db->prefix().'c_powerplantpv_intervention_nature as f WHERE f.entity IN ('.$this->db->sanitize(getEntity('c_powerplantpv_intervention_nature')).')',
 				'SELECT f.rowid as rowid, f.code, f.label, f.description, f.active, f.position FROM '.$this->db->prefix().'c_powerplantpv_maintenance_service as f WHERE f.entity = '.((int) $conf->entity),
 				'SELECT f.rowid as rowid, f.code, f.label, f.description, f.default_unit, f.active, f.position FROM '.$this->db->prefix().'c_powerplantpv_index_type as f WHERE f.entity = '.((int) $conf->entity),
 				'SELECT f.rowid as rowid, f.code, f.label, f.description, f.active, f.position FROM '.$this->db->prefix().'c_powerplantpv_communication_protocol as f WHERE f.entity = '.((int) $conf->entity),
@@ -363,7 +364,7 @@ class modPowerPlantPV extends DolibarrModules
 			),
 			'tabfieldvalue' => array(
 				'code,label',
-				'code,label,report_template_code,is_maintenance,is_preventive,requires_report,requires_signature,position',
+				'code,label,report_template_code,model_pdf,is_maintenance,is_preventive,requires_report,requires_signature,position',
 				'code,label,description,position',
 				'code,label,description,default_unit,position',
 				'code,label,description,position',
@@ -373,7 +374,7 @@ class modPowerPlantPV extends DolibarrModules
 			),
 			'tabfieldinsert' => array(
 				'code,label',
-				'code,label,report_template_code,is_maintenance,is_preventive,requires_report,requires_signature,position',
+				'code,label,report_template_code,model_pdf,is_maintenance,is_preventive,requires_report,requires_signature,position,entity',
 				'code,label,description,position',
 				'code,label,description,default_unit,position',
 				'code,label,description,position,entity',

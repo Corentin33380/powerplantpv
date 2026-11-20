@@ -533,6 +533,15 @@ class ActionsPowerplantpv
 		}
 
 		$contexts = $this->getContexts($parameters, $hookmanager);
+		$dictionaryId = (int) ($parameters['id'] ?? 0);
+		if (in_array('dictionaryadmin', $contexts, true)
+			&& ($parameters['tabname'][$dictionaryId] ?? '') === 'c_powerplantpv_intervention_nature') {
+			$this->interventionNatureDictionary = true;
+			return $this->saveInterventionNatureDictionary($dictionaryId, $action);
+		}
+		if ($object instanceof Fichinter && in_array('interventioncard', $contexts, true)) {
+			$this->prepareInterventionNatureChoices($object);
+		}
 		if ($action === '' && $object instanceof Fichinter && (int) $object->id > 0
 			&& in_array('interventioncard', $contexts, true)
 			&& $user->hasRight('ficheinter', 'lire') && $user->hasRight('powerplantpv', 'maintenance', 'read')) {
@@ -2198,6 +2207,146 @@ class ActionsPowerplantpv
 		}
 
 		return $valid || !function_exists('currentToken');
+	}
+
+	/** @var bool The current request renders the intervention nature dictionary. */
+	private $interventionNatureDictionary = false;
+
+	/**
+	 * Add the native PDF model selector to the generic dictionary form.
+	 * @param array<string,mixed> $parameters Hook parameters
+	 * @param object|null $object Current object
+	 * @param string $action Current action
+	 * @param HookManager $hookmanager Native hook manager
+	 * @return int Neutral hook result
+	 */
+	public function llxFooter($parameters, &$object, &$action, $hookmanager)
+	{
+		global $conf, $db;
+
+		if (!$this->interventionNatureDictionary || empty($conf->use_javascript_ajax)) {
+			return 0;
+		}
+
+		require_once __DIR__.'/powerplantpvinterventionnature.class.php';
+		$select = Form::selectarray('powerplantpv_dict_model', PowerPlantPVInterventionNature::getPdfModels($db),
+			'', 1, 0, 0, '', 0, 0, 0, '', 'minwidth150', 0);
+		$html = json_encode($select, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT);
+		$this->resprints = '<script nonce="'.getNonce().'">jQuery(function ($) {
+			$("input[type=text][name=model_pdf]").each(function (index) {
+				var field = $(this);
+				var select = $('.$html.');
+				var value = field.val();
+				if (value && !select.find("option").filter(function () { return this.value === value; }).length) {
+					select.append(new Option(value, value));
+				}
+				select.attr({name: field.attr("name"), id: "powerplantpv_dict_model_" + index}).val(value || "-1");
+				field.replaceWith(select);
+				if ($.fn.select2) {
+					select.select2({width: "resolve"});
+				}
+			});
+		});</script>';
+		return 0;
+	}
+
+	/**
+	 * Preserve optional fields and apply native dictionary ownership on all writes.
+	 * Native dict.php treats every listed custom column as required on add/modify.
+	 *
+	 * @param int $dictionaryId Native dictionary identifier
+	 * @param string $action Current action, set back to the form on validation error
+	 * @return int 0 to continue native rendering, -1 to cancel a rejected mutation
+	 */
+	private function saveInterventionNatureDictionary(int $dictionaryId, &$action): int
+	{
+		global $db, $langs, $user;
+
+		$add = GETPOSTISSET('actionadd');
+		$modify = GETPOSTISSET('actionmodify');
+		$rowAction = in_array($action, array('edit', 'delete', 'confirm_delete', 'activate', 'disable'), true);
+		if (!$add && !$modify && !$rowAction) {
+			return 0;
+		}
+		if (!$user->hasRight('powerplantpv', 'maintenance', 'config')) {
+			accessforbidden();
+		}
+		if (($add || $modify) && ($_SERVER['REQUEST_METHOD'] ?? '') !== 'POST') {
+			accessforbidden();
+		}
+		if (($add || $modify || in_array($action, array('confirm_delete', 'activate', 'disable'), true))
+			&& !$this->isSubmittedTokenValid()) {
+			accessforbidden('Bad token');
+		}
+		require_once __DIR__.'/powerplantpvinterventionnature.class.php';
+		$nature = new PowerPlantPVInterventionNature($db);
+		if ($modify || $rowAction) {
+			$id = GETPOSTINT('rowid');
+			if ($id <= 0 || $nature->fetch($id) <= 0
+				|| (int) $nature->entity !== (int) getEntity($nature->table_element, 0)) {
+				accessforbidden();
+			}
+		}
+		if (!$add && !$modify) {
+			return 0;
+		}
+
+		$nature->code = trim(GETPOST('code', 'alphanohtml'));
+		$nature->label = trim(GETPOST('label', 'alphanohtml'));
+		$nature->report_template_code = trim(GETPOST('report_template_code', 'alphanohtml'));
+		$model = trim(GETPOST('model_pdf', 'alphanohtml'));
+		$nature->model_pdf = $model === '-1' ? '' : $model;
+		foreach (array('is_maintenance', 'is_preventive', 'requires_report', 'requires_signature') as $field) {
+			$nature->$field = (int) (GETPOSTINT($field) === 1);
+		}
+		$nature->position = GETPOSTINT('position');
+		if ($add) {
+			$nature->active = 1;
+		}
+		$result = $add ? $nature->create($user) : $nature->update($user);
+		$langs->load('powerplantpv@powerplantpv');
+		if ($result <= 0) {
+			$action = $add ? 'create' : 'edit';
+			$this->error = $langs->trans($nature->error ?: 'Error');
+			$this->errors = $nature->errors;
+			return -1;
+		}
+
+		setEventMessages($langs->trans('RecordSaved'), null, 'mesgs');
+		header('Location: '.DOL_URL_ROOT.'/admin/dict.php?id='.$dictionaryId);
+		exit;
+	}
+
+	/**
+	 * Resolve the native intervention extrafield's options from the shared dictionary.
+	 * Preserve administrator-defined extrafield filters.
+	 *
+	 * @param Fichinter $intervention Current intervention
+	 * @return void
+	 */
+	private function prepareInterventionNatureChoices(Fichinter $intervention): void
+	{
+		global $db, $extrafields;
+
+		$key = 'powerplantpv_intervention_nature';
+		$defaultFilter = 'c_powerplantpv_intervention_nature:label:rowid::((active:=:1) AND (entity:=:$ENTITY$))';
+		if (!is_object($extrafields) || ($extrafields->attributes['fichinter']['type'][$key] ?? '') !== 'sellist'
+			|| !array_key_exists($defaultFilter, $extrafields->attributes['fichinter']['param'][$key]['options'] ?? array())) {
+			return;
+		}
+
+		require_once __DIR__.'/../lib/powerplantpv_maintenance.lib.php';
+		$options = powerplantpvMaintenanceInterventionNatureOptions(0);
+		$id = (int) ($intervention->array_options['options_'.$key] ?? 0);
+		if ($id > 0 && !isset($options[$id])) {
+			require_once __DIR__.'/powerplantpvinterventionnature.class.php';
+			$nature = new PowerPlantPVInterventionNature($db);
+			if ($nature->fetch($id) > 0) {
+				$options[$id] = $nature->label;
+			}
+		}
+		$extrafields->attributes['fichinter']['type'][$key] = 'select';
+		$extrafields->attributes['fichinter']['param'][$key] = array('options' => $options);
 	}
 
 	/**

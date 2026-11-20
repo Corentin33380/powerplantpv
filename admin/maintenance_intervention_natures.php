@@ -34,17 +34,12 @@ dol_include_once('/powerplantpv/class/powerplantpvinterventionnature.class.php')
 $langs->loadLangs(array('admin', 'powerplantpv@powerplantpv', 'other'));
 powerplantpvReportTemplateAdminAccess();
 
-require_once DOL_DOCUMENT_ROOT.'/core/modules/fichinter/modules_fichinter.php';
-$pdfModels = ModelePDFFicheinter::liste_modeles($db);
-$pdfModels = is_array($pdfModels) ? $pdfModels : array();
-foreach (array_keys($pdfModels) as $modelName) {
-	if (!preg_match('/^[A-Za-z][A-Za-z0-9_]*$/D', (string) $modelName) || strpos((string) $modelName, 'doc_generic_') === 0) {
-		unset($pdfModels[$modelName]);
-	}
-}
+$pdfModels = PowerPlantPVInterventionNature::getPdfModels($db);
 $form = new Form($db);
 $object = new PowerPlantPVInterventionNature($db);
 $template = new PowerPlantPVReportTemplate($db);
+$dictionaryEntity = (int) getEntity($object->table_element, 0);
+$canEditReportTemplate = $dictionaryEntity === (int) $conf->entity;
 
 $action = GETPOST('action', 'aZ09');
 $id = GETPOSTINT('id');
@@ -67,6 +62,11 @@ if (GETPOST('button_removefilter', 'alpha') || GETPOST('button_removefilter_x', 
 	$search_requires_report = '';
 }
 
+if (in_array($action, array('edit', 'update', 'enable', 'disable', 'delete', 'moveup', 'movedown'), true)
+	&& ($id <= 0 || $object->fetch($id) <= 0 || (int) $object->entity !== $dictionaryEntity)) {
+	accessforbidden();
+}
+
 if (in_array($action, array('add', 'update', 'enable', 'disable', 'delete', 'moveup', 'movedown'), true)) {
 	if (function_exists('checkToken') && !checkToken()) {
 		accessforbidden('Bad token');
@@ -74,25 +74,20 @@ if (in_array($action, array('add', 'update', 'enable', 'disable', 'delete', 'mov
 }
 
 if ($action === 'add' || $action === 'update') {
-	if ($action === 'update') {
-		if ($id <= 0 || $object->fetch($id) <= 0) {
-			accessforbidden();
-		}
-	} else {
-		$object = new PowerPlantPVInterventionNature($db);
-	}
-	$templateId = GETPOSTINT('fk_report_template');
-	$templateCode = '';
-	if ($templateId > 0 && $template->fetch($templateId) > 0) {
-		$templateCode = (string) $template->code;
-	}
+
 	$object->code = strtoupper(trim(GETPOST('code', 'alphanohtml')));
 	$object->label = trim(GETPOST('label', 'alphanohtml'));
 	$object->label_en = trim(GETPOST('label_en', 'alphanohtml'));
 	$object->description = GETPOST('description', 'restricthtml');
 	$object->description_en = GETPOST('description_en', 'restricthtml');
-	$object->fk_report_template = $templateId;
-	$object->report_template_code = $templateCode;
+	if ($canEditReportTemplate) {
+		$templateId = GETPOSTINT('fk_report_template');
+		if ($templateId > 0 && $template->fetch($templateId) <= 0) {
+			accessforbidden();
+		}
+		$object->fk_report_template = $templateId;
+		$object->report_template_code = $templateId > 0 ? (string) $template->code : '';
+	}
 	$modelName = GETPOST('model_pdf', 'alphanohtml');
 	$object->model_pdf = $modelName === '-1' ? '' : $modelName;
 	$object->is_maintenance = GETPOSTINT('is_maintenance');
@@ -112,9 +107,6 @@ if ($action === 'add' || $action === 'update') {
 		exit;
 	}
 } elseif ($action === 'disable' && $id > 0) {
-	if ($object->fetch($id) <= 0) {
-		accessforbidden();
-	}
 	$result = $object->disable($user);
 	if ($result < 0) {
 		setEventMessages($object->error, $object->errors, 'errors');
@@ -123,9 +115,6 @@ if ($action === 'add' || $action === 'update') {
 	}
 	$action = '';
 } elseif ($action === 'enable' && $id > 0) {
-	if ($object->fetch($id) <= 0) {
-		accessforbidden();
-	}
 	$result = $object->enable($user);
 	if ($result < 0) {
 		setEventMessages($object->error, $object->errors, 'errors');
@@ -134,9 +123,6 @@ if ($action === 'add' || $action === 'update') {
 	}
 	$action = '';
 } elseif ($action === 'delete' && $confirm === 'yes' && $id > 0) {
-	if ($object->fetch($id) <= 0) {
-		accessforbidden();
-	}
 	$result = $object->delete($user, 0);
 	if ($result < 0) {
 		setEventMessages($object->error, $object->errors, 'errors');
@@ -147,18 +133,13 @@ if ($action === 'add' || $action === 'update') {
 	}
 	$action = '';
 } elseif (($action === 'moveup' || $action === 'movedown') && $id > 0) {
-	$result = powerplantpvReportTemplateMoveRow('c_powerplantpv_intervention_nature', $id, $action === 'moveup' ? 'up' : 'down');
+	$result = powerplantpvReportTemplateMoveRow('c_powerplantpv_intervention_nature', $id, $action === 'moveup' ? 'up' : 'down', '', $dictionaryEntity);
 	if ($result < 0) {
 		setEventMessages($langs->trans('Error'), null, 'errors');
 	}
 	$action = '';
 }
 
-if ($action === 'edit' && $id > 0) {
-	if ($object->fetch($id) <= 0) {
-		accessforbidden();
-	}
-}
 $openeditdialog = in_array($action, array('create', 'edit'), true);
 
 $param = '';
@@ -172,7 +153,7 @@ if ($search_requires_report !== '') {
 	$param .= '&search_requires_report='.urlencode((string) $search_requires_report);
 }
 
-$where = " WHERE t.entity = ".((int) $conf->entity);
+$where = " WHERE t.entity = ".$dictionaryEntity;
 if ($search !== '') {
 	$safeSearch = $db->escape($search);
 	$where .= " AND (t.code LIKE '%".$safeSearch."%' OR t.label LIKE '%".$safeSearch."%')";
@@ -293,7 +274,7 @@ print '<tr><td class="titlefieldcreate">'.$langs->trans('Label').'</td><td><inpu
 print '<tr><td>'.$langs->trans('PowerPlantPVEnglishLabel').'</td><td><input class="flat minwidth300" type="text" name="label_en" value="'.dol_escape_htmltag((string) $object->label_en).'"></td></tr>';
 print '<tr><td>'.$langs->trans('Description').'</td><td><textarea class="flat centpercent" name="description" rows="2">'.dol_escape_htmltag((string) $object->description).'</textarea></td></tr>';
 print '<tr><td>'.$langs->trans('PowerPlantPVEnglishDescription').'</td><td><textarea class="flat centpercent" name="description_en" rows="2">'.dol_escape_htmltag((string) $object->description_en).'</textarea></td></tr>';
-print '<tr><td>'.$langs->trans('PowerPlantPVReportTemplate').'</td><td>'.$form->selectarray('fk_report_template', powerplantpvReportTemplateOptions(1), $object->fk_report_template, 1, 0, 0, '', 0, 0, 0, '', 'minwidth300').'</td></tr>';
+print '<tr><td>'.$langs->trans('PowerPlantPVReportTemplate').'</td><td>'.($canEditReportTemplate ? $form->selectarray('fk_report_template', powerplantpvReportTemplateOptions(1), $object->fk_report_template, 1, 0, 0, '', 0, 0, 0, '', 'minwidth300') : dol_escape_htmltag((string) $object->report_template_code)).'</td></tr>';
 print '<tr><td>'.$langs->trans('Model').'</td><td>'.$form->selectarray('model_pdf', $pdfModels, $object->model_pdf, 1).'</td></tr>';
 print '<tr><td>'.$langs->trans('PowerPlantPVIsMaintenance').'</td><td>'.$form->selectyesno('is_maintenance', isset($object->is_maintenance) ? (int) $object->is_maintenance : 1, 1).'</td></tr>';
 print '<tr><td>'.$langs->trans('PowerPlantPVIsPreventive').'</td><td>'.$form->selectyesno('is_preventive', (int) $object->is_preventive, 1).'</td></tr>';
