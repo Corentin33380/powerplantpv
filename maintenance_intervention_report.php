@@ -59,6 +59,8 @@ dol_include_once('/powerplantpv/class/powerplantpvreportbuilder.class.php');
 dol_include_once('/powerplantpv/class/powerplantpvreportfield.class.php');
 dol_include_once('/powerplantpv/class/powerplantpvreportfile.class.php');
 require_once __DIR__.'/lib/powerplantpv_indexphoto.lib.php';
+require_once __DIR__.'/lib/powerplantpv_reportsignature.lib.php';
+require_once __DIR__.'/class/powerplantpvinterventionnature.class.php';
 dol_include_once('/powerplantpv/class/powerplantpvreportdcmeasure.class.php');
 dol_include_once('/powerplantpv/class/powerplantpvpowerplantsummary.class.php');
 require_once __DIR__.'/class/powerplantpvreportpresentation.class.php';
@@ -133,22 +135,47 @@ if ($reportFetch < 0) {
 	setEventMessages($report->error, $report->errors, 'errors');
 }
 $technicalSigned = $reportFetch > 0 && (int) $report->fk_user_technical_sign > 0;
-$caneditreport = $caneditreport && !$technicalSigned;
-$canTechnicalSign = $reportFetch > 0 && !$technicalSigned && !$locked && $report->isSaved()
-	&& $user->hasRight('powerplantpv', 'maintenance', 'sign_technical')
-	&& $report->technicalSignatureEnabled() && $report->isTechnicalSupervisor($intervention, $user);
-if ($action === 'sign_technical') {
-	if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'POST' || !$canTechnicalSign || !powerplantpvReportSubmittedTokenValid($token)
-		|| GETPOSTINT('technical_sign_consent', 2) !== 1
-		|| powerplantpvReportSnapshotNeedsRebuild($builder, (int) $report->id)) {
+$technicianSigned = $reportFetch > 0 && (int) $report->fk_user_technician_sign > 0;
+$caneditreport = $caneditreport && !$technicalSigned && !$technicianSigned;
+
+$signatureScript = '';
+if (powerplantpvReportSignatureAvailable() && !empty($conf->use_javascript_ajax)) {
+	foreach (array('/public/includes/jquery/plugins/jSignature/jSignature.js', '/includes/jquery/plugins/jSignature/jSignature.js') as $path) {
+		if (is_readable(DOL_DOCUMENT_ROOT.$path)) {
+			$signatureScript = $path;
+			break;
+		}
+	}
+}
+$canSign = $reportFetch > 0 && !$locked && $report->isSaved() && $signatureScript !== '';
+$signingAllowed = array(
+	'technician' => $canSign && !$technicianSigned && $report->isAssignedTechnician($intervention, $user),
+	'technical' => $canSign && !$technicalSigned && $user->hasRight('powerplantpv', 'maintenance', 'sign_technical')
+		&& $report->technicalSignatureEnabled() && $report->isTechnicalSupervisor($intervention, $user),
+);
+$signatureRole = '';
+if ($action === 'prepare_signature' || $action === 'save_signature') {
+	$signatureRole = GETPOST('signature_role', 'aZ09');
+	if (empty($signingAllowed[$signatureRole]) || powerplantpvReportSnapshotNeedsRebuild($builder, (int) $report->id)) {
 		accessforbidden();
 	}
-	if ($report->signAsTechnicalSupervisor($intervention, $user, $user->getFullName($langs)) > 0) {
-		setEventMessages($langs->trans('PowerPlantPVTechnicalSignRecorded'), null, 'mesgs');
-		header('Location: '.$_SERVER['PHP_SELF'].'?id='.(int) $id);
-		exit;
+	if ($action === 'save_signature') {
+		if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'POST' || !powerplantpvReportSubmittedTokenValid($token)
+			|| GETPOSTINT('signature_consent', 2) !== 1) {
+			accessforbidden();
+		}
+		$drawing = (string) GETPOST('signature_image', 'none', 2);
+		if ($report->signDrawn($intervention, $user, $signatureRole, $user->getFullName($langs), $drawing) > 0) {
+			setEventMessages($langs->trans('PowerPlantPVSignatureRecorded'), null, 'mesgs');
+			$model = (new PowerPlantPVInterventionNature($db))->configuredPdfModel($intervention);
+			if ($model === null || $intervention->generateDocument($model !== '' ? $model : 'powerplantpvreport', $langs) <= 0) {
+				setEventMessages($langs->trans('PowerPlantPVInterventionPdfGenerationFailed'), null, 'warnings');
+			}
+			header('Location: '.$_SERVER['PHP_SELF'].'?id='.(int) $id.'#powerplantpv-report-signatures');
+			exit;
+		}
+		setEventMessages($langs->trans('PowerPlantPVSignatureDrawingFailed'), null, 'errors');
 	}
-	setEventMessages($langs->trans('PowerPlantPVTechnicalSignFailed'), null, 'errors');
 }
 
 if ($action === 'view_index_photo') {
@@ -242,8 +269,15 @@ if (($action === 'save_draft' || $action === 'save') && $caneditreport) {
 		}
 		$interventionValidationResult = 0;
 		$requiredValidationFailed = 0;
+		$photoWarnings = array();
+		$finalPdfModel = '';
 		if ($result >= 0) {
-			$photoErrors = powerplantpvReportSaveIndexPhotos($report, (string) $status === PowerPlantPVReport::STATUS_SAVED);
+			$photoErrors = powerplantpvReportSaveIndexPhotos(
+				$report,
+				(string) $status === PowerPlantPVReport::STATUS_SAVED,
+				$user->hasRight('powerplantpv', 'maintenance', 'finalize_missing_evidence'),
+				$photoWarnings
+			);
 			if ($photoErrors) {
 				$result = -1;
 				$requiredValidationFailed = 1;
@@ -272,6 +306,14 @@ if (($action === 'save_draft' || $action === 'save') && $caneditreport) {
 							$result = -1;
 						}
 					}
+					if ($result >= 0) {
+						$nature = new PowerPlantPVInterventionNature($db);
+						$finalPdfModel = $nature->configuredPdfModel($intervention);
+						if ($finalPdfModel === null || $nature->applyPdfModel($intervention, $user, $finalPdfModel) < 0) {
+							$result = -1;
+							$builder->error = $langs->trans('PowerPlantPVInterventionPdfModelFailed');
+						}
+					}
 					if ($result >= 0 && $db->commit() <= 0) {
 						$result = -1;
 						$builder->error = $db->lasterror();
@@ -295,6 +337,12 @@ if (($action === 'save_draft' || $action === 'save') && $caneditreport) {
 				setEventMessages($langs->trans('PowerPlantPVReportSavedInterventionValidated'), null, 'mesgs');
 			} else {
 				setEventMessages($langs->trans($status === PowerPlantPVReport::STATUS_SAVED ? 'PowerPlantPVReportSaved' : 'PowerPlantPVReportDraftSaved'), null, 'mesgs');
+			}
+			if ($finalPdfModel !== '' && $intervention->generateDocument($finalPdfModel, $langs) <= 0) {
+				setEventMessages($langs->trans('PowerPlantPVInterventionPdfGenerationFailed'), null, 'warnings');
+			}
+			if ($photoWarnings) {
+				setEventMessages($langs->trans('PowerPlantPVReportMissingEvidenceWarning'), $photoWarnings, 'warnings');
 			}
 			$redirectUrl = $_SERVER['PHP_SELF'].'?id='.(int) $id;
 			if ($action === 'save_draft') {
@@ -365,6 +413,9 @@ $form = new Form($db);
 $title = $langs->trans('PowerPlantPVReportTab');
 
 $morejs = array('/powerplantpv/js/powerplantpv_report.js?v='.(int) filemtime(__DIR__.'/js/powerplantpv_report.js'));
+if ($signatureRole !== '') {
+	array_unshift($morejs, $signatureScript);
+}
 $morecss = array('/powerplantpv/css/powerplantpv_report.css?v='.(int) filemtime(__DIR__.'/css/powerplantpv_report.css'));
 llxHeader('', $title, '', '', 0, 0, $morejs, $morecss, '', 'mod-powerplantpv page-maintenance-intervention-report');
 
@@ -552,18 +603,37 @@ if (is_array($tree) && empty($tree['can_generate'])) {
 	}
 	print '</form>';
 
+	print '<div class="center powerplantpv-report-actions" id="powerplantpv-report-signatures">';
+	$signatureLabels = array('technician' => 'PowerPlantPVTechnicianSignButton', 'technical' => 'PowerPlantPVTechnicalSignButton');
+	foreach ($signatureLabels as $role => $label) {
+		if ($signingAllowed[$role] && !$snapshotNeedsRebuild) {
+			$url = $_SERVER['PHP_SELF'].'?id='.(int) $id.'&action=prepare_signature&signature_role='.$role.'&token='.newToken().'#powerplantpv-report-signatures';
+			print dolGetButtonAction($langs->trans($label), '', 'default', $url);
+		}
+	}
+	if ($technicianSigned) {
+		print '<p class="opacitymedium">'.$langs->trans('PowerPlantPVTechnicianSignSummary',
+			dol_escape_htmltag((string) $report->technician_signer_name), dol_print_date($report->date_technician_sign, 'dayhour')).'</p>';
+	}
 	if ($technicalSigned) {
 		print '<p class="opacitymedium">'.$langs->trans('PowerPlantPVTechnicalSignSummary',
 			dol_escape_htmltag((string) $report->technical_signer_name), dol_print_date($report->date_technical_sign, 'dayhour')).'</p>';
-	} elseif ($canTechnicalSign && !$snapshotNeedsRebuild) {
-		print '<form method="POST" action="'.dol_escape_htmltag($_SERVER['PHP_SELF']).'">';
+	}
+	if ($signatureRole !== '') {
+		$consent = $signatureRole === 'technical' ? 'PowerPlantPVTechnicalSignConsent' : 'PowerPlantPVTechnicianSignConsent';
+		print '<form method="POST" id="powerplantpv-signature-form" action="'.dol_escape_htmltag($_SERVER['PHP_SELF']).'">';
 		print '<input type="hidden" name="token" value="'.newToken().'">';
 		print '<input type="hidden" name="id" value="'.(int) $id.'">';
-		print '<input type="hidden" name="action" value="sign_technical">';
-		print '<label><input type="checkbox" name="technical_sign_consent" value="1" required> '.$langs->trans('PowerPlantPVTechnicalSignConsent').'</label>';
-		print ' <input type="submit" class="button" value="'.dol_escape_htmltag($langs->trans('PowerPlantPVTechnicalSignButton')).'">';
+		print '<input type="hidden" name="action" value="save_signature">';
+		print '<input type="hidden" name="signature_role" value="'.dol_escape_htmltag($signatureRole).'">';
+		print '<input type="hidden" name="signature_image" value="">';
+		print '<div id="powerplantpv-signature-pad"></div>';
+		print '<button type="button" class="button buttonreset" id="powerplantpv-signature-clear">'.$langs->trans('ClearSignature').'</button>';
+		print '<p><label><input type="checkbox" name="signature_consent" value="1" required> '.$langs->trans($consent).'</label></p>';
+		print '<input type="submit" class="button" value="'.dol_escape_htmltag($langs->trans($signatureLabels[$signatureRole])).'">';
 		print '</form>';
 	}
+	print '</div>';
 
 	if ($cangenerateserialannex && $reportFetch > 0) {
 		print '<form method="POST" action="'.dol_escape_htmltag($_SERVER['PHP_SELF']).'" class="powerplantpv-inline-form">';
@@ -1829,7 +1899,7 @@ function powerplantpvReportIndexPhotoField(PowerPlantPVReportField $field): bool
 }
 
 /** @return list<string> Labels of uploads or required photos that need attention. */
-function powerplantpvReportSaveIndexPhotos(PowerPlantPVReport $report, bool $finalize): array
+function powerplantpvReportSaveIndexPhotos(PowerPlantPVReport $report, bool $finalize, bool $allowMissing, array &$warnings): array
 {
 	global $db, $langs;
 
@@ -1851,7 +1921,11 @@ function powerplantpvReportSaveIndexPhotos(PowerPlantPVReport $report, bool $fin
 		if ($hasUpload && !powerplantpvIndexPhotoStore($upload, $path)) {
 			$errors[] = $label.' — '.$langs->trans('PowerPlantPVIndexPhotoInvalid');
 		} elseif ($required && is_numeric($field->value_number) && ($path === '' || !is_file($path))) {
-			$errors[] = $label.' — '.$langs->trans('PowerPlantPVIndexPhotoRequired');
+			if ($allowMissing) {
+				$warnings[] = $label;
+			} else {
+				$errors[] = $label.' — '.$langs->trans('PowerPlantPVIndexPhotoRequired');
+			}
 		}
 	}
 	return $errors;

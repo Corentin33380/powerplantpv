@@ -47,6 +47,9 @@ class PowerPlantPVReport extends PowerPlantPVReportGeneratedBase
 		'status' => array('type' => 'varchar(16)', 'label' => 'Status', 'enabled' => 1, 'position' => 70, 'notnull' => 1, 'visible' => 1, 'default' => self::STATUS_DRAFT),
 		'fk_user_technical_sign' => array('type' => 'integer:User:user/class/user.class.php', 'label' => 'PowerPlantPVVisualTechnicalServiceSignature', 'enabled' => 1, 'position' => 71, 'notnull' => 0, 'visible' => 0),
 		'date_technical_sign' => array('type' => 'datetime', 'label' => 'Date', 'enabled' => 1, 'position' => 72, 'notnull' => 0, 'visible' => 0),
+		'fk_user_technician_sign' => array('type' => 'integer:User:user/class/user.class.php', 'label' => 'PowerPlantPVReportTechnicianSignature', 'enabled' => 1, 'position' => 74, 'notnull' => 0, 'visible' => 0),
+		'date_technician_sign' => array('type' => 'datetime', 'label' => 'Date', 'enabled' => 1, 'position' => 75, 'notnull' => 0, 'visible' => 0),
+		'technician_signer_name' => array('type' => 'varchar(255)', 'label' => 'Name', 'enabled' => 1, 'position' => 76, 'notnull' => 0, 'visible' => 0),
 		'technical_signer_name' => array('type' => 'varchar(255)', 'label' => 'Name', 'enabled' => 1, 'position' => 73, 'notnull' => 0, 'visible' => 0),
 		'date_creation' => array('type' => 'datetime', 'label' => 'DateCreation', 'enabled' => 1, 'position' => 500, 'notnull' => 0, 'visible' => -2),
 		'tms' => array('type' => 'timestamp', 'label' => 'DateModification', 'enabled' => 1, 'position' => 501, 'notnull' => 0, 'visible' => -2),
@@ -71,6 +74,76 @@ class PowerPlantPVReport extends PowerPlantPVReportGeneratedBase
 	public $fk_user_technical_sign;
 	public $date_technical_sign;
 	public $technical_signer_name;
+	public $fk_user_technician_sign;
+	public $date_technician_sign;
+	public $technician_signer_name;
+
+	/** Check an internal intervention contact against the authenticated signer. */
+	public function isAssignedTechnician(Fichinter $intervention, User $signer): bool
+	{
+		if ((int) $signer->id <= 0 || (int) $signer->socid > 0 || (int) $this->fk_fichinter !== (int) $intervention->id
+			|| (int) $this->entity !== (int) $intervention->entity) {
+			return false;
+		}
+		$contacts = $intervention->liste_contact(-1, 'internal');
+		if (!is_array($contacts)) {
+			return false;
+		}
+		foreach ($contacts as $contact) {
+			if ((int) ($contact['id'] ?? 0) === (int) $signer->id
+				&& in_array($contact['code'] ?? '', array('INTERVENING', 'INTERREPFOLL'), true)) {
+				return true;
+			}
+		}
+
+		return false;
+	}
+
+	/** Store the drawing and signer on the same finalized report revision. */
+	public function signDrawn(Fichinter $intervention, User $signer, string $role, string $name, string $drawing): int
+	{
+		require_once __DIR__.'/../lib/powerplantpv_reportsignature.lib.php';
+		if (!$this->isSaved() || !in_array($role, powerplantpvReportSignatureRoles(), true)) {
+			return -1;
+		}
+		if ($role === 'technician' && !$this->isAssignedTechnician($intervention, $signer)) {
+			return -1;
+		}
+		if ($role === 'technical' && (!$signer->hasRight('powerplantpv', 'maintenance', 'sign_technical')
+			|| !$this->technicalSignatureEnabled() || !$this->isTechnicalSupervisor($intervention, $signer))) {
+			return -1;
+		}
+
+		// The role is selected from a fixed list and is used in column names only.
+		$signerColumn = 'fk_user_'.$role.'_sign';
+		$sql = "UPDATE ".$this->db->prefix().$this->table_element;
+		$sql .= " SET ".$signerColumn." = ".((int) $signer->id);
+		$sql .= ", date_".$role."_sign = '".$this->db->idate(dol_now())."'";
+		$sql .= ", ".$role."_signer_name = '".$this->db->escape(dol_substr($name, 0, 255))."'";
+		$sql .= " WHERE rowid = ".((int) $this->id)." AND entity = ".((int) $this->entity);
+		$sql .= " AND status = '".self::STATUS_SAVED."' AND ".$signerColumn." IS NULL";
+
+		if ($this->db->begin() <= 0) {
+			return -1;
+		}
+		$result = $this->db->query($sql);
+		if (!$result || (int) $this->db->affected_rows($result) !== 1) {
+			$this->db->rollback();
+			return -1;
+		}
+		$path = powerplantpvReportSignaturePath((int) $this->entity, (int) $this->id, $role, true);
+		if (!powerplantpvReportSignatureStore($drawing, $path)) {
+			$this->db->rollback();
+			return -1;
+		}
+		if ($this->db->commit() <= 0) {
+			$this->db->rollback();
+			dol_delete_file($path, 1, 1, 1, null, false, 0);
+			return -1;
+		}
+
+		return 1;
+	}
 
 	public function technicalSignatureEnabled(): bool
 	{
@@ -144,7 +217,7 @@ class PowerPlantPVReport extends PowerPlantPVReportGeneratedBase
 	/** Check the technical signature under a database lock within a report edit transaction. */
 	public function lockUnsignedForEdit(): bool
 	{
-		$sql = "SELECT fk_user_technical_sign FROM ".$this->db->prefix().$this->table_element;
+		$sql = "SELECT fk_user_technical_sign, fk_user_technician_sign FROM ".$this->db->prefix().$this->table_element;
 		$sql .= " WHERE rowid = ".((int) $this->id)." AND entity = ".((int) $this->entity)." FOR UPDATE";
 		$result = $this->db->query($sql);
 		if (!$result) {
@@ -153,7 +226,7 @@ class PowerPlantPVReport extends PowerPlantPVReportGeneratedBase
 		$row = $this->db->fetch_object($result);
 		$this->db->free($result);
 
-		return is_object($row) && empty($row->fk_user_technical_sign);
+		return is_object($row) && empty($row->fk_user_technical_sign) && empty($row->fk_user_technician_sign);
 	}
 
 	/**

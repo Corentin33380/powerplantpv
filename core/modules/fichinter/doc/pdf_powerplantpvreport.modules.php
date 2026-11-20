@@ -13,6 +13,7 @@
  * \brief		Dynamic PDF model for PowerPlantPV intervention reports.
  */
 
+require_once __DIR__.'/../../../../lib/powerplantpv_reportsignature.lib.php';
 require_once DOL_DOCUMENT_ROOT.'/core/modules/fichinter/modules_fichinter.php';
 require_once DOL_DOCUMENT_ROOT.'/core/lib/company.lib.php';
 require_once DOL_DOCUMENT_ROOT.'/core/lib/files.lib.php';

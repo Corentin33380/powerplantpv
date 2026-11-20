@@ -61,6 +61,16 @@ class InterfacePowerPlantPVMaintenanceTriggers extends DolibarrTriggers
 			return 0;
 		}
 
+		if (($action === 'FICHINTER_CREATE' || $action === 'FICHINTER_MODIFY') && $object instanceof Fichinter) {
+			dol_include_once('/powerplantpv/class/powerplantpvinterventionnature.class.php');
+			$nature = new PowerPlantPVInterventionNature($this->db);
+			$model = $nature->configuredPdfModel($object);
+			if ($model === null || $nature->applyPdfModel($object, $user, $model) < 0) {
+				$this->error = 'PowerPlantPVInterventionPdfModelFailed';
+				return -1;
+			}
+		}
+
 		if ($action === 'FICHINTER_CREATE') {
 			$linker = new PowerPlantPVMaintenanceContractLinker($this->db);
 			$linkResult = $linker->linkInterventionToMaintenanceContract($object, $user, 'trigger_create');

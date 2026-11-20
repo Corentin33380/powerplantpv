@@ -515,6 +515,27 @@ class ActionsPowerplantpv
 		}
 
 		$contexts = $this->getContexts($parameters, $hookmanager);
+		if ($action === 'builddoc' && $object instanceof Fichinter && $object->id > 0
+			&& in_array('interventioncard', $contexts, true) && $user->hasRight('ficheinter', 'creer')
+			&& getDolGlobalInt('POWERPLANTPV_MAINTENANCE_ENABLE', 1)) {
+			require_once __DIR__.'/powerplantpvinterventionnature.class.php';
+			$nature = new PowerPlantPVInterventionNature($db);
+			$model = $nature->configuredPdfModel($object);
+			$requestedModel = GETPOST('model', 'alpha');
+			if ($model === null || ($model !== '' && !$this->isSubmittedTokenValid())) {
+				return -1;
+			}
+			if ($model !== '' && $nature->applyPdfModel($object, $user, $model) < 0) {
+				$langs->load('powerplantpv@powerplantpv');
+				$this->error = $langs->trans('PowerPlantPVInterventionPdfModelFailed');
+				return -1;
+			}
+			if ($model !== '' && $requestedModel !== '' && $requestedModel !== $model) {
+				$langs->load('powerplantpv@powerplantpv');
+				setEventMessages($langs->trans('PowerPlantPVInterventionPdfModelForced', $model), null, 'errors');
+				return 1;
+			}
+		}
 		// The native project card already owns the banner's surrounding POST form.
 		if ($object instanceof Project && $action === 'update' && in_array('projectcard', $contexts, true)
 			&& GETPOST('powerplantpv_links_action', 'aZ09') === 'powerplantpv_save_plants') {

@@ -34,6 +34,14 @@ dol_include_once('/powerplantpv/class/powerplantpvinterventionnature.class.php')
 $langs->loadLangs(array('admin', 'powerplantpv@powerplantpv', 'other'));
 powerplantpvReportTemplateAdminAccess();
 
+require_once DOL_DOCUMENT_ROOT.'/core/modules/fichinter/modules_fichinter.php';
+$pdfModels = ModelePDFFicheinter::liste_modeles($db);
+$pdfModels = is_array($pdfModels) ? $pdfModels : array();
+foreach (array_keys($pdfModels) as $modelName) {
+	if (!preg_match('/^[A-Za-z][A-Za-z0-9_]*$/D', (string) $modelName) || strpos((string) $modelName, 'doc_generic_') === 0) {
+		unset($pdfModels[$modelName]);
+	}
+}
 $form = new Form($db);
 $object = new PowerPlantPVInterventionNature($db);
 $template = new PowerPlantPVReportTemplate($db);
@@ -85,6 +93,7 @@ if ($action === 'add' || $action === 'update') {
 	$object->description_en = GETPOST('description_en', 'restricthtml');
 	$object->fk_report_template = $templateId;
 	$object->report_template_code = $templateCode;
+	$object->model_pdf = GETPOST('model_pdf', 'alphanohtml');
 	$object->is_maintenance = GETPOSTINT('is_maintenance');
 	$object->is_preventive = GETPOSTINT('is_preventive');
 	$object->requires_report = GETPOSTINT('requires_report');
@@ -94,7 +103,7 @@ if ($action === 'add' || $action === 'update') {
 
 	$result = ($action === 'add') ? $object->create($user, 0) : $object->update($user, 0);
 	if ($result < 0) {
-		setEventMessages($object->error, $object->errors, 'errors');
+		setEventMessages($langs->trans($object->error), $object->errors, 'errors');
 		$action = ($action === 'add') ? 'create' : 'edit';
 	} else {
 		setEventMessages($langs->trans('RecordSaved'), null, 'mesgs');
@@ -191,7 +200,7 @@ if (!in_array(strtoupper($sortorder), array('ASC', 'DESC'), true)) {
 	$sortorder = 'ASC';
 }
 
-$sql = "SELECT t.rowid, t.code, t.label, t.fk_report_template, t.report_template_code, t.is_maintenance, t.is_preventive, t.requires_report, t.requires_signature, t.active, t.position, rt.label as template_label, rt.code as template_code";
+$sql = "SELECT t.rowid, t.code, t.label, t.fk_report_template, t.report_template_code, t.model_pdf, t.is_maintenance, t.is_preventive, t.requires_report, t.requires_signature, t.active, t.position, rt.label as template_label, rt.code as template_code";
 $sql .= " FROM ".$db->prefix()."c_powerplantpv_intervention_nature as t";
 $sql .= " LEFT JOIN ".$db->prefix()."powerplantpv_report_template as rt ON rt.rowid = t.fk_report_template AND rt.entity = t.entity";
 $sql .= $where;
@@ -228,6 +237,7 @@ print '<tr class="liste_titre">';
 print_liste_field_titre('Code', $_SERVER['PHP_SELF'], 'code', '', $param, '', $sortfield, $sortorder);
 print_liste_field_titre('Label', $_SERVER['PHP_SELF'], 'label', '', $param, '', $sortfield, $sortorder);
 print_liste_field_titre('PowerPlantPVReportTemplate', $_SERVER['PHP_SELF'], 'fk_report_template', '', $param, '', $sortfield, $sortorder);
+print '<th>'.$langs->trans('PDFTemplate').'</th>';
 print_liste_field_titre('PowerPlantPVRequiresReport', $_SERVER['PHP_SELF'], 'requires_report', '', $param, 'class="center"', $sortfield, $sortorder);
 print_liste_field_titre('Status', $_SERVER['PHP_SELF'], 'active', '', $param, 'class="center"', $sortfield, $sortorder);
 print '<th class="center">'.$langs->trans('PowerPlantPVActivationSwitch').'</th>';
@@ -242,6 +252,7 @@ if ($resql) {
 		print '<td>'.dol_escape_htmltag((string) $obj->code).'</td>';
 		print '<td>'.dol_escape_htmltag((string) $obj->label).'</td>';
 		print '<td>'.dol_escape_htmltag($templateLabel).'</td>';
+		print '<td>'.dol_escape_htmltag((string) ($pdfModels[$obj->model_pdf ?? ''] ?? $obj->model_pdf ?? '')).'</td>';
 		print '<td class="center">'.yn((int) $obj->requires_report).'</td>';
 		print '<td class="center"><span class="badge '.(!empty($obj->active) ? 'badge-status4' : 'badge-status8').'">'.$langs->trans(!empty($obj->active) ? 'Enabled' : 'Disabled').'</span></td>';
 		print '<td class="center nowraponall">';
@@ -263,7 +274,7 @@ if ($resql) {
 	$db->free($resql);
 }
 if (empty($num)) {
-	powerplantpvPrintNoRecordFound(8);
+	powerplantpvPrintNoRecordFound(9);
 }
 print '</table></div></form>';
 
@@ -282,6 +293,7 @@ print '<tr><td>'.$langs->trans('PowerPlantPVEnglishLabel').'</td><td><input clas
 print '<tr><td>'.$langs->trans('Description').'</td><td><textarea class="flat centpercent" name="description" rows="2">'.dol_escape_htmltag((string) $object->description).'</textarea></td></tr>';
 print '<tr><td>'.$langs->trans('PowerPlantPVEnglishDescription').'</td><td><textarea class="flat centpercent" name="description_en" rows="2">'.dol_escape_htmltag((string) $object->description_en).'</textarea></td></tr>';
 print '<tr><td>'.$langs->trans('PowerPlantPVReportTemplate').'</td><td>'.$form->selectarray('fk_report_template', powerplantpvReportTemplateOptions(1), $object->fk_report_template, 1, 0, 0, '', 0, 0, 0, '', 'minwidth300').'</td></tr>';
+print '<tr><td>'.$langs->trans('PDFTemplate').'</td><td>'.$form->selectarray('model_pdf', $pdfModels, $object->model_pdf, 1).'</td></tr>';
 print '<tr><td>'.$langs->trans('PowerPlantPVIsMaintenance').'</td><td>'.$form->selectyesno('is_maintenance', isset($object->is_maintenance) ? (int) $object->is_maintenance : 1, 1).'</td></tr>';
 print '<tr><td>'.$langs->trans('PowerPlantPVIsPreventive').'</td><td>'.$form->selectyesno('is_preventive', (int) $object->is_preventive, 1).'</td></tr>';
 print '<tr><td>'.$langs->trans('PowerPlantPVRequiresReport').'</td><td>'.$form->selectyesno('requires_report', (int) $object->requires_report, 1).'</td></tr>';

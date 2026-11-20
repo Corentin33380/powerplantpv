@@ -13,6 +13,7 @@ if (!is_file($core.'/core/lib/functions.lib.php') || basename($module) !== 'powe
 }
 $dataRoot = sys_get_temp_dir().'/ppv-visual-'.bin2hex(random_bytes(6));
 mkdir($dataRoot.'/mycompany/logos', 0777, true);
+mkdir($dataRoot.'/powerplantpv', 0777, true);
 define('DOL_DOCUMENT_ROOT', $core);
 define('DOL_DATA_ROOT', $dataRoot);
 define('DOL_URL_ROOT', '');
@@ -37,6 +38,7 @@ $conf = (object) array(
 	'global' => (object) array('MAIN_DISABLE_PDF_COMPRESSION' => '1', 'MAIN_LANG_DEFAULT' => 'fr_FR'),
 	'file' => (object) array('character_set_client' => 'UTF-8', 'dol_document_root' => array('main' => $core, 'test' => dirname($module)), 'dol_url_root' => array('main' => '', 'test' => '/custom')),
 	'mycompany' => (object) array('dir_output' => $dataRoot.'/mycompany', 'multidir_output' => array(1 => $dataRoot.'/mycompany')),
+	'powerplantpv' => (object) array('multidir_output' => array(1 => $dataRoot.'/powerplantpv')),
 	'ficheinter' => (object) array('dir_output' => $dataRoot.'/ficheinter', 'multidir_output' => array(1 => $dataRoot.'/ficheinter')),
 	'tzuserinputkey' => 'tzserver', 'format_date_short' => '%d/%m/%Y', 'format_date_text_short' => '%d %b %Y',
 );
@@ -190,6 +192,7 @@ $object = (object) array('ref' => 'FI2611-0123', 'entity' => 1, 'datei' => dol_m
 
 $runs = array('default' => array(), 'client' => array('HIDE_EQUIPMENT', 'SHORT_CONNECTION', 'TECHNICAL_SERVICE_SIGNATURE'), 'mixed' => array('SHORT_CONNECTION'));
 $contents = array();
+$storedSignature = false;
 foreach ($runs as $name => $options) {
 	if ($name === 'mixed') {
 		$measures[0]->insulation_positive_to_ground = null;
@@ -207,10 +210,35 @@ foreach ($runs as $name => $options) {
 	} else {
 		unset($dataset['report']->fk_user_technical_sign, $dataset['report']->date_technical_sign, $dataset['report']->technical_signer_name);
 	}
+	if ($name === 'mixed' && powerplantpvReportSignatureAvailable()) {
+		$dataset['report']->id = 91;
+		$dataset['report']->entity = 1;
+		$dataset['report']->fk_user_technician_sign = 10;
+		$dataset['report']->date_technician_sign = dol_mktime(10, 35, 0, 11, 18, 2026);
+		$dataset['report']->technician_signer_name = 'Intervenant Signataire';
+		$path = powerplantpvReportSignaturePath(1, 91, 'technician', true);
+		$pad = imagecreatetruecolor(600, 200);
+		imagefill($pad, 0, 0, imagecolorallocate($pad, 255, 255, 255));
+		ob_start();
+		imagepng($pad);
+		$blank = ob_get_clean();
+		visualPdfCheck(!powerplantpvReportSignatureStore('data:image/png;base64,'.base64_encode($blank), $path), 'Empty signature is rejected');
+		imagesetthickness($pad, 4);
+		imageline($pad, 40, 150, 560, 60, imagecolorallocate($pad, 23, 40, 74));
+		ob_start();
+		imagepng($pad);
+		$drawing = ob_get_clean();
+		$storedSignature = powerplantpvReportSignatureStore('data:image/png;base64,'.base64_encode($drawing), $path);
+		visualPdfCheck($storedSignature && is_file($path), 'The technician drawing is saved privately');
+	}
 	$model = VisualPdfFixture::create($mysoc);
 	$model->snapshot = $snapshot;
 	$file = ($outputDir !== '' ? rtrim($outputDir, '/\\') : $dataRoot).'/visual-'.$name.'.pdf';
 	$pages = $model->build($object, $dataset, $file);
+	if ($name === 'mixed' && $storedSignature) {
+		visualPdfCheck(strpos(file_get_contents($file), '/Width 600 /Height 200') !== false
+			|| (strpos(file_get_contents($file), '/Width 600') !== false && strpos(file_get_contents($file), '/Height 200') !== false), 'Technician drawing is embedded');
+	}
 	$annexFile = substr($file, 0, -4).'-annexe.pdf';
 	$annexPages = $model->build($object, $dataset, $annexFile, true);
 	visualPdfCheck(is_file($file) && $pages >= 3 && is_file($annexFile) && $annexPages >= 1, 'Both '.$name.' PDFs are rendered');
@@ -248,6 +276,9 @@ visualPdfCheck(strpos($default, $langs->transnoentities('PowerPlantPVVisualInsul
 // Card titles may wrap: compare the flattened text.
 $flat = static function ($text) { return preg_replace('/\s+/u', ' ', $text); };
 $mixed = $flat($contents['mixed']);
+if ($storedSignature) {
+	visualPdfCheck(strpos($mixed, 'Intervenant Signataire') !== false && strpos($mixed, '18/11/2026') !== false, 'The PDF displays the technician signer and date');
+}
 visualPdfCheck(strpos($flat($default), $langs->transnoentities('PowerPlantPVVisualAnswerSummary', 20, 21)) !== false, 'The additional not-applicable answer counts as completed');
 visualPdfCheck(strpos($flat($default), 'Nettoyage / lubrification des joints Sans objet') !== false, 'The cabinet cleaning row shows Sans objet in the PDF');
 visualPdfCheck(strpos($default, 'Bleu : tension') === false && strpos($default, 'Pointillés :') === false, 'The chart legend uses graphic markers instead of color names');

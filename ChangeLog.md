@@ -1,5 +1,12 @@
 # CHANGELOG MODULE POWERPLANTPV FOR [DOLIBARR ERP CRM](https://www.dolibarr.org)
 
+## Non publié
+
+- Rapports de maintenance avec photos obligatoires : une permission dédiée autorise la finalisation avec un index renseigné et une photo absente. Les autres contrôles de finalisation s’appliquent.
+- Signatures internes tracées via le pavé Dolibarr pour l’intervenant affecté et le responsable technique. Le rapport PowerPlantPV affiche le tracé, le nom et la date dans les cadres correspondants.
+- Le dictionnaire des natures d’intervention peut imposer un modèle PDF natif. Le module enregistre ce choix sur la fiche Intervention et génère le modèle configuré à la finalisation.
+- Actualiser le module dans Dolibarr pour ajouter les champs et attribuer la nouvelle permission aux utilisateurs ou groupes concernés.
+
 ## 1.8.0 — 2026-11-18
 
 - Mesures DC : détail des chaînes dans le rapport principal. Une action par chaîne permet de reprendre dans les champs de tension vides les anciennes valeurs dont la mesure en volts est confirmée.
