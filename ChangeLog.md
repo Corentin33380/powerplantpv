@@ -2,7 +2,6 @@
 
 ## Non publié
 
-- Mesures DC : les anciennes valeurs « Isolement + / − terre » sont des tensions d’isolement, affichées en volts dans la fiche, le tableau et le graphique du PDF.
 - Finalisation : le conducteur de travaux de la centrale (contact interne « Conducteur de travaux ») peut finaliser le rapport même si des photos d’index obligatoires manquent ; les photos absentes sont signalées en avertissement.
 - Signatures dessinées directement dans l’ERP pour le technicien affecté, le responsable technique et le client, reprises avec nom et date dans les cadres du PDF. Toute signature verrouille le rapport. Actualiser le module par l’action native de Dolibarr pour ajouter les colonnes de signature.
 

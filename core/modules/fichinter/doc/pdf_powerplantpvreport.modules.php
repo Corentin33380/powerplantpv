@@ -936,8 +936,8 @@ class pdf_powerplantpvreport extends ModelePDFFicheinter
 			'negative_to_ground_voltage' => array('PowerPlantPVNegativeToGroundVoltage', 'V'),
 		);
 		$resistance = array(
-			'insulation_positive_to_ground' => array('PowerPlantPVInsulationPositiveToGround', 'V'),
-			'insulation_negative_to_ground' => array('PowerPlantPVInsulationNegativeToGround', 'V'),
+			'insulation_positive_to_ground' => array('PowerPlantPVInsulationPositiveToGround', 'MOhm'),
+			'insulation_negative_to_ground' => array('PowerPlantPVInsulationNegativeToGround', 'MOhm'),
 		);
 		$hasVoltages = $hasResistances = false;
 		foreach ($group['mppts'] as $measures) {

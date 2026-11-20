@@ -1776,7 +1776,7 @@ function powerplantpvReportRenderDcMeasureCard($measure, $editable, $form)
 	);
 	foreach ($historicalResistance as $label => $value) {
 		if ($value !== null && $value !== '') {
-			print '<div class="opacitymedium">'.dol_escape_htmltag($langs->trans($label).' : '.powerplantpvReportDcDisplayNumber($measure, $value, 'V')).'</div>';
+			print '<div class="opacitymedium">'.dol_escape_htmltag($langs->trans($label).' : '.powerplantpvReportDcDisplayNumber($measure, $value, 'MOhm')).'</div>';
 		}
 	}
 
