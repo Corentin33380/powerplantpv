@@ -400,7 +400,7 @@ if ($action === 'upload_file' && $caneditreport && $reportFetch > 0) {
 	if ($result < 0) {
 		setEventMessages($langs->trans('ErrorFileNotUploaded'), null, 'errors');
 	} else {
-		setEventMessages($langs->trans('FileWasUploaded'), null, 'mesgs');
+		setEventMessages($langs->trans('FileUploaded'), null, 'mesgs');
 		header('Location: '.$_SERVER['PHP_SELF'].'?id='.(int) $id);
 		exit;
 	}
@@ -409,9 +409,9 @@ if ($action === 'upload_file' && $caneditreport && $reportFetch > 0) {
 if ($action === 'delete_file' && $caneditreport && $reportFetch > 0) {
 	$result = powerplantpvReportDeleteFile($report, $intervention, $fileId);
 	if ($result < 0) {
-		setEventMessages($langs->trans('ErrorFailedToDeleteFile'), null, 'errors');
+		setEventMessages($langs->trans('PowerPlantPVReportFileRemoveFailed'), null, 'errors');
 	} else {
-		setEventMessages($langs->trans('FileWasRemoved'), null, 'mesgs');
+		setEventMessages($langs->trans('PowerPlantPVReportFileRemoved'), null, 'mesgs');
 		header('Location: '.$_SERVER['PHP_SELF'].'?id='.(int) $id);
 		exit;
 	}
@@ -1788,7 +1788,7 @@ function powerplantpvReportRenderDcMeasureCard($measure, $editable, $form)
 	print '<label>'.$langs->trans('PowerPlantPVInsulationStatus').$form->selectarray($name.'[insulation_status]', $insulationOptions, (string) $measure->insulation_status, 1, 0, 0, '', 0, 0, 0, '', 'powerplantpv-report-control').'</label>';
 	print '<label>'.$langs->trans('PowerPlantPVPositiveToGroundVoltage').'<span class="powerplantpv-control-with-unit"><input type="text" class="flat powerplantpv-report-control right" name="'.$name.'[positive_to_ground_voltage]" value="'.dol_escape_htmltag(powerplantpvReportDcInputNumberValue($measure->positive_to_ground_voltage)).'"><span class="opacitymedium">V</span></span></label>';
 	print '<label>'.$langs->trans('PowerPlantPVNegativeToGroundVoltage').'<span class="powerplantpv-control-with-unit"><input type="text" class="flat powerplantpv-report-control right" name="'.$name.'[negative_to_ground_voltage]" value="'.dol_escape_htmltag(powerplantpvReportDcInputNumberValue($measure->negative_to_ground_voltage)).'"><span class="opacitymedium">V</span></span></label>';
-	print '<label class="powerplantpv-dc-observation">'.$langs->trans('Observation').'<textarea class="flat powerplantpv-report-control" rows="2" name="'.$name.'[observation]">'.dol_escape_htmltag((string) $measure->observation).'</textarea></label>';
+	print '<label class="powerplantpv-dc-observation">'.$langs->trans('PowerPlantPVReportObservation').'<textarea class="flat powerplantpv-report-control" rows="2" name="'.$name.'[observation]">'.dol_escape_htmltag((string) $measure->observation).'</textarea></label>';
 	print '</div></details>';
 }
 

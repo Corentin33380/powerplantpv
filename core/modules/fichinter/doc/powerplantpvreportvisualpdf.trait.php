@@ -990,7 +990,7 @@ trait PowerPlantPVReportVisualPdf
 			}
 		}
 		$pdf->Ln(3);
-		$this->visualNote($pdf, $langs->transnoentities('Observation'), implode("\n", $notes));
+		$this->visualNote($pdf, $langs->transnoentities('PowerPlantPVReportObservation'), implode("\n", $notes));
 	}
 
 	/**

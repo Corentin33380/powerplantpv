@@ -902,7 +902,7 @@ class pdf_powerplantpvreport extends ModelePDFFicheinter
 			foreach ($poleColumns as $column) {
 				$html .= '<td>'.dol_escape_htmltag($outputlangs->transnoentities($column[0]).' ('.$column[1].')').'</td>';
 			}
-			$html .= '<td>'.dol_escape_htmltag($outputlangs->transnoentities('Observation')).'</td>';
+			$html .= '<td>'.dol_escape_htmltag($outputlangs->transnoentities('PowerPlantPVReportObservation')).'</td>';
 			$html .= '</tr></thead><tbody>';
 			foreach ($group['mppts'] as $rows) {
 				foreach ($rows as $measure) {
@@ -1018,7 +1018,7 @@ class pdf_powerplantpvreport extends ModelePDFFicheinter
 		if (isset($fieldsByCode['PRODUCTION_READING_OBSERVATION'])) {
 			$value = PowerPlantPVReportPdfDataset::formatFieldValue($fieldsByCode['PRODUCTION_READING_OBSERVATION'], $outputlangs);
 			if ($value !== '') {
-				$this->renderKeyValueTable($pdf, array(array($outputlangs->transnoentities('Observation'), $value)), '');
+				$this->renderKeyValueTable($pdf, array(array($outputlangs->transnoentities('PowerPlantPVReportObservation'), $value)), '');
 			}
 		}
 	}
