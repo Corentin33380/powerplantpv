@@ -591,8 +591,13 @@ if (is_array($tree) && empty($tree['can_generate'])) {
 		print '<div id="powerplantpv-report-contents-label" class="menu_titre">'.$langs->trans('PowerPlantPVReportContents').'</div>';
 		print '</nav>';
 		print '<div class="marginbottomonly" data-report-disclosure-controls hidden>';
-		print '<button type="button" class="button" data-report-disclosure="open">'.$langs->trans('PowerPlantPVReportExpandAll').'</button> ';
-		print '<button type="button" class="button" data-report-disclosure="close">'.$langs->trans('PowerPlantPVReportCollapseAll').'</button>';
+		print dolGetButtonAction($langs->transnoentities('PowerPlantPVReportExpandAll'), '', 'default', '#', '', 1, array(
+			'attr' => array('role' => 'button', 'data-report-disclosure' => 'open'),
+		));
+		print ' ';
+		print dolGetButtonAction($langs->transnoentities('PowerPlantPVReportCollapseAll'), '', 'default', '#', '', 1, array(
+			'attr' => array('role' => 'button', 'data-report-disclosure' => 'close'),
+		));
 		print '</div></div>';
 	}
 	powerplantpvReportRenderSections($tree['sections'], $renderEditableFields, $form, isset($tree['powerplants']) && is_array($tree['powerplants']) ? $tree['powerplants'] : array());

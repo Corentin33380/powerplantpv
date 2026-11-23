@@ -200,10 +200,17 @@
 		if (controls && sections.size) {
 			controls.hidden = false;
 			controls.querySelectorAll('[data-report-disclosure]').forEach(function (button) {
-				button.addEventListener('click', function () {
+				button.addEventListener('click', function (event) {
+					event.preventDefault();
 					var open = button.dataset.reportDisclosure === 'open';
 					sections.forEach(function (section) { section.open = open; });
 					rememberSections(true);
+				});
+				button.addEventListener('keydown', function (event) {
+					if (event.key === ' ') {
+						event.preventDefault();
+						if (!event.repeat) { button.click(); }
+					}
 				});
 			});
 		}
