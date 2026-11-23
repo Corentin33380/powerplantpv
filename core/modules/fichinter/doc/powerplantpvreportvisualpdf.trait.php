@@ -68,7 +68,7 @@ trait PowerPlantPVReportVisualPdf
 				$this->renderSectionTitle($pdf, $outputlangs->transnoentities('PowerPlantPDFInverters'), 2);
 				$panels = array();
 				foreach ($inverters as $row) { $panels[] = $this->visualSectionPanel($row, $outputlangs); }
-				$this->visualPanels($pdf, $panels, true);
+				$this->visualPanels($pdf, $panels, false);
 				foreach ($inverters as $row) { $this->visualSectionExtras($pdf, $row, $dataset, $outputlangs); }
 			}
 			foreach ($other as $row) {
