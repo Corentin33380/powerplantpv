@@ -5,6 +5,7 @@
 - Rapports de maintenance et PDF : retrait des index d’injection par onduleur et des photos associées. Les index de production par onduleur et le compteur d’injection général restent disponibles.
 - Rapports et PDF : libellés français et anglais pour les réponses de contrôle, les listes d’options et les actions de configuration.
 - PDF : blocs de contrôle des onduleurs sur toute la largeur, y compris lorsqu’un bloc se poursuit sur la page suivante.
+- Rapports de maintenance : mémorisation des sections ouvertes ou repliées, commandes « Développer tout » et « Replier tout » et sommaire cliquable dans le menu gauche.
 
 ## 1.9.0 — 2026-11-20
 
