@@ -568,7 +568,8 @@ if (is_array($tree) && empty($tree['can_generate'])) {
 		&& $noContractPrestations
 		&& !empty($manualOptions));
 	$formClass = 'powerplantpv-report-form'.($caneditreport ? ' powerplantpv-report-form-editable' : '');
-	print '<form id="powerplantpvreportform" class="'.dol_escape_htmltag($formClass).'" data-unsaved="'.dol_escape_htmltag($langs->transnoentities('PowerPlantPVUnsavedChanges')).'" data-saving="'.dol_escape_htmltag($langs->transnoentities('PowerPlantPVSavingReport')).'" data-leave="'.dol_escape_htmltag($langs->transnoentities('PowerPlantPVLeaveUnsaved')).'" method="POST" enctype="multipart/form-data" action="'.dol_escape_htmltag($_SERVER['PHP_SELF']).'">';
+	$viewKey = (int) $conf->entity.':'.(int) $user->id.':'.(int) $id;
+	print '<form id="powerplantpvreportform" class="'.dol_escape_htmltag($formClass).'" data-view-key="'.$viewKey.'" data-unsaved="'.dol_escape_htmltag($langs->transnoentities('PowerPlantPVUnsavedChanges')).'" data-saving="'.dol_escape_htmltag($langs->transnoentities('PowerPlantPVSavingReport')).'" data-leave="'.dol_escape_htmltag($langs->transnoentities('PowerPlantPVLeaveUnsaved')).'" method="POST" enctype="multipart/form-data" action="'.dol_escape_htmltag($_SERVER['PHP_SELF']).'">';
 	print '<input type="hidden" name="token" value="'.newToken().'">';
 	print '<input type="hidden" name="id" value="'.((int) $id).'">';
 	print '<div class="powerplantpv-report-save-state opacitymedium" role="status" aria-live="polite"></div>';
@@ -584,6 +585,16 @@ if (is_array($tree) && empty($tree['can_generate'])) {
 	}
 
 	$renderEditableFields = $caneditreport;
+	if (!empty($conf->use_javascript_ajax)) {
+		print '<div class="powerplantpv-report-navigation">';
+		print '<nav class="blockvmenu" aria-labelledby="powerplantpv-report-contents-label" data-report-contents hidden>';
+		print '<div id="powerplantpv-report-contents-label" class="menu_titre">'.$langs->trans('PowerPlantPVReportContents').'</div>';
+		print '</nav>';
+		print '<div class="marginbottomonly" data-report-disclosure-controls hidden>';
+		print '<button type="button" class="button" data-report-disclosure="open">'.$langs->trans('PowerPlantPVReportExpandAll').'</button> ';
+		print '<button type="button" class="button" data-report-disclosure="close">'.$langs->trans('PowerPlantPVReportCollapseAll').'</button>';
+		print '</div></div>';
+	}
 	powerplantpvReportRenderSections($tree['sections'], $renderEditableFields, $form, isset($tree['powerplants']) && is_array($tree['powerplants']) ? $tree['powerplants'] : array());
 
 	if ($caneditreport) {
@@ -1152,8 +1163,10 @@ function powerplantpvReportRenderSections($sections, $editable, $form, $powerpla
 	$dcMeasuresAnchors = array();
 	$singlePlant = count($powerplants) === 1 ? powerplantpvReportPowerplantSourceId(reset($powerplants)) : 0;
 	foreach ($groups as $group) {
+		$plantLabel = '';
 		if (!empty($group['powerplant'])) {
-			print load_fiche_titre(dol_escape_htmltag(powerplantpvReportPowerplantLabel($group['powerplant'])), '', 'fa-industry');
+			$plantLabel = powerplantpvReportPowerplantLabel($group['powerplant']);
+			print load_fiche_titre(dol_escape_htmltag($plantLabel), '', 'fa-industry');
 			powerplantpvReportRenderPowerplantTechnicalSummary($group['powerplant']);
 		}
 		foreach ($group['sections'] as $row) {
@@ -1168,15 +1181,20 @@ function powerplantpvReportRenderSections($sections, $editable, $form, $powerpla
 			$label = powerplantpvReportLocalizedObjectLabel($section, 'section_label');
 			$identity = !empty($row['equipment']) ? (object) $row['equipment'] : null;
 			$identity = $identity && (string) $identity->equipment_type === 'INVERTER' ? $identity : null;
-			$anchor = '';
+			$sectionKey = hash('sha256', (string) ($section->fk_powerplant ?? '').':'.(string) $section->section_code.':'.(string) ($section->occurrence_key ?? ''));
+			$anchor = 'powerplantpv-section-'.$sectionKey;
 			if ((string) $section->section_code === 'DC_ELECTRICAL_MEASURE') {
 				$plantId = empty($group['powerplant']) ? $singlePlant : powerplantpvReportPowerplantSourceId($group['powerplant']);
 				if ($plantId > 0 && !isset($dcMeasuresAnchors[$plantId])) {
-					$anchor = ' id="powerplantpv-dc-measures-'.$plantId.'"';
+					$anchor = 'powerplantpv-dc-measures-'.$plantId;
 					$dcMeasuresAnchors[$plantId] = true;
 				}
 			}
-			print '<details'.$anchor.' class="powerplantpv-report-section" data-state-key="section:'.hash('sha256', (string) ($section->fk_powerplant ?? '').':'.(string) $section->section_code.':'.(string) ($section->occurrence_key ?? '')).'" open>';
+			$contentsLabel = $plantLabel !== '' ? $plantLabel.' · '.$label : $label;
+			if (!empty($row['equipment'])) {
+				$contentsLabel .= ' · '.powerplantpvReportEquipmentLabel($row['equipment']);
+			}
+			print '<details id="'.$anchor.'" class="powerplantpv-report-section" data-state-key="section:'.$sectionKey.'" data-contents-label="'.dol_escape_htmltag($contentsLabel).'" open>';
 			print '<summary class="liste_titre"><span>'.dol_escape_htmltag($label).'</span><span class="powerplantpv-report-progress opacitymedium" data-progress-label="'.dol_escape_htmltag($langs->transnoentities('PowerPlantPVReportProgress')).'"></span>';
 			if ($identity) {
 				print ' <span class="powerplantpv-identity-mobile">'.dol_escape_htmltag(PowerPlantPVReportPresentation::identity($identity, false)).'</span>';
@@ -1251,9 +1269,12 @@ function powerplantpvReportRenderPowerplantTechnicalSummary($powerplant)
 
 	$resolved = powerplantpvReportResolvePowerplantTechnicalSummary($powerplant);
 	$snapshot = $resolved['snapshot'];
+	$plantId = powerplantpvReportPowerplantSourceId($powerplant);
+	$title = $langs->transnoentities('PowerPlantPVReportPowerPlantSummary');
+	$contentsLabel = powerplantpvReportPowerplantLabel($powerplant).' · '.$title;
+	print '<details id="powerplantpv-plant-summary-'.$plantId.'" class="powerplantpv-report-section powerplantpv-report-summary" data-state-key="plant-summary:'.$plantId.'" data-contents-label="'.dol_escape_htmltag($contentsLabel).'" open>';
+	print '<summary class="liste_titre"><span>'.dol_escape_htmltag($title).'</span></summary>';
 	if (empty($snapshot['sections']) || !is_array($snapshot['sections'])) {
-		print '<details class="powerplantpv-report-section powerplantpv-report-summary" open>';
-		print '<summary class="liste_titre"><span>'.dol_escape_htmltag($langs->trans('PowerPlantPVReportPowerPlantSummary')).'</span></summary>';
 		print '<div class="powerplantpv-report-summary-content">';
 		print '<table class="noborder centpercent"><tr class="oddeven"><td><span class="opacitymedium">'.$langs->trans('PowerPlantPVReportPowerPlantSummaryUnavailable').'</span></td></tr></table>';
 		print '</div>';
@@ -1261,8 +1282,6 @@ function powerplantpvReportRenderPowerplantTechnicalSummary($powerplant)
 		return;
 	}
 
-	print '<details class="powerplantpv-report-section powerplantpv-report-summary" open>';
-	print '<summary class="liste_titre"><span>'.dol_escape_htmltag($langs->trans('PowerPlantPVReportPowerPlantSummary')).'</span></summary>';
 	print '<div class="powerplantpv-report-summary-content">';
 	if (!empty($resolved['fallback_notice'])) {
 		print '<div class="info opacitymedium powerplantpv-report-summary-fallback">'.dol_escape_htmltag($langs->trans('PowerPlantPVReportPowerPlantSummaryLiveFallback')).'</div>';
@@ -1454,7 +1473,7 @@ function powerplantpvReportRenderNativeCustomerSignatureBlock($signatureRows)
 		$message = $langs->trans('PowerPlantPVReportSignatureRequiresFinalizedReport');
 	}
 
-	print '<div class="powerplantpv-native-signature-block">';
+	print '<div id="powerplantpv-report-customer-signature" class="powerplantpv-native-signature-block" data-contents-label="'.dol_escape_htmltag($title).'" tabindex="-1">';
 	print '<table class="noborder centpercent">';
 	print '<tr class="liste_titre"><td colspan="2">'.dol_escape_htmltag($title).'</td></tr>';
 	print '<tr class="oddeven">';
