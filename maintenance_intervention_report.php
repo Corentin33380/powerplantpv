@@ -1897,6 +1897,7 @@ function powerplantpvReportRenderField($field, $editable, $form)
 function powerplantpvReportIndexPhotoField(PowerPlantPVReportField $field): bool
 {
 	return empty($field->readonly) && (int) $field->visible_form > 0
+		&& !PowerPlantPVReportPresentation::isRetiredProductionField((string) $field->field_code)
 		&& powerplantpvIndexPhotoApplies((string) $field->field_code)
 		&& powerplantpvReportIsNumericFieldType((string) $field->field_type);
 }

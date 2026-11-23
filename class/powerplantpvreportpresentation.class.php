@@ -15,7 +15,14 @@ class PowerPlantPVReportPresentation
 	/** @param string $code @return bool */
 	public static function isRetiredProductionField($code)
 	{
-		return in_array($code, array('ANNUAL_PRODUCTION', 'ANNUAL_PRODUCTION_N_MINUS_1', 'SELF_CONSUMPTION', 'SELF_CONSUMPTION_N_MINUS_1'), true);
+		return self::isInverterInjectionField($code)
+			|| in_array($code, array('ANNUAL_PRODUCTION', 'ANNUAL_PRODUCTION_N_MINUS_1', 'SELF_CONSUMPTION', 'SELF_CONSUMPTION_N_MINUS_1'), true);
+	}
+
+	/** Identify the retired inverter fields without matching the common injection meter. */
+	public static function isInverterInjectionField(string $code): bool
+	{
+		return in_array($code, array('INVERTER_INJECTION', 'INVERTER_INJECTION_N_MINUS_1'), true);
 	}
 
 	/** @param object $field @param Translate $langs @return string|null */

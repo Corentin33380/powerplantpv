@@ -167,7 +167,7 @@ $sections[] = visualSection('PRODUCTION_READING', 'Relevés', array(
 ));
 $sections[] = visualSection('DC_ELECTRICAL_MEASURE', 'Mesures électriques DC', array(), null, $measures);
 $sections[] = visualSection('PRODUCTION_READING', 'Relevés', array(
-	visualField('INVERTER_INJECTION', 'Index injection', 'double', null, 'kWh'),
+	visualField('INVERTER_INJECTION', 'Injection onduleur historique', 'double', 101234, 'kWh'),
 	visualField('INVERTER_INJECTION_N_MINUS_1', 'Ancien index injection', 'double', 99991, 'kWh'),
 ),
 	(object) array('fk_powerplant_line' => 99, 'equipment_marker' => 'OND-VIDE', 'equipment_identification' => 'Sans relevé'));
@@ -271,6 +271,8 @@ visualPdfCheck(strpos($default, $langs->transnoentities('PowerPlantPVVisualVigil
 visualPdfCheck(substr_count($default, 'Procédures de mise en sécurité affichées') >= 2, 'A report-level control section counts in the cover points to report, not only in its own panel');
 visualPdfCheck(strpos($default, $langs->transnoentities('PowerPlantPVVisualDelta').' : +525 416') !== false || strpos($default, '+525') !== false, 'Readings show the change since N-1');
 visualPdfCheck(strpos($default, 'Index consommation N') === false, 'A reading never taken does not produce an empty card');
+visualPdfCheck(strpos($default, 'Injection onduleur historique') === false && strpos($default, 'Ancien index injection') === false, 'Previously entered inverter injection readings stay out of the PDF');
+visualPdfCheck(strpos($default, 'Index injection N') !== false, 'The common injection meter remains in the PDF');
 visualPdfCheck(strpos($default, 'OND-VIDE') === false, 'A section for an inverter without readings or comments does not leave an empty heading');
 visualPdfCheck(strpos($default, 'Relevés effectués sur site.') !== false, 'Short reading observation is printed');
 visualPdfCheck(strpos($default, $langs->transnoentities('PowerPlantPVVisualNoObservation')) !== false, 'Empty section observation remains visible');

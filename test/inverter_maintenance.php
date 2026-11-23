@@ -211,7 +211,7 @@ $emptyManual->open_circuit_voltage = 0;
 checkMaintenance(count(PowerPlantPVReportPresentation::visibleMeasures(array($emptyManual), false)) === 1, 'Legacy manual measurement zero is retained');
 // Execute the real page validators without bootstrapping a web session.
 $reportPage = file_get_contents(dirname(__DIR__).'/maintenance_intervention_report.php');
-foreach (array('powerplantpvReportFindMissingRequiredFields', 'powerplantpvReportRequiredFieldIsEmpty', 'powerplantpvReportIsHtmlTextEmpty', 'powerplantpvReportLocalizedObjectLabel', 'powerplantpvReportFieldIsPreviousReading', 'powerplantpvReportIsNumericFieldType') as $functionName) {
+foreach (array('powerplantpvReportFilterRenderableFields', 'powerplantpvReportFindMissingRequiredFields', 'powerplantpvReportRequiredFieldIsEmpty', 'powerplantpvReportIsHtmlTextEmpty', 'powerplantpvReportLocalizedObjectLabel', 'powerplantpvReportFieldIsPreviousReading', 'powerplantpvReportIsNumericFieldType') as $functionName) {
 	if (!preg_match('/^function '.preg_quote($functionName, '/').'\([^\n]*\)\R\{.*?^\}/ms', $reportPage, $match)) { throw new RuntimeException('Missing report validator '.$functionName); }
 	eval($match[0]);
 }
@@ -259,13 +259,23 @@ checkMaintenance($expanded['sections'][0]['fields'][0]->readonly === 1 && $expan
 checkMaintenance($expanded['sections'][1]['fields'][0]->value_number === null && $production->value_number === 123, 'New inverter values start empty and source is not mutated');
 checkMaintenance($expanded['sections'][1]['fields'][0]->stable_key !== $expanded['sections'][2]['fields'][0]->stable_key, 'Identical inverter models have distinct stable reading keys');
 checkMaintenance($expanded['sections'][1]['fields'][1]->readonly === 1, 'Per-inverter previous reading is read-only');
-checkMaintenance($expanded['sections'][1]['fields'][2]->field_code === 'INVERTER_INJECTION'
-	&& $expanded['sections'][1]['fields'][2]->value_number === null
-	&& $expanded['sections'][1]['fields'][2]->is_required === 0, 'Inverter injection is an optional independent reading');
-checkMaintenance($expanded['sections'][1]['fields'][3]->readonly === 1
-	&& $expanded['sections'][1]['fields'][2]->stable_key !== $expanded['sections'][2]['fields'][2]->stable_key, 'Injection history is read-only and scoped to each inverter');
+checkMaintenance(array_column($expanded['sections'][1]['fields'], 'field_code') === array('INVERTER_PRODUCTION', 'INVERTER_PRODUCTION_N_MINUS_1'), 'Only production readings are generated per inverter');
+$injection = clone $production;
+$injection->field_code = 'INVERTER_INJECTION';
+$injection->value_number = 456;
+$previousInjection = clone $injection;
+$previousInjection->field_code = 'INVERTER_INJECTION_N_MINUS_1';
+$commonInjection = clone $injection;
+$commonInjection->field_code = 'INJECTION_INDEX';
+foreach (array($injection, $previousInjection, $commonInjection) as $reading) {
+	$reading->field_type = 'double';
+}
+checkMaintenance(powerplantpvReportFilterRenderableFields(array($injection, $previousInjection, $commonInjection)) === array($commonInjection), 'Existing report fields hide both inverter injection readings and retain the common meter');
+$injection->value_number = null;
+PowerPlantPVReportField::$rows = array($injection);
+checkMaintenance(powerplantpvReportFindMissingRequiredFields(1) === array(), 'A legacy required inverter injection field cannot block finalization');
 $reexpanded = PowerPlantPVInverterProduction::expand($expanded);
-checkMaintenance(count($reexpanded['sections']) === 4 && count($reexpanded['sections'][1]['fields']) === 4, 'Repeated draft loading never duplicates inverter sections or fields');
+checkMaintenance(count($reexpanded['sections']) === 4 && count($reexpanded['sections'][1]['fields']) === 2, 'Repeated draft loading never duplicates inverter sections or fields');
 $tree['report']->status = 'saved';
 checkMaintenance(count(PowerPlantPVInverterProduction::expand($tree)['sections']) === 1, 'Finalized historic reports are not expanded or rewritten');
 $stats = PowerPlantPVReportPresentation::indicators(array(array('fields' => array((object) array('visible_pdf' => 1, 'field_type' => 'conformity_so_valid_obs', 'value_text' => 'observation'), (object) array('visible_pdf' => 1, 'field_type' => 'conformity_so_valid_obs', 'value_text' => ''), (object) array('visible_pdf' => 1, 'field_type' => 'yesno', 'value_text' => '0')), 'dc_measures' => array($unusedInput, $usedInput))));
