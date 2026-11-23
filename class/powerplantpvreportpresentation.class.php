@@ -12,6 +12,79 @@ class PowerPlantPVReportPresentation
 		return $code === 'BOX_JOINTS_HINGES_CLEANING' && in_array($type, array('yesno', 'boolean'), true);
 	}
 
+	/**
+	 * Return the labels of stored choices, including legacy report field types.
+	 * @param object $field Report field
+	 * @param Translate $langs Output language
+	 * @return array<string|int,string>|null Null for fields without predefined choices
+	 */
+	public static function choiceOptions($field, $langs)
+	{
+		$type = (string) $field->field_type;
+		if (in_array($type, array('checkbox', 'yesno', 'boolean'), true)) {
+			$options = array('0' => $langs->transnoentities('No'), '1' => $langs->transnoentities('Yes'));
+			if (self::allowsNotApplicable((string) $field->field_code, $type)) {
+				$options = array('' => $langs->transnoentities('PowerPlantPVDataNotFilled')) + $options;
+				$options['not_applicable'] = $langs->transnoentities('PowerPlantPVReportConformityNotApplicable');
+			}
+			return $options;
+		}
+		if ($type === 'conformity_so_valid_obs' || $type === 'status') {
+			return array(
+				'valid' => $langs->transnoentities('PowerPlantPVReportConformityValid'),
+				'observation' => $langs->transnoentities('PowerPlantPVReportConformityObservation'),
+				'not_applicable' => $langs->transnoentities('PowerPlantPVReportConformityNotApplicable'),
+			);
+		}
+		if ($type !== 'select' && $type !== 'multiselect') {
+			return null;
+		}
+		$options = array();
+		$snapshot = json_decode((string) ($field->options_snapshot ?? ''), true);
+		if (is_array($snapshot)) {
+			foreach ($snapshot as $option) {
+				if (!is_array($option) || !isset($option['code']) || (string) $option['code'] === '') {
+					continue;
+				}
+				$label = $langs->defaultlang === 'en_US' ? ($option['label_en'] ?? '') : '';
+				$options[(string) $option['code']] = (string) ($label !== '' ? $label : ($option['label'] ?? ''));
+			}
+		}
+
+		return $options;
+	}
+
+	/**
+	 * Format stored choices for read-only HTML and PDF output.
+	 * @param object $field Report field
+	 * @param Translate $langs Output language
+	 * @return string|null Null for fields without predefined choices
+	 */
+	public static function formatChoiceValue($field, $langs)
+	{
+		$options = self::choiceOptions($field, $langs);
+		if ($options === null) {
+			return null;
+		}
+		$type = (string) $field->field_type;
+		$value = (string) $field->value_text;
+		if ($type === 'conformity_so_valid_obs' || $type === 'status') {
+			return $options[$value] ?? $langs->transnoentities('PowerPlantPVDataNotFilled');
+		}
+		if ($value === '') {
+			return '';
+		}
+		$codes = $type === 'multiselect' ? preg_split('/\R/', $value) : array($value);
+		$labels = array();
+		foreach ($codes ?: array() as $code) {
+			$code = trim($code);
+			if ($code !== '') {
+				$labels[] = ($options[$code] ?? '') !== '' ? $options[$code] : $langs->transnoentities('Unknown');
+			}
+		}
+		return implode(', ', $labels);
+	}
+
 	/** @param string $code @return bool */
 	public static function isRetiredProductionField($code)
 	{

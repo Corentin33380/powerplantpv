@@ -230,46 +230,6 @@ class PowerPlantPVReportPdfDataset
 	}
 
 	/**
-	 * Return field options indexed by code.
-	 *
-	 * @param	PowerPlantPVReportField	$field			Field
-	 * @param	Translate				$outputlangs	Output language
-	 * @return	array<string,string>						Options
-	 */
-	public static function fieldOptions($field, $outputlangs)
-	{
-		if (!is_object($field)) {
-			return array();
-		}
-		if ((string) $field->field_type === 'conformity_so_valid_obs') {
-			return array(
-				'valid' => $outputlangs->transnoentities('PowerPlantPVReportConformityValid'),
-				'observation' => $outputlangs->transnoentities('PowerPlantPVReportConformityObservation'),
-				'not_applicable' => $outputlangs->transnoentities('PowerPlantPVReportConformityNotApplicable'),
-			);
-		}
-
-		$options = array();
-		$decoded = !empty($field->options_snapshot) ? json_decode((string) $field->options_snapshot, true) : array();
-		if (!is_array($decoded)) {
-			return $options;
-		}
-
-		foreach ($decoded as $option) {
-			if (!is_array($option) || empty($option['code'])) {
-				continue;
-			}
-			$label = isset($option['label']) ? (string) $option['label'] : (string) $option['code'];
-			if (is_object($outputlangs) && $outputlangs->defaultlang === 'en_US' && !empty($option['label_en'])) {
-				$label = (string) $option['label_en'];
-			}
-			$options[(string) $option['code']] = $label;
-		}
-
-		return $options;
-	}
-
-	/**
 	 * Format a field value for the PDF.
 	 *
 	 * @param	PowerPlantPVReportField	$field			Field
@@ -302,39 +262,9 @@ class PowerPlantPVReportPdfDataset
 			return dol_print_date($date, $type === 'datetime' ? 'dayhour' : 'day', 'tzuser', $outputlangs);
 		}
 
-		if (in_array($type, array('checkbox', 'yesno', 'boolean'), true)) {
-			if ((string) $field->value_text === 'not_applicable'
-				&& PowerPlantPVReportPresentation::allowsNotApplicable((string) $field->field_code, $type)) {
-				return $outputlangs->transnoentities('PowerPlantPVReportConformityNotApplicable');
-			}
-			if ((string) $field->value_text === '') {
-				return '';
-			}
-			return ((int) $field->value_text) ? $outputlangs->transnoentities('Yes') : $outputlangs->transnoentities('No');
-		}
-
-		if (in_array($type, array('select', 'conformity_so_valid_obs'), true)) {
-			$options = self::fieldOptions($field, $outputlangs);
-			$code = (string) $field->value_text;
-			if ($type === 'conformity_so_valid_obs' && !isset($options[$code])) { return $outputlangs->transnoentities('PowerPlantPVDataNotFilled'); }
-			return isset($options[$code]) ? $options[$code] : $code;
-		}
-
-		if ($type === 'multiselect') {
-			$options = self::fieldOptions($field, $outputlangs);
-			$values = preg_split('/\r\n|\r|\n/', (string) $field->value_text);
-			if (!is_array($values)) {
-				return '';
-			}
-			$labels = array();
-			foreach ($values as $code) {
-				$code = trim((string) $code);
-				if ($code === '') {
-					continue;
-				}
-				$labels[] = isset($options[$code]) ? $options[$code] : $code;
-			}
-			return implode(', ', $labels);
+		$choiceLabel = PowerPlantPVReportPresentation::formatChoiceValue($field, $outputlangs);
+		if ($choiceLabel !== null) {
+			return $choiceLabel;
 		}
 
 		$value = (string) $field->value_text;

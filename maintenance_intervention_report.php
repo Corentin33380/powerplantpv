@@ -1827,15 +1827,18 @@ function powerplantpvReportRenderField($field, $editable, $form)
 	}
 	print '<div class="'.$inputClass.'">';
 	if (!$fieldEditable) {
+		$choiceLabel = PowerPlantPVReportPresentation::formatChoiceValue($field, $langs);
 		if ($type === 'file') {
 			powerplantpvReportRenderFiles($field, false);
 		} elseif ($type === 'textarea') {
 			print '<div class="powerplantpv-report-readonly">';
 			powerplantpvReportPrintHtmlValue((string) $value);
 			print '</div>';
-		} elseif ($allowsNotApplicable) {
-			$options = powerplantpvReportFieldOptions($field);
-			print '<div class="powerplantpv-report-readonly">'.dol_escape_htmltag($options[$value] ?? '').'</div>';
+		} elseif ($choiceLabel !== null) {
+			if ($choiceLabel === '' && $allowsNotApplicable) {
+				$choiceLabel = $langs->transnoentities('PowerPlantPVDataNotFilled');
+			}
+			print '<div class="powerplantpv-report-readonly">'.dol_escape_htmltag($choiceLabel).'</div>';
 		} elseif ($value === '' && powerplantpvReportFieldIsPreviousReading($field)) {
 			print '<div class="powerplantpv-report-readonly opacitymedium">'.$langs->trans('PowerPlantPVReportNoPreviousReading').'</div>';
 		} else {
@@ -1861,14 +1864,14 @@ function powerplantpvReportRenderField($field, $editable, $form)
 		print $form->selectDate($timestamp, 'report_date_'.$hash, ($type === 'datetime' ? 1 : 0), ($type === 'datetime' ? 1 : 0), 1, 'powerplantpvreportform', 1, 1);
 		print '</div>';
 	} elseif ($allowsNotApplicable) {
-		print $form->selectarray($name, powerplantpvReportFieldOptions($field), (string) $value, 0, 0, 0, '', 0, 0, 0, '', 'powerplantpv-report-control');
-	} elseif ($type === 'checkbox' || $type === 'yesno') {
-		print $form->selectarray($name, array(0 => $langs->trans('No'), 1 => $langs->trans('Yes')), (int) $value, 0, 0, 0, '', 0, 0, 0, '', 'powerplantpv-report-control');
-	} elseif ($type === 'select' || $type === 'conformity_so_valid_obs') {
-		$options = powerplantpvReportFieldOptions($field);
+		print $form->selectarray($name, PowerPlantPVReportPresentation::choiceOptions($field, $langs), (string) $value, 0, 0, 0, '', 0, 0, 0, '', 'powerplantpv-report-control');
+	} elseif (in_array($type, array('checkbox', 'yesno', 'boolean'), true)) {
+		print $form->selectarray($name, PowerPlantPVReportPresentation::choiceOptions($field, $langs), $type === 'boolean' ? $value : (int) $value, $type === 'boolean' ? 1 : 0, 0, 0, '', 0, 0, 0, '', 'powerplantpv-report-control');
+	} elseif (in_array($type, array('select', 'conformity_so_valid_obs', 'status'), true)) {
+		$options = PowerPlantPVReportPresentation::choiceOptions($field, $langs);
 		print $form->selectarray($name, $options, (string) $value, 1, 0, 0, '', 0, 0, 0, '', 'powerplantpv-report-control');
 	} elseif ($type === 'multiselect') {
-		$options = powerplantpvReportFieldOptions($field);
+		$options = PowerPlantPVReportPresentation::choiceOptions($field, $langs);
 		$selected = array_filter(explode("\n", (string) $value));
 		print $form->multiselectarray($name, $options, $selected, 0, 0, 'powerplantpv-report-control', 0, 0);
 	} elseif ($type === 'file') {
@@ -2159,49 +2162,6 @@ function powerplantpvReportFieldCanInline($field)
 function powerplantpvReportIsNumericFieldType($fieldType)
 {
 	return in_array((string) $fieldType, array('number', 'double', 'real', 'integer', 'price'), true);
-}
-
-/**
- * Return field options.
- *
- * @param	PowerPlantPVReportField	$field	Field
- * @return	array<string,string>			Options
- */
-function powerplantpvReportFieldOptions($field)
-{
-	global $langs;
-
-	if (PowerPlantPVReportPresentation::allowsNotApplicable((string) $field->field_code, (string) $field->field_type)) {
-		return array(
-			'' => $langs->trans('PowerPlantPVDataNotFilled'),
-			'1' => $langs->trans('Yes'),
-			'0' => $langs->trans('No'),
-			'not_applicable' => $langs->trans('PowerPlantPVReportConformityNotApplicable'),
-		);
-	}
-	if ((string) $field->field_type === 'conformity_so_valid_obs') {
-		return array(
-			'valid' => $langs->trans('PowerPlantPVReportConformityValid'),
-			'observation' => $langs->trans('PowerPlantPVReportConformityObservation'),
-			'not_applicable' => $langs->trans('PowerPlantPVReportConformityNotApplicable'),
-		);
-	}
-	$options = array();
-	$decoded = !empty($field->options_snapshot) ? json_decode((string) $field->options_snapshot, true) : array();
-	if (is_array($decoded)) {
-		foreach ($decoded as $option) {
-			if (!is_array($option) || empty($option['code'])) {
-				continue;
-			}
-			$label = isset($option['label']) ? (string) $option['label'] : (string) $option['code'];
-			if ($langs->defaultlang == 'en_US' && !empty($option['label_en'])) {
-				$label = (string) $option['label_en'];
-			}
-			$options[(string) $option['code']] = $label;
-		}
-	}
-
-	return $options;
 }
 
 /**
