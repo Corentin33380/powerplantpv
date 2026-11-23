@@ -1,5 +1,11 @@
 # CHANGELOG MODULE POWERPLANTPV FOR [DOLIBARR ERP CRM](https://www.dolibarr.org)
 
+## 1.9.1 — 2026-11-23
+
+- Rapports de maintenance et PDF : retrait des index d’injection par onduleur et des photos associées. Les index de production par onduleur et le compteur d’injection général restent disponibles.
+- Rapports et PDF : libellés français et anglais pour les réponses de contrôle, les listes d’options et les actions de configuration.
+- PDF : blocs de contrôle des onduleurs sur toute la largeur, y compris lorsqu’un bloc se poursuit sur la page suivante.
+
 ## 1.9.0 — 2026-11-20
 
 - Dictionnaire des natures d’intervention : ajout et modification selon le partage Multicompany, enregistrement du modèle PDF facultatif et en-têtes traduits. Actualiser le module pour enregistrer le hook du dictionnaire natif.
