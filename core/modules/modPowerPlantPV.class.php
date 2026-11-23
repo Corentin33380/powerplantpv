@@ -77,7 +77,7 @@ class modPowerPlantPV extends DolibarrModules
 		$this->editor_squarred_logo = '';					// Must be image filename into the module/img directory followed with @modulename. Example: 'myimage.png@powerplantpv'
 
 		// Possible values for version are: 'development', 'experimental', 'dolibarr', 'dolibarr_deprecated', 'experimental_deprecated' or a version string like 'x.y.z'
-		$this->version = '1.9.0';
+		$this->version = '1.9.1';
 		// Url to the file with your last numberversion of this module
 		//$this->url_last_version = 'http://www.example.com/versionmodule.txt';
 
@@ -3223,8 +3223,6 @@ class modPowerPlantPV extends DolibarrModules
 			array('section' => 'DC_ELECTRICAL_MEASURE', 'service' => 'DC_ELECTRICAL_MEASURE', 'code' => 'DC_MEASURE_OBSERVATION', 'label' => 'Observation', 'label_en' => 'Observation', 'field_type' => 'text', 'scope_type' => 'dc_measure', 'unit' => '', 'position' => 4070),
 			array('section' => 'PRODUCTION_READING', 'service' => 'PRODUCTION_READING', 'code' => 'INVERTER_PRODUCTION_N_MINUS_1', 'label' => 'Index de production onduleur N-1', 'label_en' => 'Inverter production index N-1', 'field_type' => 'double', 'scope_type' => 'powerplant', 'unit' => 'kWh', 'position' => 5005),
 			array('section' => 'PRODUCTION_READING', 'service' => 'PRODUCTION_READING', 'code' => 'INVERTER_PRODUCTION', 'label' => 'Index de production onduleur N', 'label_en' => 'Inverter production index N', 'field_type' => 'double', 'scope_type' => 'powerplant', 'unit' => 'kWh', 'position' => 5010),
-			array('section' => 'PRODUCTION_READING', 'service' => 'PRODUCTION_READING', 'code' => 'INVERTER_INJECTION_N_MINUS_1', 'label' => 'Index d’injection onduleur N-1', 'label_en' => 'Inverter export meter index N-1', 'field_type' => 'double', 'scope_type' => 'powerplant', 'unit' => 'kWh', 'position' => 5011),
-			array('section' => 'PRODUCTION_READING', 'service' => 'PRODUCTION_READING', 'code' => 'INVERTER_INJECTION', 'label' => 'Index d’injection onduleur N', 'label_en' => 'Inverter export meter index N', 'field_type' => 'double', 'scope_type' => 'powerplant', 'unit' => 'kWh', 'position' => 5012),
 			array('section' => 'PRODUCTION_READING', 'service' => 'PRODUCTION_READING', 'code' => 'PRODUCTION_INDEX_N_MINUS_1', 'label' => 'Index production N-1', 'label_en' => 'Production index N-1', 'field_type' => 'double', 'scope_type' => 'powerplant', 'unit' => 'kWh', 'position' => 5015),
 			array('section' => 'PRODUCTION_READING', 'service' => 'PRODUCTION_READING', 'code' => 'PRODUCTION_INDEX', 'label' => 'Index production N', 'label_en' => 'Production index N', 'field_type' => 'double', 'scope_type' => 'powerplant', 'unit' => 'kWh', 'position' => 5020),
 			array('section' => 'PRODUCTION_READING', 'service' => 'PRODUCTION_READING', 'code' => 'INJECTION_INDEX_N_MINUS_1', 'label' => 'Index injection N-1', 'label_en' => 'Injection index N-1', 'field_type' => 'double', 'scope_type' => 'powerplant', 'unit' => 'kWh', 'position' => 5025),

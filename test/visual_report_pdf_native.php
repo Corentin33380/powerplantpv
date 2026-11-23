@@ -119,6 +119,54 @@ function visualSection($code, $label, $fields, $equipment = null, $measures = ar
 	return array('section' => (object) array('section_code' => $code, 'section_label' => $label, 'visible_pdf' => 1, 'fk_report_powerplant' => 7), 'fields' => $fields, 'equipment' => $equipment, 'dc_measures' => $measures);
 }
 
+// Run the report's read-only renderer with Dolibarr's real translations.
+$reportPage = file_get_contents($module.'/maintenance_intervention_report.php');
+foreach (array('powerplantpvReportRenderField', 'powerplantpvReportLocalizedObjectLabel', 'powerplantpvReportFieldDisplayValue',
+	'powerplantpvReportFieldCanInline', 'powerplantpvReportFieldHasInlineUnit', 'powerplantpvReportIsNumericFieldType',
+	'powerplantpvReportRenderIndexPhoto', 'powerplantpvReportIndexPhotoField') as $name) {
+	if (!preg_match('/^function '.preg_quote($name, '/').'\([^\n]*\)\R?[^\n]*\R\{.*?^\}/ms', $reportPage, $match)) {
+		throw new RuntimeException('Missing report renderer '.$name);
+	}
+	eval($match[0]);
+}
+$translationCases = array(
+	array('conformity_so_valid_obs', 'valid', 'Conforme', 'Compliant'),
+	array('status', 'valid', 'Conforme', 'Compliant'),
+	array('status', 'observation', 'Non conforme / observation', 'Non-compliant / observation'),
+	array('conformity_so_valid_obs', 'not_applicable', 'Sans objet', 'Not applicable'),
+	array('yesno', '0', 'Non', 'No'),
+	array('boolean', '1', 'Oui', 'Yes'),
+	array('select', 'LOW', 'Faible', 'Low'),
+	array('multiselect', "LOW\nHIGH", 'Faible, Fort', 'Low, High'),
+	array('select', 'obsolete_code', 'Inconnu', 'Unknown'),
+);
+$french = $langs;
+foreach (array('fr_FR' => 2, 'en_US' => 3) as $locale => $labelIndex) {
+	$langs = new Translate('', $conf);
+	$langs->setDefaultLang($locale);
+	$langs->loadLangs(array('main', 'powerplantpv@powerplantpv'));
+	foreach ($translationCases as $case) {
+		$field = (new ReflectionClass('PowerPlantPVReportField'))->newInstanceWithoutConstructor();
+		$field->field_code = 'ROOF_PANEL_VISUAL_CHECK';
+		$field->field_label = 'Test';
+		$field->field_type = $case[0];
+		$field->value_text = $case[1];
+		$field->readonly = 1;
+		$field->options_snapshot = json_encode(array(
+			array('code' => 'LOW', 'label' => 'Faible', 'label_en' => 'Low'),
+			array('code' => 'HIGH', 'label' => 'Fort', 'label_en' => 'High'),
+		));
+		ob_start();
+		powerplantpvReportRenderField($field, false, null);
+		$html = ob_get_clean();
+		visualPdfCheck(strpos($html, '>'.$case[$labelIndex].'</div>') !== false,
+			'Report translates '.$case[0].' in '.$locale);
+		visualPdfCheck(PowerPlantPVReportPdfDataset::formatFieldValue($field, $langs) === $case[$labelIndex],
+			'PDF translates '.$case[0].' in '.$locale);
+	}
+}
+$langs = $french;
+
 $plant = (object) array('id' => 7, 'fk_powerplant' => 18, 'powerplant_ref' => 'PP2611-0018', 'powerplant_label' => 'Ecopark 5 Revente Total');
 $sections = array();
 $sections[] = visualSection('ELECTRICAL_BOX', 'Vérifications coffrets', array(
@@ -167,7 +215,7 @@ $sections[] = visualSection('PRODUCTION_READING', 'Relevés', array(
 ));
 $sections[] = visualSection('DC_ELECTRICAL_MEASURE', 'Mesures électriques DC', array(), null, $measures);
 $sections[] = visualSection('PRODUCTION_READING', 'Relevés', array(
-	visualField('INVERTER_INJECTION', 'Index injection', 'double', null, 'kWh'),
+	visualField('INVERTER_INJECTION', 'Injection onduleur historique', 'double', 101234, 'kWh'),
 	visualField('INVERTER_INJECTION_N_MINUS_1', 'Ancien index injection', 'double', 99991, 'kWh'),
 ),
 	(object) array('fk_powerplant_line' => 99, 'equipment_marker' => 'OND-VIDE', 'equipment_identification' => 'Sans relevé'));
@@ -271,6 +319,8 @@ visualPdfCheck(strpos($default, $langs->transnoentities('PowerPlantPVVisualVigil
 visualPdfCheck(substr_count($default, 'Procédures de mise en sécurité affichées') >= 2, 'A report-level control section counts in the cover points to report, not only in its own panel');
 visualPdfCheck(strpos($default, $langs->transnoentities('PowerPlantPVVisualDelta').' : +525 416') !== false || strpos($default, '+525') !== false, 'Readings show the change since N-1');
 visualPdfCheck(strpos($default, 'Index consommation N') === false, 'A reading never taken does not produce an empty card');
+visualPdfCheck(strpos($default, 'Injection onduleur historique') === false && strpos($default, 'Ancien index injection') === false, 'Previously entered inverter injection readings stay out of the PDF');
+visualPdfCheck(strpos($default, 'Index injection N') !== false, 'The common injection meter remains in the PDF');
 visualPdfCheck(strpos($default, 'OND-VIDE') === false, 'A section for an inverter without readings or comments does not leave an empty heading');
 visualPdfCheck(strpos($default, 'Relevés effectués sur site.') !== false, 'Short reading observation is printed');
 visualPdfCheck(strpos($default, $langs->transnoentities('PowerPlantPVVisualNoObservation')) !== false, 'Empty section observation remains visible');

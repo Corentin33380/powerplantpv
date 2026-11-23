@@ -197,7 +197,7 @@ class PowerPlantPVReportBuilder
 			if ($sourceId <= 0) { $sourceId = (int) $equipment->fk_source_equipment; }
 			foreach ($row['fields'] as $field) {
 				$typeCode = $this->productionReadingTypeCodeFromField((string) $field->field_code, 1);
-				if (!in_array($typeCode, array('INVERTER_PRODUCTION', 'INVERTER_INJECTION'), true)) { continue; }
+				if ($typeCode !== 'INVERTER_PRODUCTION') { continue; }
 				$archive = new PowerPlantPVIndexReading($this->db);
 				$latest = $archive->fetchLatestValue((int) $equipment->fk_powerplant, $typeCode, '', (int) $report->id, $sourceId);
 				if ($archive->error !== '') { $this->copyErrorsFrom($archive); return -1; }
@@ -379,7 +379,7 @@ class PowerPlantPVReportBuilder
 					if ((int) $field->id <= 0) {
 						if (isset($oldValues[(string) $field->stable_key]) && empty($field->readonly)) { $this->copyStoredValueToField($field, $oldValues[(string) $field->stable_key]); }
 						$result = $field->create($user, 0);
-					} elseif (in_array((string) $field->field_code, array('INVERTER_PRODUCTION_N_MINUS_1', 'INVERTER_INJECTION_N_MINUS_1'), true)) {
+					} elseif ((string) $field->field_code === 'INVERTER_PRODUCTION_N_MINUS_1') {
 						$result = $field->update($user, 0);
 					} else {
 						continue;
@@ -388,7 +388,7 @@ class PowerPlantPVReportBuilder
 				}
 			} elseif ((string) $section->section_code === 'PRODUCTION_READING' && (int) $section->fk_report_equipment === 0) {
 				foreach ($row['fields'] as $field) {
-					if (in_array((string) $field->field_code, array('INVERTER_PRODUCTION', 'INVERTER_PRODUCTION_N_MINUS_1', 'INVERTER_INJECTION', 'INVERTER_INJECTION_N_MINUS_1'), true) && $field->update($user, 0) < 0) { $this->copyErrorsFrom($field); $this->db->rollback(); return -1; }
+					if (in_array((string) $field->field_code, array('INVERTER_PRODUCTION', 'INVERTER_PRODUCTION_N_MINUS_1'), true) && $field->update($user, 0) < 0) { $this->copyErrorsFrom($field); $this->db->rollback(); return -1; }
 				}
 			}
 		}
@@ -1277,7 +1277,6 @@ class PowerPlantPVReportBuilder
 	{
 		return array(
 			'INVERTER_PRODUCTION' => 'INVERTER_PRODUCTION',
-			'INVERTER_INJECTION' => 'INVERTER_INJECTION',
 			'PRODUCTION_INDEX' => 'PRODUCTION_INDEX',
 			'INJECTION_INDEX' => 'INJECTION_INDEX',
 			'CONSUMPTION_INDEX' => 'CONSUMPTION_INDEX',
@@ -1337,7 +1336,8 @@ class PowerPlantPVReportBuilder
 			'planned_fields' => 0,
 		);
 		foreach ($context['template_fields'] as $field) {
-			if (!$this->isTemplateFlagEnabled($field, 'active', 1) || !$this->isTemplateFlagEnabled($field, 'visible_form', 1)) {
+			if (PowerPlantPVReportPresentation::isInverterInjectionField((string) $field->field_code)
+				|| !$this->isTemplateFlagEnabled($field, 'active', 1) || !$this->isTemplateFlagEnabled($field, 'visible_form', 1)) {
 				$stats['fields_skipped_hidden']++;
 				continue;
 			}
@@ -2769,7 +2769,7 @@ class PowerPlantPVReportBuilder
 				|| (int) $row['fk_powerplant'] <= 0) {
 				continue;
 			}
-			if ($row['legacy_unassigned'] && in_array($typeCode, array('INVERTER_PRODUCTION', 'INVERTER_INJECTION'), true)) {
+			if ($row['legacy_unassigned'] && $typeCode === 'INVERTER_PRODUCTION') {
 				continue;
 			}
 			$sourceKey = $row['fk_powerplant'].':'.$row['fk_report_equipment'].':'.$typeCode;

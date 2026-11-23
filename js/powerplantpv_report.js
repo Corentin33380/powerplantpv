@@ -155,34 +155,121 @@
 		});
 	}
 
+	function enableReportNavigation(form) {
+		var storageKey = 'powerplantpv-report-sections:' + window.location.pathname + ':' + form.dataset.viewKey;
+		var sections = new Map();
+		var current = new Map();
+		function readStates() {
+			try {
+				var saved = JSON.parse(window.localStorage.getItem(storageKey));
+				return saved && typeof saved === 'object' && !Array.isArray(saved) ? saved : {};
+			} catch (error) {
+				return {};
+			}
+		}
+		function rememberSections(force) {
+			var changes = {};
+			var closedTarget = false;
+			sections.forEach(function (section, key) {
+				if (force === true || current.get(key) !== section.open) {
+					current.set(key, section.open);
+					changes[key] = section.open;
+					if (!section.open && section.id && window.location.hash === '#' + section.id) { closedTarget = true; }
+				}
+			});
+			if (closedTarget) {
+				window.history.replaceState(window.history.state, '', window.location.pathname + window.location.search);
+			}
+			if (!Object.keys(changes).length) { return; }
+			var saved = Object.assign(readStates(), changes);
+			try { window.localStorage.setItem(storageKey, JSON.stringify(saved)); } catch (error) { /* Storage may be disabled. */ }
+		}
+		var saved = readStates();
+		form.querySelectorAll('details[data-state-key], details[data-card-key]').forEach(function (section) {
+			var key = section.dataset.stateKey || 'card:' + section.dataset.cardKey;
+			var parent = section.parentElement.closest('details[data-state-key]');
+			if (parent) { key = parent.dataset.stateKey + '/' + key; }
+			if (typeof saved[key] === 'boolean') { section.open = saved[key]; }
+			sections.set(key, section);
+			current.set(key, section.open);
+			section.addEventListener('toggle', rememberSections);
+		});
+		window.addEventListener('pagehide', rememberSections);
+
+		var controls = form.querySelector('[data-report-disclosure-controls]');
+		if (controls && sections.size) {
+			controls.hidden = false;
+			controls.querySelectorAll('[data-report-disclosure]').forEach(function (button) {
+				button.addEventListener('click', function (event) {
+					event.preventDefault();
+					var open = button.dataset.reportDisclosure === 'open';
+					sections.forEach(function (section) { section.open = open; });
+					rememberSections(true);
+				});
+				button.addEventListener('keydown', function (event) {
+					if (event.key === ' ') {
+						event.preventDefault();
+						if (!event.repeat) { button.click(); }
+					}
+				});
+			});
+		}
+
+		var contents = form.querySelector('[data-report-contents]');
+		if (!contents) { return; }
+		var targets = form.querySelectorAll('[data-contents-label][id]');
+		if (!targets.length) { return; }
+		targets.forEach(function (target) {
+			var item = document.createElement('div');
+			item.className = 'menu_contenu';
+			var link = document.createElement('a');
+			link.className = 'vsmenu';
+			link.href = '#' + target.id;
+			link.textContent = target.dataset.contentsLabel;
+			link.addEventListener('click', function (event) {
+				if (event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) { return; }
+				event.preventDefault();
+				if (window.location.hash !== link.hash) {
+					window.history.pushState(window.history.state, '', link.hash);
+				}
+				if (target.matches('details')) { target.open = true; }
+				var heading = target.querySelector('summary') || target;
+				heading.focus({preventScroll: true});
+				target.scrollIntoView({block: 'start'});
+			});
+			item.appendChild(link);
+			contents.appendChild(item);
+		});
+		contents.hidden = false;
+		var inline = contents.parentElement;
+		var menu = document.querySelector('#id-left > .vmenu');
+		if (menu) {
+			var placeContents = function () {
+				var destination = !isMobileReportViewport() && menu.getClientRects().length ? menu : inline;
+				if (contents.parentElement !== destination) { destination.prepend(contents); }
+			};
+			placeContents();
+			window.addEventListener('resize', placeContents);
+		}
+	}
+
 	function enableReportWorkflow(form) {
 		if (form.dataset.workflowReady || !form.classList.contains('powerplantpv-report-form-editable')) { return; }
 		form.dataset.workflowReady = '1';
 		var dirty = false;
 		var submitted = false;
 		var state = form.querySelector('.powerplantpv-report-save-state');
-		var storageKey = 'powerplantpv-report-mobile-view-v2:' + window.location.pathname + ':' + (form.querySelector('[name="id"]') || {}).value;
-		var sections = form.querySelectorAll('details');
-		function sectionKey(section, index) { return section.dataset.stateKey || section.dataset.cardKey || 'summary:' + index; }
+		var storageKey = 'powerplantpv-report-mobile-scroll:' + window.location.pathname + ':' + form.dataset.viewKey;
 		var view = null;
 		if (isMobileReportViewport()) {
 			try {
 				view = JSON.parse(window.sessionStorage.getItem(storageKey));
-				if (view && view.sections) {
-					sections.forEach(function (section, index) {
-						var key = sectionKey(section, index);
-						if (Object.prototype.hasOwnProperty.call(view.sections, key)) { section.open = view.sections[key] === true; }
-					});
-				}
-			} catch (error) { /* Optional navigation memory; never store field values. */ }
+			} catch (error) { /* Storage may be disabled. */ }
 		}
 		function rememberView() {
 			if (!isMobileReportViewport()) { return; }
-			var states = {};
-			sections.forEach(function (section, index) { states[sectionKey(section, index)] = section.open; });
-			try { window.sessionStorage.setItem(storageKey, JSON.stringify({sections: states, y: Math.max(0, Math.round(getScrollY()))})); } catch (error) { /* Storage may be disabled. */ }
+			try { window.sessionStorage.setItem(storageKey, JSON.stringify({y: Math.max(0, Math.round(getScrollY()))})); } catch (error) { /* Storage may be disabled. */ }
 		}
-		sections.forEach(function (section) { section.addEventListener('toggle', rememberView); });
 		window.addEventListener('pagehide', rememberView);
 		var rememberingScroll = false;
 		window.addEventListener('scroll', function () {
@@ -298,6 +385,7 @@
 	document.addEventListener('DOMContentLoaded', function () {
 		var form = document.getElementById('powerplantpvreportform');
 		if (form) {
+			enableReportNavigation(form);
 			enableReportWorkflow(form);
 			form.addEventListener('submit', function () {
 				captureScrollPosition(form);
@@ -307,7 +395,6 @@
 
 			var updateFonts = function () {
 				updateEditorIframes(form);
-				if (!isMobileReportViewport()) { form.querySelectorAll('details.powerplantpv-dc-card').forEach(function (card) { card.open = true; }); }
 			};
 			if (mobileMediaQuery) {
 				if (mobileMediaQuery.addEventListener) {
@@ -320,16 +407,21 @@
 			}
 		}
 
-		var dcHistoryTarget = /^#powerplantpv-dc-measures-\d+$/.test(window.location.hash)
-			? document.getElementById(window.location.hash.slice(1)) : null;
-		if (dcHistoryTarget) {
-			dcHistoryTarget.open = true;
-			var showDcHistory = function () {
-				dcHistoryTarget.scrollIntoView({block: 'start'});
+		function openReportTarget() {
+			var target = document.getElementById(window.location.hash.slice(1));
+			if (!form || !target || !form.contains(target) || !target.hasAttribute('data-contents-label')) { return null; }
+			if (target.matches('details')) { target.open = true; }
+			return target;
+		}
+		window.addEventListener('hashchange', openReportTarget);
+		var reportTarget = openReportTarget();
+		if (reportTarget) {
+			var showReportTarget = function () {
+				reportTarget.scrollIntoView({block: 'start'});
 			};
-			window.requestAnimationFrame(showDcHistory);
+			window.requestAnimationFrame(showReportTarget);
 			if (document.readyState !== 'complete') {
-				window.addEventListener('load', showDcHistory, {once: true});
+				window.addEventListener('load', showReportTarget, {once: true});
 			}
 		} else {
 			restoreScrollPosition();

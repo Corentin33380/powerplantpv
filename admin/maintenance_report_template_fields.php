@@ -346,8 +346,8 @@ if ($resql) {
 		print '<td class="center nowraponall">';
 		print '<a href="'.$_SERVER['PHP_SELF'].'?action=edit&id='.(int) $obj->rowid.$param.'">'.img_edit($langs->trans('Modify')).'</a>';
 		print ' <a href="'.$_SERVER['PHP_SELF'].'?fk_report_template_field='.(int) $obj->rowid.$paramNoField.'">'.img_picto($langs->trans('PowerPlantPVReportFieldOptions'), 'list').'</a>';
-		print ' <a href="'.$_SERVER['PHP_SELF'].'?action=moveup&id='.(int) $obj->rowid.'&token='.newToken().$param.'">'.img_picto($langs->trans('MoveUp'), 'uparrow').'</a>';
-		print ' <a href="'.$_SERVER['PHP_SELF'].'?action=movedown&id='.(int) $obj->rowid.'&token='.newToken().$param.'">'.img_picto($langs->trans('MoveDown'), 'downarrow').'</a>';
+		print ' <a href="'.$_SERVER['PHP_SELF'].'?action=moveup&id='.(int) $obj->rowid.'&token='.newToken().$param.'">'.img_picto($langs->trans('PowerPlantPVReportMoveUp'), 'uparrow').'</a>';
+		print ' <a href="'.$_SERVER['PHP_SELF'].'?action=movedown&id='.(int) $obj->rowid.'&token='.newToken().$param.'">'.img_picto($langs->trans('PowerPlantPVReportMoveDown'), 'downarrow').'</a>';
 		if (!empty($obj->active)) {
 			print ' <a href="'.$_SERVER['PHP_SELF'].'?action=disable&id='.(int) $obj->rowid.'&token='.newToken().$param.'">'.img_picto($langs->trans('Disable'), 'switch_off').'</a>';
 		}
@@ -410,8 +410,8 @@ if ($selectedFieldId > 0 && $field->fetch($selectedFieldId) > 0 && (int) $field-
 			print '<td class="center"><span class="badge '.(!empty($obj->active) ? 'badge-status4' : 'badge-status8').'">'.$langs->trans(!empty($obj->active) ? 'Enabled' : 'Disabled').'</span></td>';
 			print '<td class="center">'.((int) $obj->position).'</td><td class="center nowraponall">';
 			print '<a href="'.$_SERVER['PHP_SELF'].'?action=editoption&option_id='.(int) $obj->rowid.'&token='.newToken().$param.'">'.img_edit($langs->trans('Modify')).'</a>';
-			print ' <a href="'.$_SERVER['PHP_SELF'].'?action=moveoptionup&option_id='.(int) $obj->rowid.'&token='.newToken().$param.'">'.img_picto($langs->trans('MoveUp'), 'uparrow').'</a>';
-			print ' <a href="'.$_SERVER['PHP_SELF'].'?action=moveoptiondown&option_id='.(int) $obj->rowid.'&token='.newToken().$param.'">'.img_picto($langs->trans('MoveDown'), 'downarrow').'</a>';
+			print ' <a href="'.$_SERVER['PHP_SELF'].'?action=moveoptionup&option_id='.(int) $obj->rowid.'&token='.newToken().$param.'">'.img_picto($langs->trans('PowerPlantPVReportMoveUp'), 'uparrow').'</a>';
+			print ' <a href="'.$_SERVER['PHP_SELF'].'?action=moveoptiondown&option_id='.(int) $obj->rowid.'&token='.newToken().$param.'">'.img_picto($langs->trans('PowerPlantPVReportMoveDown'), 'downarrow').'</a>';
 			if (!empty($obj->active)) {
 				print ' <a href="'.$_SERVER['PHP_SELF'].'?action=disableoption&option_id='.(int) $obj->rowid.'&token='.newToken().$param.'">'.img_picto($langs->trans('Disable'), 'switch_off').'</a>';
 			}
