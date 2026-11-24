@@ -132,10 +132,9 @@ class PowerPlantPVReportParts
 			);
 		}
 
+		// A part carries one signature: the person who ran its tests that day.
 		return array(
-			'technician' => 'PowerPlantPVPartSignerTechnician',
-			'technician2' => 'PowerPlantPVPartSignerTechnician2',
-			'works_manager' => 'PowerPlantPVPartSignerWorksManager',
+			'technician' => 'PowerPlantPVAutocontrolPartSignature',
 		);
 	}
 
@@ -276,6 +275,9 @@ class PowerPlantPVReportParts
 		}
 		if ($role === 'business_manager') {
 			return (bool) $user->hasRight('powerplantpv', 'maintenance', 'sign_technical');
+		}
+		if ($partCode !== self::FINAL_CODE && $this->isWorksManager($report, $user)) {
+			return true;
 		}
 
 		return $report->isAssignedTechnician($intervention, $user);

@@ -141,7 +141,7 @@ trait PowerPlantPVReportPartsPdf
 				}
 			}
 			$technicians = array();
-			foreach (array('technician', 'technician2') as $role) {
+			foreach (array('technician') as $role) {
 				if (!empty($signatures[$partCode][$role])) {
 					$technicians[] = (string) $signatures[$partCode][$role]->signer_name;
 				}
