@@ -220,6 +220,7 @@ class modPowerPlantPV extends DolibarrModules
 		$this->const[] = array('POWERPLANTPV_ATTESTATION_BRIDAGE_STATIQUE_MODEL', 'chaine', 'attestation_bridage_statique', 'Default static curtailment attestation PDF model', 0, 'current');
 		$this->const[] = array('POWERPLANTPV_ATTESTATION_REGLAGE_FREQ_MODEL', 'chaine', 'attestation_reglage_max_freq', 'Default max frequency attestation PDF model', 0, 'current');
 		$this->const[] = array('POWERPLANTPV_ATTESTATION_INSTALLATEUR_INF100KWC_MODEL', 'chaine', 'attestation_installateur_inf100kwc', 'Default installer under 100 kWc attestation PDF model', 0, 'current');
+		$this->const[] = array('POWERPLANTPV_ATTESTATION_MISE_EN_SERVICE_MODEL', 'chaine', 'attestation_mise_en_service', 'Default commissioning attestation PDF model', 0, 'current');
 		$this->const[] = array('POWERPLANTPV_MAINTENANCE_ENABLE', 'chaine', '1', 'Enable maintenance foundation features', 0, 'current');
 		$this->const[] = array('POWERPLANTPV_MAINTENANCE_DEFAULT_REPORT_TEMPLATE', 'chaine', 'preventive_maintenance', 'Default maintenance report template code', 0, 'current');
 		$this->const[] = array('POWERPLANTPV_MAINTENANCE_PLANNING_LEAD_DAYS', 'chaine', '30', 'Maintenance planning lead time in days', 0, 'current');
@@ -1276,6 +1277,7 @@ class modPowerPlantPV extends DolibarrModules
 			'attestation_bridage_statique',
 			'attestation_reglage_max_freq',
 			'attestation_installateur_inf100kwc',
+			'attestation_mise_en_service',
 		);
 		foreach ($attestationModels as $attestationModel) {
 			$attestationModelSql = $this->db->escape($attestationModel);
@@ -1649,6 +1651,8 @@ class modPowerPlantPV extends DolibarrModules
 				'date_setting' => array('type' => 'date', 'value' => '', 'null' => ''),
 				'date_completion' => array('type' => 'date', 'value' => '', 'null' => ''),
 				'bta_contract_number' => array('type' => 'varchar', 'value' => '128', 'null' => ''),
+				'consuel_number' => array('type' => 'varchar', 'value' => '128', 'null' => ''),
+				'date_consuel' => array('type' => 'date', 'value' => '', 'null' => ''),
 				'max_export_power_kw' => array('type' => 'double', 'value' => '24,8', 'null' => ''),
 				'max_frequency_hz' => array('type' => 'double', 'value' => '24,8', 'null' => ''),
 				'landscape_integration_prime' => array('type' => 'smallint', 'value' => '', 'null' => 'DEFAULT 0'),

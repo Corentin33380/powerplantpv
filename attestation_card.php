@@ -207,6 +207,8 @@ function powerplantpvAttestationSetFromPost($object, $allowSignatureMetadata = 0
 	$object->date_setting = powerplantpvAttestationGetPostDate('date_setting');
 	$object->date_completion = powerplantpvAttestationGetPostDate('date_completion');
 	$object->bta_contract_number = GETPOST('bta_contract_number', 'alphanohtml');
+	$object->consuel_number = GETPOST('consuel_number', 'alphanohtml');
+	$object->date_consuel = powerplantpvAttestationGetPostDate('date_consuel');
 	$object->max_export_power_kw = powerplantpvAttestationGetPostDecimalOrNull('max_export_power_kw');
 	$object->max_frequency_hz = powerplantpvAttestationGetPostDecimalOrNull('max_frequency_hz');
 	$object->landscape_integration_prime = GETPOSTINT('landscape_integration_prime');
@@ -522,6 +524,11 @@ if ($action == 'create' || $action == 'edit') {
 		print '<tr><td>'.$langs->trans('AttestationCompletionDate').'</td><td>'.$form->selectDate($object->date_completion, 'date_completion', 0, 0, 1, '', 1, 1).'</td></tr>';
 		print '<tr><td>'.$langs->trans('AttestationLandscapeIntegrationPrime').'</td><td>'.$form->selectyesno('landscape_integration_prime', (int) $object->landscape_integration_prime, 1).'</td></tr>';
 	}
+	if ($object->type_code == PowerPlantPVAttestationTypes::TYPE_MISE_EN_SERVICE) {
+		print '<tr><td>'.$langs->trans('AttestationCommissioningDate').'</td><td>'.$form->selectDate($object->date_completion, 'date_completion', 0, 0, 1, '', 1, 1).'</td></tr>';
+		print '<tr><td>'.$langs->trans('AttestationConsuelNumber').'</td><td><input type="text" class="flat minwidth200" name="consuel_number" value="'.dol_escape_htmltag($object->consuel_number).'"></td></tr>';
+		print '<tr><td>'.$langs->trans('AttestationConsuelDate').'</td><td>'.$form->selectDate($object->date_consuel, 'date_consuel', 0, 0, 1, '', 1, 1).'</td></tr>';
+	}
 	print '<tr><td>'.$langs->trans('NotePublic').'</td><td><textarea class="flat centpercent" rows="3" name="note_public">'.dol_escape_htmltag($object->note_public).'</textarea></td></tr>';
 	if (empty($user->socid)) {
 		print '<tr><td>'.$langs->trans('NotePrivate').'</td><td><textarea class="flat centpercent" rows="3" name="note_private">'.dol_escape_htmltag($object->note_private).'</textarea></td></tr>';
@@ -575,6 +582,11 @@ if ($action == 'create' || $action == 'edit') {
 		print '<tr><td>'.$langs->trans('AttestationBtaContractNumber').'</td><td>'.dol_escape_htmltag($object->bta_contract_number).'</td></tr>';
 		print '<tr><td>'.$langs->trans('AttestationCompletionDate').'</td><td>'.(!empty($object->date_completion) ? dol_print_date($object->date_completion, 'day') : '').'</td></tr>';
 		print '<tr><td>'.$langs->trans('AttestationLandscapeIntegrationPrime').'</td><td>'.yn((int) $object->landscape_integration_prime).'</td></tr>';
+	}
+	if ($object->type_code == PowerPlantPVAttestationTypes::TYPE_MISE_EN_SERVICE) {
+		print '<tr><td>'.$langs->trans('AttestationCommissioningDate').'</td><td>'.(!empty($object->date_completion) ? dol_print_date($object->date_completion, 'day') : '').'</td></tr>';
+		print '<tr><td>'.$langs->trans('AttestationConsuelNumber').'</td><td>'.dol_escape_htmltag($object->consuel_number).'</td></tr>';
+		print '<tr><td>'.$langs->trans('AttestationConsuelDate').'</td><td>'.(!empty($object->date_consuel) ? dol_print_date($object->date_consuel, 'day') : '').'</td></tr>';
 	}
 	$writerHtml = dol_escape_htmltag($derivedData['writer_name']);
 	if (!empty($derivedData['writer_id'])) {

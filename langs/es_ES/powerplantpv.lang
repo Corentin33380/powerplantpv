@@ -1283,3 +1283,11 @@ Notify_POWERPLANTPV_POWERPLANT_UPDATE = Planta modificada
 PowerPlantPVProjectLinksFeature = Vínculos de proyectos y totales firmados
 PowerPlantPVProjectLinksCompatibilityDescription = Vínculos múltiples, cabeceras recíprocas y totales de presupuestos firmados en proyectos, disponibles desde Dolibarr v20.
 PowerPlantPVRequiresProjects = Active el módulo Proyectos para utilizar esta función.
+
+# Commissioning attestation
+AttestationTypeMiseEnService = Certificado de puesta en servicio
+AttestationPdfModelMiseEnServiceName = Certificado de puesta en servicio
+AttestationPdfModelMiseEnServiceDescription = Modelo PDF para el certificado de puesta en servicio de una instalación fotovoltaica.
+AttestationCommissioningDate = Fecha de puesta en servicio
+AttestationConsuelNumber = N.º de certificado CONSUEL
+AttestationConsuelDate = Fecha del certificado CONSUEL

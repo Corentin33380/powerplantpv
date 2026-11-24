@@ -60,6 +60,8 @@ class PowerPlantPVAttestation extends CommonObject
 		'date_setting' => array('type' => 'date', 'label' => 'AttestationSettingDate', 'enabled' => 1, 'position' => 240, 'notnull' => 0, 'visible' => 3),
 		'date_completion' => array('type' => 'date', 'label' => 'AttestationCompletionDate', 'enabled' => 1, 'position' => 250, 'notnull' => 0, 'visible' => 3),
 		'bta_contract_number' => array('type' => 'varchar(128)', 'label' => 'AttestationBtaContractNumber', 'enabled' => 1, 'position' => 260, 'notnull' => 0, 'visible' => 1, 'searchall' => 1),
+		'consuel_number' => array('type' => 'varchar(128)', 'label' => 'AttestationConsuelNumber', 'enabled' => 1, 'position' => 262, 'notnull' => 0, 'visible' => 3, 'searchall' => 1),
+		'date_consuel' => array('type' => 'date', 'label' => 'AttestationConsuelDate', 'enabled' => 1, 'position' => 264, 'notnull' => 0, 'visible' => 3),
 		'max_export_power_kw' => array('type' => 'double(24,8)', 'label' => 'AttestationMaxExportPowerKw', 'enabled' => 1, 'position' => 270, 'notnull' => 0, 'visible' => 3, 'css' => 'right', 'cssview' => 'right', 'csslist' => 'right'),
 		'max_frequency_hz' => array('type' => 'double(24,8)', 'label' => 'AttestationMaxFrequencyHz', 'enabled' => 1, 'position' => 280, 'notnull' => 0, 'visible' => 3, 'css' => 'right', 'cssview' => 'right', 'csslist' => 'right'),
 		'landscape_integration_prime' => array('type' => 'boolean', 'label' => 'AttestationLandscapeIntegrationPrime', 'enabled' => 1, 'position' => 290, 'notnull' => 0, 'visible' => 3),
@@ -97,6 +99,8 @@ class PowerPlantPVAttestation extends CommonObject
 	public $date_setting;
 	public $date_completion;
 	public $bta_contract_number;
+	public $consuel_number;
+	public $date_consuel;
 	public $max_export_power_kw;
 	public $max_frequency_hz;
 	public $landscape_integration_prime;

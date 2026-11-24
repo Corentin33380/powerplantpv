@@ -69,6 +69,7 @@ $attestationTypeModelConstants = array(
 	'POWERPLANTPV_ATTESTATION_BRIDAGE_STATIQUE_MODEL' => array('label' => 'AttestationTypeBridageStatiqueOnduleur', 'default' => 'attestation_bridage_statique'),
 	'POWERPLANTPV_ATTESTATION_REGLAGE_FREQ_MODEL' => array('label' => 'AttestationTypeReglageMaxFreq515Hz', 'default' => 'attestation_reglage_max_freq'),
 	'POWERPLANTPV_ATTESTATION_INSTALLATEUR_INF100KWC_MODEL' => array('label' => 'AttestationTypeInstallateurInf100kwc', 'default' => 'attestation_installateur_inf100kwc'),
+	'POWERPLANTPV_ATTESTATION_MISE_EN_SERVICE_MODEL' => array('label' => 'AttestationTypeMiseEnService', 'default' => 'attestation_mise_en_service'),
 );
 
 /**
@@ -221,6 +222,9 @@ function powerplantpvAttestationAdminGetTypeForModel($model)
 	if ($model === 'attestation_installateur_inf100kwc') {
 		return PowerPlantPVAttestationTypes::TYPE_INSTALLATEUR_INF_100KWC;
 	}
+	if ($model === 'attestation_mise_en_service') {
+		return PowerPlantPVAttestationTypes::TYPE_MISE_EN_SERVICE;
+	}
 
 	return PowerPlantPVAttestationTypes::TYPE_BRIDAGE_DYNAMIQUE_ONDULEUR;
 }
@@ -242,6 +246,7 @@ if ($action == 'save') {
 		'POWERPLANTPV_ATTESTATION_BRIDAGE_STATIQUE_MODEL' => array('type' => 'chaine', 'value' => GETPOST('POWERPLANTPV_ATTESTATION_BRIDAGE_STATIQUE_MODEL', 'aZ09')),
 		'POWERPLANTPV_ATTESTATION_REGLAGE_FREQ_MODEL' => array('type' => 'chaine', 'value' => GETPOST('POWERPLANTPV_ATTESTATION_REGLAGE_FREQ_MODEL', 'aZ09')),
 		'POWERPLANTPV_ATTESTATION_INSTALLATEUR_INF100KWC_MODEL' => array('type' => 'chaine', 'value' => GETPOST('POWERPLANTPV_ATTESTATION_INSTALLATEUR_INF100KWC_MODEL', 'aZ09')),
+		'POWERPLANTPV_ATTESTATION_MISE_EN_SERVICE_MODEL' => array('type' => 'chaine', 'value' => GETPOST('POWERPLANTPV_ATTESTATION_MISE_EN_SERVICE_MODEL', 'aZ09')),
 	);
 	foreach ($settings as $key => $setting) {
 		$result = dolibarr_set_const($db, $key, (string) $setting['value'], $setting['type'], 0, '', (int) $conf->entity);

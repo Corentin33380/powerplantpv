@@ -1283,3 +1283,11 @@ Notify_POWERPLANTPV_POWERPLANT_UPDATE = Kraftwerk geändert
 PowerPlantPVProjectLinksFeature = Projektverknüpfungen und unterzeichnete Summen
 PowerPlantPVProjectLinksCompatibilityDescription = Mehrfachverknüpfungen, gegenseitige Banner und Summen unterzeichneter Angebote auf Projekten, verfügbar ab Dolibarr v20.
 PowerPlantPVRequiresProjects = Aktivieren Sie das Projektmodul für diese Funktion.
+
+# Commissioning attestation
+AttestationTypeMiseEnService = Inbetriebnahmebescheinigung
+AttestationPdfModelMiseEnServiceName = Inbetriebnahmebescheinigung
+AttestationPdfModelMiseEnServiceDescription = PDF-Modell für die Inbetriebnahmebescheinigung einer Photovoltaikanlage.
+AttestationCommissioningDate = Datum der Inbetriebnahme
+AttestationConsuelNumber = CONSUEL-Bescheinigungsnummer
+AttestationConsuelDate = Datum der CONSUEL-Bescheinigung

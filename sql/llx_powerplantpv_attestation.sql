@@ -18,6 +18,8 @@ CREATE TABLE IF NOT EXISTS llx_powerplantpv_attestation(
 	date_setting date,
 	date_completion date,
 	bta_contract_number varchar(128),
+	consuel_number varchar(128),
+	date_consuel date,
 	max_export_power_kw double(24,8),
 	max_frequency_hz double(24,8),
 	landscape_integration_prime smallint DEFAULT 0,

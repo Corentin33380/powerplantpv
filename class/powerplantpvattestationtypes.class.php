@@ -30,6 +30,7 @@ class PowerPlantPVAttestationTypes
 	public const TYPE_BRIDAGE_STATIQUE_ONDULEUR = 'BRIDAGE_STATIQUE_ONDULEUR';
 	public const TYPE_REGLAGE_MAX_FREQ_51_5HZ = 'REGLAGE_MAX_FREQ_51_5HZ';
 	public const TYPE_INSTALLATEUR_INF_100KWC = 'INSTALLATEUR_INF_100KWC';
+	public const TYPE_MISE_EN_SERVICE = 'MISE_EN_SERVICE';
 
 	/**
 	 * Return type definitions.
@@ -64,6 +65,12 @@ class PowerPlantPVAttestationTypes
 				'model_pdf' => 'attestation_installateur_inf100kwc',
 				'equipment_types' => array('MODULE', 'INVERTER', 'CONNECTOR', 'BOX'),
 				'required_fields' => array('fk_powerplant', 'bta_contract_number', 'date_completion', 'date_attestation'),
+			),
+			self::TYPE_MISE_EN_SERVICE => array(
+				'label' => 'AttestationTypeMiseEnService',
+				'model_pdf' => 'attestation_mise_en_service',
+				'equipment_types' => array('MODULE', 'INVERTER'),
+				'required_fields' => array('fk_powerplant', 'date_completion', 'date_attestation'),
 			),
 		);
 	}
@@ -127,6 +134,8 @@ class PowerPlantPVAttestationTypes
 			$const = 'POWERPLANTPV_ATTESTATION_REGLAGE_FREQ_MODEL';
 		} elseif ($typecode == self::TYPE_INSTALLATEUR_INF_100KWC) {
 			$const = 'POWERPLANTPV_ATTESTATION_INSTALLATEUR_INF100KWC_MODEL';
+		} elseif ($typecode == self::TYPE_MISE_EN_SERVICE) {
+			$const = 'POWERPLANTPV_ATTESTATION_MISE_EN_SERVICE_MODEL';
 		}
 		if ($const !== '' && function_exists('getDolGlobalString')) {
 			return getDolGlobalString($const, $default);
